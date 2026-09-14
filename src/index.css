@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+/* Look and feel follows metal-stack.io: Inter on near-black text, a light
+   gray page with white cards, and the brand amber (the logo's #f59e0b) as
+   the single accent — used for the primary action, the active tab, focus
+   rings, and everything "management" in the diagrams. */
+@theme {
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --color-ink: #1c1e21;
+  --color-page: #f5f6f7;
+  --color-brand: #f59e0b;
+  --color-brand-strong: #d97706;
+  --color-brand-soft: #fcd094;
+  --color-brand-tint: #fff8e6;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-page);
+    color: var(--color-ink);
+  }
+  input,
+  select,
+  button {
+    outline-color: var(--color-brand);
+  }
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: -1px;
+    border-color: var(--color-brand);
+  }
+}
+
+@utility btn {
+  @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors;
+  @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand;
+  @apply disabled:cursor-not-allowed disabled:opacity-40;
+}
+@utility btn-primary {
+  @apply btn bg-ink text-white hover:bg-gray-800;
+}
+@utility btn-accent {
+  @apply btn bg-brand text-ink hover:bg-brand-strong;
+}
+@utility btn-secondary {
+  @apply btn border border-gray-300 bg-white text-ink hover:bg-gray-50;
+}
+@utility btn-danger {
+  @apply btn border border-red-300 bg-white text-red-700 hover:bg-red-50;
+}
+@utility card {
+  @apply rounded-lg border border-gray-200 bg-white;
+}
+
+/* Traffic-flow pulse on topology links: a short bright dash traveling from
+   the link's source to its target. Duration/delay are set per link in
+   Diagram.tsx (faster links pulse faster). */
+@keyframes topo-flow {
+  to {
+    stroke-dashoffset: -128;
+  }
+}
+
+.topo-flow {
+  stroke-dasharray: 10 118;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  animation-name: topo-flow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topo-flow {
+    display: none;
+  }
+}
+
+/* Flash an editor section after the side panel scrolls to it. */
+@keyframes section-flash {
+  0%,
+  60% {
+    box-shadow: 0 0 0 3px rgb(245 158 11 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgb(245 158 11 / 0);
+  }
+}
+
+.section-flash {
+  animation: section-flash 1.6s ease-out;
+}

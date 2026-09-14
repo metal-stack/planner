@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Read-only by default; the deploy job widens this for itself alone.
+permissions:
+  contents: read
+
+# One deployment at a time. Queue rather than cancel, so an in-flight deploy
+# of an older commit still finishes cleanly.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run notices:check
+      - run: npm run build
+      - run: npm run test
+
+  # Publishes to GitHub Pages. `needs: build` is the point: only a commit that
+  # passed lint, formatting, the notices check, the build and the tests is ever
+  # deployed.
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build for the Pages sub-path
+        # A project site lives at /<repo>/, not at the root. Deriving it from
+        # the repository name keeps forks working with no edit.
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

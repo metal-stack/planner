@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.local
+
+# Local assistant settings (per-developer)
+.claude/settings.local.json
+
+# Real-world reference BOMs (customer documents) — never commit
+sample-boms/
+.gstack/
+
+# Address-planning spreadsheet (may hold real allocations) — never commit
+ip_calc.ods
+.~lock.*#

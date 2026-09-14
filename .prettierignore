@@ -1,0 +1,9 @@
+dist
+node_modules
+docs/screenshots
+sample-boms
+package-lock.json
+
+# Generated verbatim from upstream license texts; reformatting would
+# corrupt the notices and fight notices:check.
+THIRD-PARTY-NOTICES.md
