@@ -11,6 +11,7 @@ import CentralRackSection from './plan/CentralRackSection'
 import RackSection from './plan/RackSection'
 import { DOCS } from './plan/docs'
 import InfoBubble from './plan/InfoBubble'
+import IntroCard from './plan/IntroCard'
 import SidePanel from './plan/SidePanel'
 import TemplateMenu from './plan/TemplateMenu'
 import { ACTION_ICON, Icon, SECTION_ICON } from './icons'
@@ -56,6 +57,7 @@ export default function PlanView() {
   return (
     <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
       <div className="min-w-0 flex-1 space-y-6 xl:max-w-5xl">
+        <IntroCard />
         <div className="flex flex-wrap items-end gap-4">
           <label className="block text-sm">
             <span className="mb-1 block font-medium">Plan name</span>
