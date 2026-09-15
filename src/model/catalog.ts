@@ -239,6 +239,7 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 4,
     status: 'stable',
     serverUsages: ['worker'],
+    availability: 'eol',
   },
   'server-bigtwin-x12': {
     id: 'server-bigtwin-x12',
@@ -265,6 +266,7 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 1,
     status: 'stable',
     serverUsages: ['worker', 'storage'],
+    availability: 'eol',
   },
   'server-superserver-tn12': {
     id: 'server-superserver-tn12',
@@ -291,6 +293,7 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 1,
     status: 'stable',
     serverUsages: ['worker', 'storage'],
+    availability: 'eol',
   },
   'server-lenovo-sd530': {
     id: 'server-lenovo-sd530',

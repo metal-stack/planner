@@ -33,7 +33,7 @@ function threeRack(name: string, storageServers = 0): Rack {
   const rack = defaultRack(name, 'three-rack')
   rack.servers = [group('worker', 'server-microcloud-h13', 112)]
   if (storageServers > 0) {
-    rack.servers.push(group('storage', 'server-superserver-tr12p', storageServers))
+    rack.servers.push(group('storage', 'server-superserver-tn12', storageServers))
   }
   return rack
 }
