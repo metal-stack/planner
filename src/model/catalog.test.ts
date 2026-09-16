@@ -276,9 +276,25 @@ describe('helpers', () => {
     expect(switchesForRole('spine').map((i) => i.id)).toContain('switch-as7726')
     expect(switchesForRole('spine').map((i) => i.id)).not.toContain('switch-as4630')
     expect(serversForUsage('management').map((i) => i.id)).toEqual([
-      'server-mgmt',
       'server-mgmt-121h',
+      'server-mgmt',
     ])
+  })
+
+  it('sorts eol and withdrawn hardware to the bottom', () => {
+    // These lists contain eol/withdrawn models today; the other roles and
+    // usages sort through the same comparator.
+    const lists = [
+      serversForUsage('worker'),
+      serversForUsage('management'),
+      switchesForRole('leaf'),
+    ]
+    for (const list of lists) {
+      const current = list.filter((i) => (i.availability ?? 'current') === 'current')
+      const eol = list.filter((i) => i.availability === 'eol')
+      const withdrawn = list.filter((i) => i.availability === 'withdrawn')
+      expect(list).toEqual([...current, ...eol, ...withdrawn])
+    }
   })
 
   it('offers GPUs only for GPU-capable servers', () => {

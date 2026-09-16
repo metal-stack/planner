@@ -622,18 +622,36 @@ export function portCount(item: CatalogItem, speed: PortSpeed): number {
   return item.ports?.find((p) => p.speed === speed)?.count ?? 0
 }
 
+/** Dropdown order: current hardware first, then eol, then withdrawn; catalog
+ *  order within each group (the sort is stable). */
+const availabilityRank: Record<Availability, number> = { current: 0, eol: 1, withdrawn: 2 }
+
+function rankOf(item: CatalogItem): number {
+  return availabilityRank[item.availability ?? 'current']
+}
+
+function byAvailability(a: CatalogItem, b: CatalogItem): number {
+  return rankOf(a) - rankOf(b)
+}
+
 export function switchesForRole(role: SwitchRole): CatalogItem[] {
-  return Object.values(catalog).filter((i) => i.switchRoles?.includes(role))
+  return Object.values(catalog)
+    .filter((i) => i.switchRoles?.includes(role))
+    .sort(byAvailability)
 }
 
 export function serversForUsage(usage: ServerUsage): CatalogItem[] {
-  return Object.values(catalog).filter((i) => i.serverUsages?.includes(usage))
+  return Object.values(catalog)
+    .filter((i) => i.serverUsages?.includes(usage))
+    .sort(byAvailability)
 }
 
 /** GPU models offerable for a server model — empty unless it accepts any. */
 export function gpusForServer(serverModelId: string): CatalogItem[] {
   if (!catalog[serverModelId]?.gpuCapable) return []
-  return Object.values(catalog).filter((i) => i.category === 'gpu')
+  return Object.values(catalog)
+    .filter((i) => i.category === 'gpu')
+    .sort(byAvailability)
 }
 
 /** How a BOM line names its item: the model people say, else the ordering
