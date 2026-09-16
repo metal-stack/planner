@@ -622,8 +622,8 @@ export function portCount(item: CatalogItem, speed: PortSpeed): number {
   return item.ports?.find((p) => p.speed === speed)?.count ?? 0
 }
 
-/** Dropdown order: current hardware first, then eol, then withdrawn; catalog
- *  order within each group (the sort is stable). */
+// Dropdown order: current hardware first, then eol, then withdrawn.
+// Catalog order within each group (the sort is stable).
 const availabilityRank: Record<Availability, number> = { current: 0, eol: 1, withdrawn: 2 }
 
 function rankOf(item: CatalogItem): number {

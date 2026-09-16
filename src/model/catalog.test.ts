@@ -282,8 +282,6 @@ describe('helpers', () => {
   })
 
   it('sorts eol and withdrawn hardware to the bottom', () => {
-    // These lists contain eol/withdrawn models today; the other roles and
-    // usages sort through the same comparator.
     const lists = [
       serversForUsage('worker'),
       serversForUsage('management'),
