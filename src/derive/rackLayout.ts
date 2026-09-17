@@ -63,9 +63,11 @@ interface Item {
 /** One physical rack of a plan rack: a single rack has one (no position);
  *  a three-rack has left/mid/right, with the switches in the middle and
  *  chassis distributed evenly by used height (each chassis goes to the
- *  physical rack with the fewest used units; ties favor mid, then left,
- *  then right). A chassis that fits nowhere lands in the least-used rack,
- *  where the height check flags it. */
+ *  physical rack holding the fewest chassis of its group, the least-used
+ *  one among those; ties favor mid, then left, then right). Spreading each
+ *  group first keeps e.g. storage systems across the racks even when the
+ *  worker chassis fill them unevenly. A chassis that fits nowhere lands in
+ *  the chosen rack, where the height check flags it. */
 export interface PhysicalRack {
   position?: RackPosition
   name: string
@@ -109,8 +111,13 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
   const mid = { items: [] as Item[], used: switches.reduce((u, i) => u + i.units, 0) }
   const left = { items: [] as Item[], used: 0 }
   const right = { items: [] as Item[], used: 0 }
+  const chassisOfGroup = (bin: { items: Item[] }, groupId?: string) =>
+    bin.items.filter((item) => item.groupId === groupId).length
   for (const c of chassis) {
-    const target = [mid, left, right].reduce((best, r) => (r.used < best.used ? r : best))
+    const target = [mid, left, right].reduce((best, r) => {
+      const spread = chassisOfGroup(r, c.groupId) - chassisOfGroup(best, c.groupId)
+      return spread < 0 || (spread === 0 && r.used < best.used) ? r : best
+    })
     target.items.push(c)
     target.used += c.units
   }
