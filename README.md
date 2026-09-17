@@ -25,6 +25,20 @@ The planner is a client-only single-page app. Everything you enter stays in your
 (localStorage) and can be exported as a JSON file. There is no backend and the app makes no
 network requests.
 
+## Why
+
+A metal-stack installation ties a lot of numbers together: racks, ports, power, bandwidth,
+addresses and part numbers all move as soon as one of them does. The planner keeps them
+consistent — you edit the plan, everything else follows from it.
+
+- **One document** — partitions, racks, server groups, the management network and the address
+  plan in a single plan file.
+- **Always in sync** — topology, rack elevations, port and power budgets, the IP plan and the BOM
+  are recomputed as you type, and checked against the official metal-stack hardware compatibility
+  list.
+- **Ready to order** — every BOM quantity says how it was derived, so the order can be reviewed
+  rather than trusted.
+
 ## What it does
 
 - **Plan editor** — one or more partitions (metal-stack failure domains), each with a central
