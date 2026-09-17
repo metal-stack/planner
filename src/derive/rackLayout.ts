@@ -25,6 +25,11 @@ export interface RackSlot {
   kind: SlotKind
   /** Estimated power draw of the device in this slot, W. */
   powerWatts: number
+  /** Set on server chassis slots only: the ServerGroup this chassis belongs
+   *  to and the nodes it holds (the last chassis of a group may be partial).
+   *  Drives chassis drag-and-drop in the Racks view. */
+  groupId?: string
+  nodes?: number
 }
 
 export interface RackElevation {

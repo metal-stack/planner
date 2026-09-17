@@ -5,6 +5,7 @@ import { temporal } from 'zundo'
 import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../model/defaults'
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
+import { moveChassis as moveChassisPlan, type MoveChassisArgs } from '../model/moveChassis'
 import { normalizePlan } from '../model/normalize'
 import {
   PlanSchema,
@@ -47,6 +48,7 @@ interface PlannerState {
     groupId: string,
     patch: Partial<ServerGroup>,
   ) => void
+  moveChassis: (args: MoveChassisArgs) => void
   addExternalNetwork: () => void
   patchExternalNetwork: (id: string, patch: Partial<ExternalNetwork>) => void
   removeExternalNetwork: (id: string) => void
@@ -218,6 +220,11 @@ export const usePlanStore = create<PlannerState>()(
               servers: r.servers.map((g) => (g.id === groupId ? { ...g, ...patch } : g)),
             })),
           })),
+        moveChassis: (args) =>
+          set((s) => {
+            const moved = moveChassisPlan(s.plan, args)
+            return moved ? { plan: touched(moved, {}) } : {}
+          }),
         addExternalNetwork: () =>
           set((s) => ({
             plan: touched(s.plan, {
