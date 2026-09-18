@@ -255,7 +255,7 @@ function partitionGroupVars(
         rg,
         'rack',
         [
-          kv('metal_core_rack_id', `${p.slug}-rack${String(rack.number).padStart(2, '0')}`),
+          kv('metal_core_rack_id', rack.metalId),
           l3 &&
             kv(
               'metal_partition_mgmt_gateway',

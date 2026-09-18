@@ -7,7 +7,9 @@ import { mgmtDeviceCount, type Partition, type Plan } from '../model/plan'
 // Hostnames follow the deployment repositories metal-stack operators keep
 // (`<partition>-spine01`, `<partition>-r01leaf01`, `<partition>-r01mgmtleaf`
 // …): the partition slug, then the device, with racks numbered in plan
-// order (a rack group once, its leaves sit in the middle rack).
+// order (a rack group once, its leaves sit in the middle rack). Rack names
+// are display only; identifiers are always the slug and the rack number,
+// unique within the plan.
 //
 // ASNs follow the numbering model of the metal-stack network docs
 // (docs.metal-stack.io, Concepts › Network › Theory, "ASN Numbering"):
@@ -58,6 +60,8 @@ export interface DeviceRack {
   number: number
   /** "r01" */
   tag: string
+  /** metal-stack's rack id (metal_core_rack_id), "partition-1-rack01". */
+  metalId: string
 }
 
 export interface PartitionDevices {
@@ -100,6 +104,12 @@ export function slugify(name: string): string {
 export function groupName(slug: string): string {
   const g = slug.replace(/-/g, '_')
   return /^[a-z_]/.test(g) ? g : `p_${g}`
+}
+
+/** Identifiers of the n-th rack (1-based) of a partition: the hostname
+ *  tag and metal-stack's rack id. */
+function rackIds(slug: string, n: number): { tag: string; metalId: string } {
+  return { tag: `r${pad(n)}`, metalId: `${slug}-rack${pad(n)}` }
 }
 
 function uniqueSlugs(partitions: Partition[]): string[] {
@@ -167,7 +177,7 @@ function partitionDevices(
     rackId: rack.id,
     name: rack.name,
     number: i + 1,
-    tag: `r${pad(i + 1)}`,
+    ...rackIds(slug, i + 1),
   }))
   partition.racks.forEach((rack, i) => {
     const r = racks[i]

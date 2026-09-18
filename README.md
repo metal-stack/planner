@@ -7,7 +7,7 @@
 <p align="center">
   Plan a <a href="https://metal-stack.io">metal-stack</a> installation in the browser:<br />
   configure the production and management networks, see the resulting topology and rack elevations,<br />
-  and get an orderable hardware bill of materials.
+  get an orderable hardware bill of materials and an Ansible deployment with CI/CD pipelines.
 </p>
 
 <p align="center">
@@ -77,11 +77,16 @@ consistent — you edit the plan, everything else follows from it.
 - **Ansible export** — an inventory, group and host variables for the
   [metal-roles](https://github.com/metal-stack/metal-roles) partition roles (sonic-config,
   metal-core, mgmt-server, dhcp, metal-bmc, pixiecore, image-cache) and the playbooks that apply
-  them, laid out like a metal-stack deployment repository. Hostnames, ASNs, loopbacks, management
-  addresses, per-leaf PXE networks, DHCP ranges and transfer networks come from the plan and the
-  IP plan; secrets, endpoints and switch ports are marked `CHANGE_ME` and listed. A GitLab CI
-  pipeline (or GitHub Actions workflows) checks every push and deploys each partition by hand,
-  in order, on a runner inside the partition. Previewed file by file and downloaded as a zip.
+  them, laid out like a metal-stack deployment repository. Derived from the plan and the IP plan:
+  hostnames, ASNs (leaves unique, spines and exits shared), loopbacks, management addresses,
+  per-leaf PXE networks, DHCP ranges, transfer networks and each switch's BGP ports (uplinks on
+  the last ports, from the SONiC port maps in the catalog). Only the metal-stack release and the
+  control plane domain need entering (metal-api and NSQ are reached under it); name and NTP
+  servers default to public ones, and everything else with a default sits under Advanced. What
+  the plan cannot know, the secrets and certificates, is marked `CHANGE_ME` and listed. A GitLab
+  CI pipeline (or GitHub Actions workflows) checks every push, refusing leftover placeholders,
+  and deploys each partition by hand, in order, on a runner inside the partition. Every file is
+  previewed with YAML highlighting (the README rendered) and the whole set downloads as a zip.
 - **Prices** — an optional price book (kept in the browser, separate from the plan, importable
   and exportable as JSON) turns the BOM into a cost estimate with line totals, category
   subtotals and a grand total.
@@ -131,6 +136,13 @@ With derivation shown: every quantity broken down by central rack and rack group
 
 ![BOM](docs/screenshots/bom.png)
 
+### Ansible deployment
+
+The Redundant template with a release and control plane domain entered: a leaf's host variables
+with its ASN, loopback, BGP ports and PXE network, and the secrets still to fill in on the right.
+
+![Ansible deployment](docs/screenshots/ansible.png)
+
 ## Getting started
 
 The planner runs at **[https://metal-stack.github.io/planner/](https://metal-stack.github.io/planner/)** — no install, no account, nothing leaves your browser.
@@ -175,9 +187,12 @@ The whole app operates on a single `Plan` document, described by Zod schemas in
 | `src/derive/validate.ts`   | validation issues                                       |
 | `src/derive/nodes.ts`      | node tallies per rack, partition and plan               |
 | `src/derive/ip/`           | CIDR arithmetic, the IP address plan and its validation |
+| `src/derive/devices.ts`    | named devices with hostnames and ASNs                   |
+| `src/derive/ports.ts`      | the BGP ports of every switch                           |
+| `src/derive/ansible/`      | the Ansible inventory, variables, playbooks and CI/CD   |
 
-Hardware facts — part numbers, port counts, height units, nodes per chassis, and metal-stack
-compatibility — live in `src/model/catalog.ts`. The compatibility data mirrors the official
+Hardware facts — part numbers, port counts and SONiC port names, height units, nodes per chassis,
+and metal-stack compatibility — live in `src/model/catalog.ts`. The compatibility data mirrors the official
 [hardware list](https://docs.metal-stack.io/docs/hardware).
 
 State lives in a Zustand store with undo history and localStorage persistence
@@ -194,7 +209,8 @@ diagrams are plain SVG.
 ## Dependencies and advisories
 
 Runtime dependencies are deliberately few: React, Zustand (with Zundo for undo), Zod, Lucide for
-icons and ExcelJS for the xlsx export. Everything else is build tooling.
+icons, ExcelJS for the xlsx export, and yaml and JSZip for the Ansible export (both loaded only
+when the Ansible tab opens). Everything else is build tooling.
 
 `npm audit` reports two moderate advisories against `uuid <11.1.1`
 ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)), reached through
