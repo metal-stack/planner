@@ -22,7 +22,7 @@ export const IP_INFO = {
     href: DOCS.architecture,
   },
   projectPrefix: {
-    text: 'Size of one project network — the private network the machines of a cluster get their addresses from. The docs use a /22 tenant network as example.',
+    text: 'Size of one project network: the private network the machines of a cluster get their addresses from. The docs use a /22 tenant network as example.',
     href: DOCS.networking,
   },
   frrListenRange: {

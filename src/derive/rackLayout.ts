@@ -39,6 +39,8 @@ export interface RackElevation {
   powerWatts: number
   /** Power budget of the rack, W (rack setting; partition default for the central rack). */
   maxPowerWatts: number
+  /** Set on the three physical racks of a rack group. */
+  group?: { id: string; name: string }
 }
 
 export interface PartitionRackLayout {
@@ -61,7 +63,7 @@ interface Item {
 }
 
 /** One physical rack of a plan rack: a single rack has one (no position);
- *  a three-rack has left/mid/right, with the switches in the middle and
+ *  a rack group has left/mid/right, with the switches in the middle and
  *  chassis distributed evenly by used height (each chassis goes to the
  *  physical rack holding the fewest chassis of its group, the least-used
  *  one among those; ties favor mid, then left, then right). Spreading each
@@ -121,10 +123,15 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
     target.items.push(c)
     target.used += c.units
   }
+  const [leftName, midName, rightName] = rack.memberNames ?? [
+    `${rack.name} (left)`,
+    `${rack.name} (middle)`,
+    `${rack.name} (right)`,
+  ]
   return [
-    { position: 'left', name: `${rack.name} (left)`, switches: [], chassis: left.items },
-    { position: 'mid', name: `${rack.name} (mid)`, switches, chassis: mid.items },
-    { position: 'right', name: `${rack.name} (right)`, switches: [], chassis: right.items },
+    { position: 'left', name: leftName, switches: [], chassis: left.items },
+    { position: 'mid', name: midName, switches, chassis: mid.items },
+    { position: 'right', name: rightName, switches: [], chassis: right.items },
   ]
 }
 
@@ -170,7 +177,7 @@ export function formatPower(watts: number): string {
 }
 
 /** Physical racks in a partition: the central rack plus one per single
- *  rack and three per three-rack. */
+ *  rack and three per rack group. */
 export function physicalRackCount(partition: Partition): number {
   return (
     1 + partition.racks.reduce((n, rack) => n + physicalRacks(rack, partition.fabric).length, 0)
@@ -208,6 +215,7 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
           : `${partition.id}/${rack.id}`,
         rackId: rack.id,
         name: phys.name,
+        ...(phys.position && { group: { id: rack.id, name: rack.name } }),
         heightUnits: rack.heightUnits,
         maxPowerWatts: rack.maxPowerWatts,
         ...place([...phys.switches, ...phys.chassis], rack.heightUnits),

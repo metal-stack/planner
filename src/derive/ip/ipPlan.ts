@@ -35,7 +35,7 @@ import {
 //   interface (production and management switches), one BMC per server
 //   node, management server and internet router, and each management
 //   server's own interface. L2 management: one subnet per partition; L3:
-//   a central subnet plus one per compute rack (a three-rack once).
+//   a central subnet plus one per compute rack (a rack group once).
 // - Transfer networks: one per router ↔ exit link (2 × routers × exits).
 // Host subnets reserve 3 addresses (network, broadcast, gateway), the
 // loopback pool none. Every size except the transfer networks gets the
@@ -242,7 +242,7 @@ function deriveFamily(
         ? `Σ 2^(32 − p) over ${validInternet.length} ranges = ${formatCount(total)}`
         : 'no internet ranges',
     )
-    m.maxTenants = missing('maxTenants', 'n/a — IPv4 tenants share the internet network')
+    m.maxTenants = missing('maxTenants', 'n/a (IPv4 tenants share the internet network)')
   } else {
     const fitting = validInternet.filter((c) => c.prefix <= tenantPrefix)
     const tenants = fitting.reduce((n, c) => n + subnetCount(c, tenantPrefix), 0n)

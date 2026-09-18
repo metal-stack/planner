@@ -1,4 +1,10 @@
-import { catalog, gpusForServer, serversForUsage, switchesForRole } from '../../model/catalog'
+import {
+  catalog,
+  gpusForServer,
+  itemLabel,
+  serversForUsage,
+  switchesForRole,
+} from '../../model/catalog'
 import type { Partition, Rack, ServerGroup } from '../../model/plan'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
@@ -142,6 +148,9 @@ function ServerGroupRow({
   )
 }
 
+/** Physical racks of a rack group, in `memberNames` order. */
+const MEMBER_LABELS = ['Left rack', 'Middle rack (leaves, mgmt leaf)', 'Right rack']
+
 export default function RackSection({
   partition,
   rack,
@@ -153,7 +162,9 @@ export default function RackSection({
 }) {
   const own = issuesFor(issues, { partitionId: partition.id, rackId: rack.id })
   const hasErrors = own.some((i) => i.severity === 'error')
+  const advancedIssues = own.filter((i) => i.target.field === 'advanced')
   const patchRack = usePlanStore((s) => s.patchRack)
+  const setRackKind = usePlanStore((s) => s.setRackKind)
   const removeRack = usePlanStore((s) => s.removeRack)
   const addServerGroup = usePlanStore((s) => s.addServerGroup)
 
@@ -161,6 +172,7 @@ export default function RackSection({
   const needed = leafPortsNeeded(rack)
   const available = leafPortsAvailable(rack, partition)
   const overCapacity = needed > available
+  const nodes = rackNodes(rack)
 
   return (
     <section
@@ -178,13 +190,15 @@ export default function RackSection({
         <Icon icon={ACTION_ICON.remove} className="h-3.5 w-3.5" />
         Remove rack
       </button>
-      <div className="mb-2 flex flex-wrap items-end gap-3 pr-24">
+      <div className="mb-3 flex flex-wrap items-end gap-3">
         <Icon
-          icon={rack.kind === 'three-rack' ? SECTION_ICON.threeRack : SECTION_ICON.rack}
+          icon={rack.kind === 'rack-group' ? SECTION_ICON.rackGroup : SECTION_ICON.rack}
           className="mb-2.5 h-5 w-5 text-gray-400"
         />
         <label className="block text-sm">
-          <span className="mb-1 block text-gray-600">Rack name</span>
+          <span className="mb-1 block text-gray-600">
+            {rack.kind === 'rack-group' ? 'Group name' : 'Rack name'}
+          </span>
           <input
             type="text"
             value={rack.name}
@@ -192,110 +206,153 @@ export default function RackSection({
             className="rounded-md border border-gray-300 bg-white px-2 py-1.5"
           />
         </label>
-        <div className="w-40">
+        <div className="w-52">
           <SelectField
             label="Rack type"
             info={{
-              text: 'A three-rack is one entity of three physical racks that share the leaf pair and the management leaf of the middle rack; server chassis are spread evenly across the three. See the rack spreading proposal.',
+              text: 'A rack group is one entity of three physical racks that share the leaf pair and the management leaf of the middle rack; server chassis are spread evenly across the three. See the rack spreading proposal.',
               href: DOCS.rackSpreading,
               linkLabel: 'MEP-12',
             }}
             value={rack.kind}
             options={[
               { value: 'single', label: 'Single rack' },
-              { value: 'three-rack', label: 'Three-rack' },
+              { value: 'rack-group', label: 'Rack group (3 racks)' },
             ]}
-            onChange={(v) => patchRack(partition.id, rack.id, { kind: v as Rack['kind'] })}
+            onChange={(v) => setRackKind(partition.id, rack.id, v as Rack['kind'])}
           />
         </div>
-        <div className="w-44">
-          <SelectField
-            label="Leaf model"
-            info={{
-              text: 'Leaf switches run metal-core, which configures them from the metal-api, so they must be on the metal-stack hardware compatibility list. Only compatible models are offered.',
-              href: DOCS.hardware,
-            }}
-            value={rack.leafModelId}
-            options={switchesForRole('leaf').map((i) => ({
-              value: i.id,
-              label: optionLabel(i),
-            }))}
-            onChange={(v) => patchRack(partition.id, rack.id, { leafModelId: v })}
-          />
-        </div>
-        <div className="w-24">
-          <NumberField
-            label="Leaves"
-            info={{
-              text: 'Bare-metal servers are dual-attached, so a rack normally has a pair of leaves. Each leaf uplinks to every spine.',
-              href: DOCS.networking,
-            }}
-            value={rack.leafCount}
-            onChange={(n) => patchRack(partition.id, rack.id, { leafCount: n })}
-          />
-        </div>
-      </div>
-      {/* Tallies on their own line: node count, leaf port usage, fabric ratio. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-          {formatTally(rackNodes(rack))}
-        </span>
-        <span
-          className={`rounded px-2 py-1 text-xs font-medium ${
-            overCapacity ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
-          }`}
-        >
-          Leaf ports: {needed} used / {Math.max(available, 0)} available
-        </span>
-        {bandwidth.ratio !== null && (
+        {rack.memberNames && (
+          <span className="mb-2 text-xs text-gray-500">{rack.memberNames.join(' · ')}</span>
+        )}
+        {/* Tallies on the right, as in the central rack: leaf ports, fabric
+            ratio, issues and node count. */}
+        <span className="mb-1 ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <HoverHint
-            hint={`${formatGbps(bandwidth.downGbps)} of server bandwidth against ${formatGbps(bandwidth.upGbps)} of leaf uplinks (${rack.leafCount} leaves × ${partition.fabric.spineCount} spines × ${partition.fabric.leafSpineLinks} link${partition.fabric.leafSpineLinks === 1 ? '' : 's'} × 100 Gbit/s).`}
+            hint={`${needed} of ${Math.max(available, 0)} leaf ports used: ${rack.leafCount}x ${itemLabel(rack.leafModelId)} after the spine uplinks, 25G servers on 4x25G breakout.`}
           >
             <span
               className={`rounded px-2 py-1 text-xs font-medium ${
-                bandwidth.ratio <= 1
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : partition.fabric.nonBlocking
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-amber-100 text-amber-800'
+                overCapacity ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
               }`}
             >
-              Fabric {formatRatio(bandwidth.ratio)}
+              Leaf ports {needed} / {Math.max(available, 0)}
             </span>
           </HoverHint>
-        )}
-        <IssueBadges issues={own} />
+          {bandwidth.ratio !== null && (
+            <HoverHint
+              hint={`${formatGbps(bandwidth.downGbps)} of server bandwidth against ${formatGbps(bandwidth.upGbps)} of leaf uplinks (${rack.leafCount} leaves × ${partition.fabric.spineCount} spines × ${partition.fabric.leafSpineLinks} link${partition.fabric.leafSpineLinks === 1 ? '' : 's'} × 100 Gbit/s).`}
+            >
+              <span
+                className={`rounded px-2 py-1 text-xs font-medium ${
+                  bandwidth.ratio <= 1
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : partition.fabric.nonBlocking
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                Fabric {formatRatio(bandwidth.ratio)}
+              </span>
+            </HoverHint>
+          )}
+          <IssueBadges issues={own} />
+          <HoverHint hint={formatTally(nodes)}>
+            <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+              {nodes.total} {nodes.total === 1 ? 'node' : 'nodes'}
+            </span>
+          </HoverHint>
+        </span>
       </div>
 
       {rack.servers.map((group) => (
         <ServerGroupRow key={group.id} partition={partition} rack={rack} group={group} />
       ))}
-      <details className="mt-3">
-        <summary className="cursor-pointer text-sm font-semibold text-gray-700">
-          Advanced <span className="font-normal text-gray-500">— rack height and power budget</span>
-        </summary>
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <NumberField
-            label="Height (U)"
-            value={rack.heightUnits}
-            min={1}
-            onChange={(n) => patchRack(partition.id, rack.id, { heightUnits: n })}
-          />
-          <NumberField
-            label="Max power draw (kW)"
-            info={{
-              text: 'Power budget of this physical rack (each rack of a three-rack). The estimate sums typical per-device draw from the catalog; validation reports racks over budget.',
-            }}
-            value={rack.maxPowerWatts / 1000}
-            min={1}
-            onChange={(n) => patchRack(partition.id, rack.id, { maxPowerWatts: n * 1000 })}
-          />
-        </div>
-      </details>
       <button onClick={() => addServerGroup(partition.id, rack.id)} className="btn-secondary mt-3">
         <Icon icon={ACTION_ICON.add} />
         Add server group
       </button>
+      <details className="mt-3" data-advanced>
+        <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+          Advanced{' '}
+          <span className="font-normal text-gray-500">
+            · {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
+          </span>
+          {advancedIssues.length > 0 && (
+            <span className="ml-2 inline-flex align-middle">
+              <IssueBadges issues={advancedIssues} />
+            </span>
+          )}
+        </summary>
+        <div className="mt-3 space-y-3">
+          {rack.memberNames && (
+            <div className="flex flex-wrap items-end gap-3">
+              {MEMBER_LABELS.map((label, i) => (
+                <label key={label} className="block text-sm">
+                  <span className="mb-1 block text-gray-600">{label}</span>
+                  <input
+                    type="text"
+                    value={rack.memberNames![i]}
+                    onChange={(e) => {
+                      const memberNames = [...rack.memberNames!] as [string, string, string]
+                      memberNames[i] = e.target.value
+                      patchRack(partition.id, rack.id, { memberNames })
+                    }}
+                    className="w-40 rounded-md border border-gray-300 bg-white px-2 py-1.5"
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-44">
+              <SelectField
+                label="Leaf model"
+                info={{
+                  text: 'Leaf switches run metal-core, which configures them from the metal-api, so they must be on the metal-stack hardware compatibility list. Only compatible models are offered.',
+                  href: DOCS.hardware,
+                }}
+                value={rack.leafModelId}
+                options={switchesForRole('leaf').map((i) => ({
+                  value: i.id,
+                  label: optionLabel(i),
+                }))}
+                onChange={(v) => patchRack(partition.id, rack.id, { leafModelId: v })}
+              />
+            </div>
+            <div className="w-24">
+              <NumberField
+                label="Leaves"
+                info={{
+                  text: 'Bare-metal servers are dual-attached, so a rack normally has a pair of leaves. Each leaf uplinks to every spine.',
+                  href: DOCS.networking,
+                }}
+                value={rack.leafCount}
+                onChange={(n) => patchRack(partition.id, rack.id, { leafCount: n })}
+              />
+            </div>
+            <div className="w-28">
+              <NumberField
+                label="Height (U)"
+                value={rack.heightUnits}
+                min={1}
+                onChange={(n) => patchRack(partition.id, rack.id, { heightUnits: n })}
+              />
+            </div>
+            <div className="w-44">
+              <NumberField
+                label="Max power draw (kW)"
+                info={{
+                  text: 'Power budget of this physical rack (each rack of a rack group). The estimate sums typical per-device draw from the catalog; validation reports racks over budget.',
+                }}
+                value={rack.maxPowerWatts / 1000}
+                min={1}
+                onChange={(n) => patchRack(partition.id, rack.id, { maxPowerWatts: n * 1000 })}
+              />
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
   )
 }

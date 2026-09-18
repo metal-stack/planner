@@ -37,7 +37,9 @@ export interface IssueTarget {
   rackId?: string
   /** Issues of another tab: 'ips' for the IP plan. */
   section?: 'ips'
-  /** Field id within the section (e.g. "ipv4.shootPodCidr"). */
+  /** Field id within the section (e.g. "ipv4.shootPodCidr"). For a rack or
+   *  central rack section, 'advanced' means the fix is in its folded
+   *  Advanced section, which navigation then opens. */
   field?: string
 }
 
@@ -130,15 +132,17 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     where: `${partition.name} / ${rack.name}`,
     target: { partitionId: partition.id, rackId: rack.id },
   }
-  checkSwitchRole(issues, scope, rack.leafModelId, 'leaf', 'Leaf switch')
+  // Leaf model and count are edited in the rack's Advanced section.
+  const inAdvanced: Scope = { ...scope, target: { ...scope.target, field: 'advanced' } }
+  checkSwitchRole(issues, inAdvanced, rack.leafModelId, 'leaf', 'Leaf switch')
 
   const nodes = rack.servers.reduce((n, g) => n + g.count, 0)
   if (nodes > 0 && rack.leafCount === 0) {
-    report(issues, scope, 'error', 'Rack has servers but no leaf switches.')
+    report(issues, inAdvanced, 'error', 'Rack has servers but no leaf switches.')
     return
   }
   if (rack.leafCount === 1) {
-    report(issues, scope, 'warning', 'Only one leaf switch — no rack-level network redundancy.')
+    report(issues, inAdvanced, 'warning', 'Only one leaf switch: no rack-level network redundancy.')
   }
 
   const needed = leafPortsNeeded(rack)
@@ -253,19 +257,21 @@ function validatePartition(issues: Issue[], partition: Partition): void {
     target: { partitionId: partition.id },
   }
   const { fabric } = partition
+  // Hardware models are picked in the central rack's Advanced section.
+  const inAdvanced: Scope = { ...scope, target: { ...scope.target, field: 'advanced' } }
 
-  checkSwitchRole(issues, scope, fabric.spineModelId, 'spine', 'Spine switch')
+  checkSwitchRole(issues, inAdvanced, fabric.spineModelId, 'spine', 'Spine switch')
   checkSwitchRole(issues, scope, fabric.exitModelId, 'exit', 'Exit switch')
-  checkSwitchRole(issues, scope, fabric.mgmt.spineModelId, 'mgmt-spine', 'Mgmt spine')
-  checkSwitchRole(issues, scope, fabric.mgmt.leafModelId, 'mgmt-leaf', 'Mgmt leaf')
+  checkSwitchRole(issues, inAdvanced, fabric.mgmt.spineModelId, 'mgmt-spine', 'Mgmt spine')
+  checkSwitchRole(issues, inAdvanced, fabric.mgmt.leafModelId, 'mgmt-leaf', 'Mgmt leaf')
   if (fabric.storageLeafCount > 0) {
-    checkSwitchRole(issues, scope, fabric.storageLeafModelId, 'storage-leaf', 'Storage leaf')
+    checkSwitchRole(issues, inAdvanced, fabric.storageLeafModelId, 'storage-leaf', 'Storage leaf')
   }
   const mgmtServer = catalog[fabric.mgmt.serverModelId]
   if (!mgmtServer?.serverUsages?.includes('management')) {
     report(
       issues,
-      scope,
+      inAdvanced,
       'error',
       `Mgmt server: ${itemLabel(fabric.mgmt.serverModelId)} is not a management server model.`,
     )
@@ -275,12 +281,12 @@ function validatePartition(issues: Issue[], partition: Partition): void {
       issues,
       scope,
       'warning',
-      'Management network is not redundant — a single mgmt spine and mgmt server.',
+      'Management network is not redundant: a single mgmt spine and mgmt server.',
     )
   }
 
   if (fabric.fabricType === 'leaf-spine-superspine') {
-    checkSwitchRole(issues, scope, fabric.superspineModelId, 'superspine', 'Superspine')
+    checkSwitchRole(issues, inAdvanced, fabric.superspineModelId, 'superspine', 'Superspine')
     if (fabric.superspineCount === 0) {
       report(
         issues,
@@ -294,12 +300,12 @@ function validatePartition(issues: Issue[], partition: Partition): void {
       issues,
       scope,
       'warning',
-      'Superspine count is set but the fabric type is leaf-spine — superspines are ignored.',
+      'Superspine count is set but the fabric type is leaf-spine, so superspines are ignored.',
     )
   }
 
   if (fabric.spineCount === 1) {
-    report(issues, scope, 'warning', 'Only one spine — no fabric redundancy.')
+    report(issues, scope, 'warning', 'Only one spine: no fabric redundancy.')
   }
   if (fabric.spineCount === 0 && partition.racks.length > 0) {
     report(issues, scope, 'error', 'Partition has racks but no spines.')
@@ -388,7 +394,7 @@ function validatePartition(issues: Issue[], partition: Partition): void {
     if (fiberNeeded > fiberAvailable) {
       report(
         issues,
-        scope,
+        inAdvanced,
         'warning',
         `Mgmt spine fiber ports: ${fiberNeeded} mgmt leaf uplinks need ${fiberNeeded} ${speed} ports ` +
           `per mgmt spine, but ${itemLabel(fabric.mgmt.spineModelId)} has ${fiberAvailable}. ` +
@@ -419,7 +425,7 @@ function checkAvailability(issues: Issue[], plan: Plan): void {
       issues,
       { where: 'Plan', target: {} },
       'warning',
-      `${itemLabel(id)} ${AVAILABILITY_NOTE[availability]} — it may no longer be orderable.`,
+      `${itemLabel(id)} ${AVAILABILITY_NOTE[availability]}, so it may no longer be orderable.`,
     )
   }
 }
@@ -430,14 +436,29 @@ export function validatePlan(plan: Plan): Issue[] {
 
   // Physical height: no rack may hold more units than it has.
   for (const layout of deriveRackLayout(plan)) {
+    // Rack names are editable, so uniqueness is checked rather than
+    // enforced; the physical rack names are what goes on the labels.
+    const seen = new Set<string>()
     for (const rack of layout.racks) {
+      const where = `${layout.partitionName} / ${rack.name}`
+      const target = { partitionId: layout.partitionId, rackId: rack.rackId }
+      // Height, power and a group's member names are edited in the rack's
+      // Advanced section; the central rack's budget is partition-level.
+      const inAdvanced = { where, target: { ...target, ...(rack.rackId && { field: 'advanced' }) } }
+      if (seen.has(rack.name)) {
+        report(
+          issues,
+          rack.group ? inAdvanced : { where, target },
+          'warning',
+          `Rack name "${rack.name}" is used more than once in ${layout.partitionName}. ` +
+            `Give every physical rack its own name.`,
+        )
+      }
+      seen.add(rack.name)
       if (rack.powerWatts > rack.maxPowerWatts) {
         report(
           issues,
-          {
-            where: `${layout.partitionName} / ${rack.name}`,
-            target: { partitionId: layout.partitionId, rackId: rack.rackId },
-          },
+          inAdvanced,
           'error',
           `Rack power budget exceeded: estimated ${formatPower(rack.powerWatts)} of ` +
             `${formatPower(rack.maxPowerWatts)} allowed. Raise the budget in the rack's ` +
@@ -447,10 +468,7 @@ export function validatePlan(plan: Plan): Issue[] {
       if (rack.usedU > rack.heightUnits) {
         report(
           issues,
-          {
-            where: `${layout.partitionName} / ${rack.name}`,
-            target: { partitionId: layout.partitionId, rackId: rack.rackId },
-          },
+          inAdvanced,
           'error',
           `Rack height exceeded: ${rack.usedU}U of ${rack.heightUnits}U used.`,
         )

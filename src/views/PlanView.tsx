@@ -58,33 +58,9 @@ export default function PlanView() {
     <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
       <div className="min-w-0 flex-1 space-y-6 xl:max-w-5xl">
         <IntroCard />
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Plan name</span>
-            <input
-              type="text"
-              value={plan.name}
-              onChange={(e) => setPlanName(e.target.value)}
-              className="w-72 rounded-md border border-gray-300 bg-white px-3 py-2"
-            />
-          </label>
-          <div>
-            <span className="mb-1 block text-sm font-medium">Topology</span>
-            <div className="flex gap-4 py-2">
-              {TopologyVariantSchema.options.map((variant) => (
-                <label key={variant} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="topology"
-                    checked={plan.topology === variant}
-                    onChange={() => setTopology(variant)}
-                  />
-                  {topologyLabels[variant]}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="ml-auto flex gap-2">
+        {/* Plan actions first, then the plan's own settings. */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap justify-end gap-2">
             <TemplateMenu />
             <button
               onClick={() =>
@@ -120,6 +96,33 @@ export default function PlanView() {
               Reset
             </button>
           </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Plan name</span>
+              <input
+                type="text"
+                value={plan.name}
+                onChange={(e) => setPlanName(e.target.value)}
+                className="w-72 rounded-md border border-gray-300 bg-white px-3 py-2"
+              />
+            </label>
+            <div>
+              <span className="mb-1 block text-sm font-medium">Topology</span>
+              <div className="flex gap-4 py-2">
+                {TopologyVariantSchema.options.map((variant) => (
+                  <label key={variant} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="topology"
+                      checked={plan.topology === variant}
+                      onChange={() => setTopology(variant)}
+                    />
+                    {topologyLabels[variant]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {plan.partitions.map((partition) => (
@@ -135,7 +138,7 @@ export default function PlanView() {
                   <InfoBubble
                     label="partitions"
                     info={{
-                      text: 'A partition is the metal-stack term for hardware controlled by one network topology — usually a rack or a group of racks — and therefore one failure domain. Machines in a partition share the same switch plane.',
+                      text: 'A partition is the metal-stack term for hardware controlled by one network topology (usually a rack or a group of racks) and therefore one failure domain. Machines in a partition share the same switch plane.',
                       href: DOCS.architecture,
                     }}
                   />
@@ -177,12 +180,12 @@ export default function PlanView() {
                 Add rack to {partition.name}
               </button>
               <button
-                onClick={() => addRack(partition.id, 'three-rack')}
+                onClick={() => addRack(partition.id, 'rack-group')}
                 title="Three physical racks sharing the middle rack's leaf pair and mgmt leaf"
                 className="btn-secondary"
               >
-                <Icon icon={SECTION_ICON.threeRack} />
-                Add three-rack to {partition.name}
+                <Icon icon={SECTION_ICON.rackGroup} />
+                Add rack group to {partition.name}
               </button>
             </div>
           </section>

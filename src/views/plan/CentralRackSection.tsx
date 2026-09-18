@@ -1,4 +1,10 @@
-import { nosOptions, serversForUsage, switchesForRole, type SwitchRole } from '../../model/catalog'
+import {
+  itemLabel,
+  nosOptions,
+  serversForUsage,
+  switchesForRole,
+  type SwitchRole,
+} from '../../model/catalog'
 import type { FabricConfig, MgmtNetwork, Partition } from '../../model/plan'
 import { formatTally, partitionNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, spineBandwidth } from '../../derive/bandwidth'
@@ -20,6 +26,22 @@ function switchOptions(role: SwitchRole) {
   }))
 }
 
+/** The central rack's models while their pickers are folded away:
+ *  production switches once each, then the management gear. */
+function modelSummary(fabric: FabricConfig): string {
+  const production = [
+    fabric.spineModelId,
+    ...(fabric.fabricType === 'leaf-spine-superspine' ? [fabric.superspineModelId] : []),
+    ...(fabric.storageLeafCount > 0 ? [fabric.storageLeafModelId] : []),
+  ]
+  const mgmtSwitches = [fabric.mgmt.spineModelId, fabric.mgmt.leafModelId]
+  return [
+    [...new Set(production)].map(itemLabel).join(', '),
+    `mgmt ${[...new Set(mgmtSwitches)].map(itemLabel).join(', ')}`,
+    `mgmt servers ${itemLabel(fabric.mgmt.serverModelId)}`,
+  ].join(' · ')
+}
+
 export default function CentralRackSection({
   partition,
   issues,
@@ -29,6 +51,7 @@ export default function CentralRackSection({
 }) {
   const own = issuesFor(issues, { partitionId: partition.id })
   const hasErrors = own.some((i) => i.severity === 'error')
+  const advancedIssues = own.filter((i) => i.target.field === 'advanced')
   const patchFabric = usePlanStore((s) => s.patchFabric)
   const patchRackDefaults = usePlanStore((s) => s.patchRackDefaults)
   const { fabric } = partition
@@ -47,11 +70,11 @@ export default function CentralRackSection({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <Icon icon={SECTION_ICON.centralRack} className="h-4 w-4 text-gray-500" />
-          Central rack — {partition.name}
+          Central rack · {partition.name}
           <InfoBubble
             label="the central rack"
             info={{
-              text: 'Each partition has one central rack holding the core of its switch plane — internet routers, exit switches, spines (and superspines) — together with the management spines and the management servers. The compute racks with their leaf switches hang below it.',
+              text: 'Each partition has one central rack holding the core of its switch plane (internet routers, exit switches, spines and any superspines) together with the management spines and the management servers. The compute racks with their leaf switches hang below it.',
               href: DOCS.networking,
             }}
           />
@@ -80,6 +103,7 @@ export default function CentralRackSection({
           </span>
         </span>
       </div>
+      <p className="-mt-2 mb-3 text-xs text-gray-500">{modelSummary(fabric)}</p>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SelectField
           label="Fabric type"
@@ -103,16 +127,10 @@ export default function CentralRackSection({
             })
           }
         />
-        <SelectField
-          label="Spine model"
-          value={fabric.spineModelId}
-          options={switchOptions('spine')}
-          onChange={(v) => patch({ spineModelId: v })}
-        />
         <NumberField
           label="Spines"
           info={{
-            text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth — at the cost of one leaf port per spine and link.',
+            text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth, at the cost of one leaf port per spine and link.',
             href: DOCS.networking,
           }}
           value={fabric.spineCount}
@@ -127,49 +145,17 @@ export default function CentralRackSection({
           value={fabric.exitSwitchCount}
           onChange={(n) => patch({ exitSwitchCount: n })}
         />
-        <NumberField
-          label="Internet routers"
-          info={{
-            text: 'Routers between the exit switches and the provider uplink (1U servers with dual-port 100G NICs). Each router is linked twice to every exit switch.',
-            href: DOCS.networking,
-          }}
-          value={fabric.routerCount}
-          onChange={(n) => patch({ routerCount: n })}
-        />
         {hasSuperspine && (
-          <>
-            <SelectField
-              label="Superspine model"
-              value={fabric.superspineModelId}
-              options={switchOptions('superspine')}
-              onChange={(v) => patch({ superspineModelId: v })}
-            />
-            <NumberField
-              label="Superspines"
-              info={{
-                text: 'A third tier above the spines for very large partitions. Each spine connects once to every superspine.',
-                href: DOCS.networking,
-              }}
-              value={fabric.superspineCount}
-              onChange={(n) => patch({ superspineCount: n })}
-            />
-          </>
+          <NumberField
+            label="Superspines"
+            info={{
+              text: 'A third tier above the spines for very large partitions. Each spine connects once to every superspine.',
+              href: DOCS.networking,
+            }}
+            value={fabric.superspineCount}
+            onChange={(n) => patch({ superspineCount: n })}
+          />
         )}
-        <SelectField
-          label="Storage leaf model"
-          value={fabric.storageLeafModelId}
-          options={switchOptions('storage-leaf')}
-          onChange={(v) => patch({ storageLeafModelId: v })}
-        />
-        <NumberField
-          label="Storage leaves"
-          info={{
-            text: 'Leaf switches for dedicated storage systems, attached once to every spine. Leave at 0 when storage servers live in the compute racks.',
-            href: DOCS.hardware,
-          }}
-          value={fabric.storageLeafCount}
-          onChange={(n) => patch({ storageLeafCount: n })}
-        />
       </div>
 
       <h4 className="mt-4 mb-3 text-sm font-semibold text-gray-700">
@@ -177,7 +163,7 @@ export default function CentralRackSection({
           icon={SECTION_ICON.mgmtNetwork}
           className="mr-1.5 inline h-4 w-4 align-[-3px] text-amber-600"
         />
-        Management network <span className="font-normal text-gray-500">— out-of-band</span>
+        Management network <span className="font-normal text-gray-500">· out-of-band</span>
         <InfoBubble
           label="the management network"
           info={{
@@ -212,53 +198,102 @@ export default function CentralRackSection({
           ]}
           onChange={(v) => patchMgmt({ redundant: v === 'redundant' })}
         />
-        <SelectField
-          label="Mgmt spine model"
-          value={fabric.mgmt.spineModelId}
-          options={switchOptions('mgmt-spine')}
-          onChange={(v) => patchMgmt({ spineModelId: v })}
-        />
-        <SelectField
-          label="Mgmt server model"
-          info={{
-            text: 'Management servers are not part of the allocatable machine pool. They run the partition services of metal-stack: PXE boot (pixiecore), metal-bmc for IPMI access and console, and the entry point into the management network.',
-            href: DOCS.architecture,
-          }}
-          value={fabric.mgmt.serverModelId}
-          options={serversForUsage('management').map((i) => ({
-            value: i.id,
-            label: optionLabel(i),
-          }))}
-          onChange={(v) => patchMgmt({ serverModelId: v })}
-        />
-        <SelectField
-          label="Mgmt leaf model"
-          info={{
-            text: 'One management leaf per compute rack (a three-rack shares one in its middle rack). It terminates the BMC/IPMI ports of the server chassis and the management interfaces of the leaves; metal-bmc discovers machines through it.',
-            href: DOCS.metalBmc,
-          }}
-          value={fabric.mgmt.leafModelId}
-          options={switchOptions('mgmt-leaf')}
-          onChange={(v) => patchMgmt({ leafModelId: v })}
-        />
-        <NumberField
-          label="Mgmt leaves per rack"
-          info={{
-            text: 'Add a second management leaf when a rack needs more 1G ports than one switch has (chassis BMCs plus one per leaf). Validation reports when this happens.',
-          }}
-          value={fabric.mgmt.leafPerRack}
-          onChange={(n) => patchMgmt({ leafPerRack: n })}
-        />
       </div>
 
-      <details className="mt-4">
+      <details className="mt-4" data-advanced>
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            — network OS, fabric links and rack defaults
+            · devices and models, network OS, fabric links and rack defaults
           </span>
+          {advancedIssues.length > 0 && (
+            <span className="ml-2 inline-flex align-middle">
+              <IssueBadges issues={advancedIssues} />
+            </span>
+          )}
         </summary>
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+
+        <h5 className="mt-3 mb-2 text-xs font-semibold text-gray-500">Devices and models</h5>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <NumberField
+            label="Internet routers"
+            info={{
+              text: 'Routers between the exit switches and the provider uplink (1U servers with dual-port 100G NICs). Each router is linked twice to every exit switch.',
+              href: DOCS.networking,
+            }}
+            value={fabric.routerCount}
+            onChange={(n) => patch({ routerCount: n })}
+          />
+          <SelectField
+            label="Spine model"
+            value={fabric.spineModelId}
+            options={switchOptions('spine')}
+            onChange={(v) => patch({ spineModelId: v })}
+          />
+          {hasSuperspine && (
+            <SelectField
+              label="Superspine model"
+              value={fabric.superspineModelId}
+              options={switchOptions('superspine')}
+              onChange={(v) => patch({ superspineModelId: v })}
+            />
+          )}
+          <SelectField
+            label="Storage leaf model"
+            value={fabric.storageLeafModelId}
+            options={switchOptions('storage-leaf')}
+            onChange={(v) => patch({ storageLeafModelId: v })}
+          />
+          <NumberField
+            label="Storage leaves"
+            info={{
+              text: 'Leaf switches for dedicated storage systems, attached once to every spine. Leave at 0 when storage servers live in the compute racks.',
+              href: DOCS.hardware,
+            }}
+            value={fabric.storageLeafCount}
+            onChange={(n) => patch({ storageLeafCount: n })}
+          />
+          <SelectField
+            label="Mgmt spine model"
+            value={fabric.mgmt.spineModelId}
+            options={switchOptions('mgmt-spine')}
+            onChange={(v) => patchMgmt({ spineModelId: v })}
+          />
+          <SelectField
+            label="Mgmt leaf model"
+            info={{
+              text: 'One management leaf per compute rack (a rack group shares one in its middle rack). It terminates the BMC/IPMI ports of the server chassis and the management interfaces of the leaves; metal-bmc discovers machines through it.',
+              href: DOCS.metalBmc,
+            }}
+            value={fabric.mgmt.leafModelId}
+            options={switchOptions('mgmt-leaf')}
+            onChange={(v) => patchMgmt({ leafModelId: v })}
+          />
+          <NumberField
+            label="Mgmt leaves per rack"
+            info={{
+              text: 'Add a second management leaf when a rack needs more 1G ports than one switch has (chassis BMCs plus one per leaf). Validation reports when this happens.',
+            }}
+            value={fabric.mgmt.leafPerRack}
+            onChange={(n) => patchMgmt({ leafPerRack: n })}
+          />
+          <SelectField
+            label="Mgmt server model"
+            info={{
+              text: 'Management servers are not part of the allocatable machine pool. They run the partition services of metal-stack: PXE boot (pixiecore), metal-bmc for IPMI access and console, and the entry point into the management network.',
+              href: DOCS.architecture,
+            }}
+            value={fabric.mgmt.serverModelId}
+            options={serversForUsage('management').map((i) => ({
+              value: i.id,
+              label: optionLabel(i),
+            }))}
+            onChange={(v) => patchMgmt({ serverModelId: v })}
+          />
+        </div>
+
+        <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Fabric links</h5>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <SelectField
             label="Network OS"
             info={{
@@ -294,12 +329,20 @@ export default function CentralRackSection({
               <InfoBubble
                 label="a non-blocking fabric"
                 info={{
-                  text: 'In a leaf-spine CLOS fabric, a rack is non-blocking when its leaf uplinks carry at least as much bandwidth as the attached machines — 8 nodes with 2×25G need 400 Gbit/s of uplinks. Above 1:1 the fabric is oversubscribed, which is a common and deliberate trade-off. Tick this to have the planner report oversubscription as an error, for the racks and, with superspines, for the spine tier.',
+                  text: 'In a leaf-spine CLOS fabric, a rack is non-blocking when its leaf uplinks carry at least as much bandwidth as the attached machines: 8 nodes with 2×25G need 400 Gbit/s of uplinks. Above 1:1 the fabric is oversubscribed, which is a common and deliberate trade-off. Tick this to have the planner report oversubscription as an error, for the racks and, with superspines, for the spine tier.',
                   href: DOCS.networking,
                 }}
               />
             </span>
           </label>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          Every leaf uplinks to every spine with this many 100G links. Each switch's single
+          management interface connects to the management network on its own.
+        </p>
+
+        <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Rack defaults</h5>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <NumberField
             label="Default rack height (U)"
             value={partition.rackDefaults.heightUnits}
@@ -317,10 +360,8 @@ export default function CentralRackSection({
           />
         </div>
         <p className="mt-2 text-xs text-gray-500">
-          Every leaf uplinks to every spine with this many 100G links. Each switch's single
-          management interface connects to the management network on its own. Rack defaults apply to
-          racks added to this partition; each rack can override them in its own Advanced section.
-          The central rack uses these values directly.
+          Rack defaults apply to racks added to this partition; each rack can override them in its
+          own Advanced section. The central rack uses these values directly.
         </p>
       </details>
     </section>

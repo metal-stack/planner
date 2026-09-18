@@ -1,6 +1,6 @@
 import type { Partition, Plan, Rack, ServerRole } from '../model/plan'
 
-// Node tallies at every aggregation level: rack (or three-rack entity),
+// Node tallies at every aggregation level: rack (or rack group),
 // partition, and the whole setup. "Nodes" are server nodes in compute
 // racks — management servers in the central rack are infrastructure and
 // not counted.

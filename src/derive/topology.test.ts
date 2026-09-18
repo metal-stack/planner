@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPlan } from '../model/defaults'
+import { createEmptyPlan, withRackKind } from '../model/defaults'
 import { deriveTopology, filterTopology } from './topology'
 
 describe('deriveTopology', () => {
@@ -109,16 +109,18 @@ describe('deriveTopology', () => {
     expect(links).toHaveLength(4) // 2 storage leaves x 2 spines
   })
 
-  it('draws a three-rack as three physical racks sharing the middle switches', () => {
+  it('draws a rack group as three physical racks sharing the middle switches', () => {
     const plan = createEmptyPlan()
-    const rack = plan.partitions[0].racks[0]
-    rack.kind = 'three-rack'
+    const partition = plan.partitions[0]
+    const rack = withRackKind(partition, partition.racks[0], 'rack-group')
+    partition.racks = [rack]
     // 14 chassis x 3U spread evenly: 5 left, 4 mid (3U of switches), 5 right
     rack.servers[0].count = 14 * 8
     const graph = deriveTopology(plan)
     const racks = graph.partitions[0].racks
 
-    expect(racks.map((r) => r.name)).toEqual(['Rack 1 (left)', 'Rack 1 (mid)', 'Rack 1 (right)'])
+    expect(racks.map((r) => r.name)).toEqual(['Rack 1', 'Rack 2', 'Rack 3'])
+    expect(racks[0].entity?.name).toBe('Rack group 1')
     expect(racks.map((r) => r.entity?.position)).toEqual(['left', 'mid', 'right'])
     const [left, mid, right] = racks
     expect(mid.leaves).toHaveLength(2)

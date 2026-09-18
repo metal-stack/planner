@@ -3,7 +3,7 @@ import { deriveBom } from '../derive/bom'
 import { planNodes } from '../derive/nodes'
 import { validatePlan } from '../derive/validate'
 import { catalog } from './catalog'
-import { createEmptyPlan } from './defaults'
+import { createEmptyPlan, physicalRackNames } from './defaults'
 import { PlanSchema, type Plan } from './plan'
 import { templates } from './templates'
 
@@ -27,11 +27,19 @@ describe('templates', () => {
     expect(planNodes(plan)).toEqual({ total: 8, byRole: { worker: 8 } })
   })
 
-  it('redundant: two three-racks with workers and three storage servers', () => {
+  it('redundant: two rack groups with workers and three storage servers', () => {
     const plan = templates.find((t) => t.id === 'redundant')!.build()
     const [partition] = plan.partitions
     expect(partition.fabric.mgmt.redundant).toBe(true)
-    expect(partition.racks.map((r) => r.kind)).toEqual(['three-rack', 'three-rack'])
+    expect(partition.racks.map((r) => r.kind)).toEqual(['rack-group', 'rack-group'])
+    expect(physicalRackNames(partition)).toEqual([
+      'Rack 1',
+      'Rack 2',
+      'Rack 3',
+      'Rack 4',
+      'Rack 5',
+      'Rack 6',
+    ])
     expect(planNodes(plan).byRole.storage).toBe(3)
   })
 

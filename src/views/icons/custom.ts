@@ -22,8 +22,8 @@ export const Rack = createLucideIcon('rack', [
   ['path', { d: 'M8 18.75h.01', key: 'u3' }],
 ])
 
-/** A three-rack: three physical racks side by side. */
-export const ThreeRack = createLucideIcon('three-rack', [
+/** A rack group: three physical racks side by side. */
+export const RackGroup = createLucideIcon('rack-group', [
   ['rect', { x: '1.5', y: '4', width: '6', height: '16', rx: '1', key: 'l' }],
   ['rect', { x: '9', y: '4', width: '6', height: '16', rx: '1', key: 'm' }],
   ['rect', { x: '16.5', y: '4', width: '6', height: '16', rx: '1', key: 'r' }],

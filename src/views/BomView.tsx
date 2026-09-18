@@ -295,7 +295,7 @@ export default function BomView() {
                       ? money(sub.total)
                       : sub.total > 0
                         ? `≥ ${money(sub.total)}`
-                        : '—'}
+                        : '–'}
                   </th>
                 )}
               </tr>
@@ -308,7 +308,7 @@ export default function BomView() {
                     key={line.catalogId}
                     className={`border-b border-gray-100 ${isSpare ? 'text-gray-500' : ''}`}
                   >
-                    <td className="px-3 py-2 font-mono text-xs">{line.partNumber ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{line.partNumber ?? '–'}</td>
                     <td className="px-3 py-2">
                       {identity(line) && <span className="font-medium">{identity(line)} </span>}
                       <span className={identity(line) ? 'text-gray-500' : ''}>
@@ -339,7 +339,7 @@ export default function BomView() {
                       <td className="px-3 py-1 text-right">
                         {isSpare ? (
                           <span className="text-xs text-gray-400">
-                            {price === undefined ? '—' : money(price)}
+                            {price === undefined ? '–' : money(price)}
                           </span>
                         ) : (
                           <input
@@ -347,7 +347,7 @@ export default function BomView() {
                             min={0}
                             step="0.01"
                             value={price ?? ''}
-                            placeholder="—"
+                            placeholder="–"
                             aria-label={`Unit price for ${line.model ?? line.partNumber ?? line.description}`}
                             onChange={(e) =>
                               setPrice(
@@ -363,7 +363,7 @@ export default function BomView() {
                     {showPrices && (
                       <td className="px-3 py-2 text-right tabular-nums">
                         {total === undefined ? (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400">–</span>
                         ) : (
                           money(total)
                         )}

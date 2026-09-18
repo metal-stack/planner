@@ -165,15 +165,15 @@ describe('infrastructure ranges', () => {
     ])
   })
 
-  it('sizes the Redundant template per three-rack and overflows a small block', () => {
+  it('sizes the Redundant template per rack group and overflows a small block', () => {
     const plan = templates.find((t) => t.id === 'redundant')!.build()
     const p = deriveIpPlan(plan).infra.partitions[0]
     const pxe = p.subnets.find((s) => s.purpose === 'PXE (vlan4000)')!
     expect(pxe).toMatchObject({ needed: 229, prefix: 23 })
     const racks = p.subnets.filter((s) => s.purpose === 'Management' && s.scope !== 'Central rack')
     expect(racks.map((s) => [s.scope, s.needed, s.prefix])).toEqual([
-      ['Rack 1', 118, 24],
-      ['Rack 2', 115, 24],
+      ['Rack group 1', 118, 24],
+      ['Rack group 2', 115, 24],
     ])
     plan.ipPlan.infra.partitionPrefix = 23
     const small = deriveIpPlan(plan).infra.partitions[0]

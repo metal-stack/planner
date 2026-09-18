@@ -2,7 +2,7 @@ import { create, useStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
 import { temporal } from 'zundo'
-import { createEmptyPlan, defaultPartition, defaultRack } from '../model/defaults'
+import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../model/defaults'
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
 import { normalizePlan } from '../model/normalize'
@@ -38,6 +38,7 @@ interface PlannerState {
   addRack: (partitionId: string, kind?: Rack['kind']) => void
   removeRack: (partitionId: string, rackId: string) => void
   patchRack: (partitionId: string, rackId: string, patch: Partial<Rack>) => void
+  setRackKind: (partitionId: string, rackId: string, kind: Rack['kind']) => void
   addServerGroup: (partitionId: string, rackId: string) => void
   removeServerGroup: (partitionId: string, rackId: string, groupId: string) => void
   patchServerGroup: (
@@ -166,7 +167,7 @@ export const usePlanStore = create<PlannerState>()(
           set((s) => ({
             plan: mapPartition(s.plan, partitionId, (p) => ({
               ...p,
-              racks: [...p.racks, defaultRack(`Rack ${p.racks.length + 1}`, kind, p.rackDefaults)],
+              racks: [...p.racks, newRack(p, kind)],
             })),
           })),
         removeRack: (partitionId, rackId) =>
@@ -180,6 +181,13 @@ export const usePlanStore = create<PlannerState>()(
           set((s) => ({
             plan: mapRack(s.plan, partitionId, rackId, (r) => ({ ...r, ...patch })),
           })),
+        setRackKind: (partitionId, rackId, kind) =>
+          set((s) => ({
+            plan: mapPartition(s.plan, partitionId, (p) => ({
+              ...p,
+              racks: p.racks.map((r) => (r.id === rackId ? withRackKind(p, r, kind) : r)),
+            })),
+          })),
         addServerGroup: (partitionId, rackId) =>
           set((s) => ({
             plan: mapRack(s.plan, partitionId, rackId, (r) => ({
@@ -189,7 +197,7 @@ export const usePlanStore = create<PlannerState>()(
                 {
                   id: crypto.randomUUID(),
                   role: 'worker',
-                  modelId: 'server-microcloud-x11',
+                  modelId: 'server-microcloud-h13',
                   count: 8,
                   uplink: '2x25G',
                 },

@@ -43,8 +43,9 @@ consistent — you edit the plan, everything else follows from it.
 
 - **Plan editor** — one or more partitions (metal-stack failure domains), each with a central
   rack (internet routers, exits, spines, optional superspines, management spines and management
-  servers), any number of compute racks, and the external networks that attach at the routers. A compute rack is either a single rack or a _three-rack_: three
-  physical racks sharing the middle rack's leaf pair and management leaf.
+  servers), any number of compute racks, and the external networks that attach at the routers. A compute rack is either a single rack or a _rack group_: three
+  physical racks sharing the middle rack's leaf pair and management leaf. Every physical rack
+  gets its own number by default (a group takes three), and names stay editable.
 - **Live feedback** — a side panel shows node and rack tallies, validation issues that jump to the
   section they belong to, and a topology thumbnail. All of it updates as you type.
 - **Validation** — leaf, spine, exit, management leaf and management spine port budgets
@@ -58,8 +59,8 @@ consistent — you edit the plan, everything else follows from it.
   (default), the management network, and the central rack alone. Wheel to zoom, drag to pan,
   hover a device to highlight its links, click a rack to jump to its editor section.
 - **Rack view** — height-unit elevations of every physical rack with an estimated power draw
-  against the rack's budget, including how a three-rack's chassis spread evenly across its
-  three racks. Click a rack to edit it.
+  against the rack's budget; a rack group's three racks are drawn in one box, showing how its
+  chassis spread evenly across them. Click a rack to edit it.
 - **BOM** — switches with their SONiC licenses, internet routers, servers (chassis derived
   from node counts), NICs, spares, and the complete cabling: server uplinks with breakout
   math, 100G fabric and router links, copper OOB and management links, and the fiber uplinks of
@@ -83,22 +84,29 @@ consistent — you edit the plan, everything else follows from it.
 ## Screenshots
 
 The screenshots show the **Redundant** template: one partition with a redundant management
-network, two three-racks with 112 workers each and three storage servers.
+network, two rack groups with 112 workers each and three storage servers.
 
 ### Plan editor with live side panel
+
+The central rack shows the counts that size the fabric; hardware models, routers, storage leaves,
+fabric links and rack defaults sit in its folded Advanced section. Each rack or rack group shows
+its leaf ports, fabric ratio and node count on the right of its header.
 
 ![Plan editor](docs/screenshots/plan.png)
 
 ### Topology
 
 Production view: routers, exits and spines in the central rack, compute racks below, a
-three-rack as three physical racks in one box. The management and central-rack views show the
+rack group as three physical racks in one box. The management and central-rack views show the
 other network and the central rack alone. Server uplinks and BMC links are intentionally not
 drawn.
 
 ![Topology](docs/screenshots/topology.png)
 
 ### Rack elevations
+
+Every physical rack with its own number; a rack group's three racks share one box, with the leaf
+pair and management leaf in the middle rack.
 
 ![Rack elevations](docs/screenshots/racks.png)
 
@@ -110,6 +118,8 @@ left, the derived limits and issues on the right.
 ![IP address plan](docs/screenshots/ips.png)
 
 ### Bill of materials
+
+With derivation shown: every quantity broken down by central rack and rack group.
 
 ![BOM](docs/screenshots/bom.png)
 
@@ -141,7 +151,7 @@ default plan. Use **Export JSON** to save a plan file and **Import JSON** to loa
 | Template         | Contents                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | Starter          | One partition, non-redundant management network, one rack with 8 workers on a leaf pair.                  |
-| Redundant        | One partition, redundant management network, two three-racks with 112 workers each and 3 storage servers. |
+| Redundant        | One partition, redundant management network, two rack groups with 112 workers each and 3 storage servers. |
 | Three partitions | Multisite topology with three partitions, each like _Redundant_.                                          |
 
 ## How it works
@@ -153,7 +163,7 @@ The whole app operates on a single `Plan` document, described by Zod schemas in
 | -------------------------- | ------------------------------------------------------- |
 | `src/derive/bom.ts`        | BOM lines and quantities                                |
 | `src/derive/topology.ts`   | the topology graph (nodes and links)                    |
-| `src/derive/rackLayout.ts` | rack elevations and the three-rack spread               |
+| `src/derive/rackLayout.ts` | rack elevations and the rack-group spread               |
 | `src/derive/validate.ts`   | validation issues                                       |
 | `src/derive/nodes.ts`      | node tallies per rack, partition and plan               |
 | `src/derive/ip/`           | CIDR arithmetic, the IP address plan and its validation |

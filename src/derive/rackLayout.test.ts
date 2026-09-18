@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPlan } from '../model/defaults'
+import { createEmptyPlan, withRackKind } from '../model/defaults'
 import { deriveRackLayout, physicalRackCount } from './rackLayout'
 import { validatePlan } from './validate'
 
@@ -55,29 +55,31 @@ describe('deriveRackLayout', () => {
   })
 })
 
-describe('three-rack', () => {
+describe('rack group', () => {
   it('distributes chassis evenly by used height with switches in the middle', () => {
     const plan = createEmptyPlan()
-    const rack = plan.partitions[0].racks[0]
-    rack.kind = 'three-rack'
+    const partition = plan.partitions[0]
+    const rack = withRackKind(partition, partition.racks[0], 'rack-group')
+    partition.racks = [rack]
     // 14 chassis x 3U over three racks; mid starts with 3U of switches
     rack.servers[0].count = 14 * 8
     const layout = deriveRackLayout(plan)[0]
     const [left, mid, right] = layout.racks.slice(1)
 
-    expect([left.name, mid.name, right.name]).toEqual([
-      'Rack 1 (left)',
-      'Rack 1 (mid)',
-      'Rack 1 (right)',
-    ])
+    expect([left.name, mid.name, right.name]).toEqual(['Rack 1', 'Rack 2', 'Rack 3'])
+    expect(layout.racks.slice(1).map((r) => r.group)).toEqual(
+      Array(3).fill({ id: rack.id, name: 'Rack group 1' }),
+    )
+    expect(layout.racks[0].group).toBeUndefined()
     expect(mid.slots.slice(0, 3).map((s) => s.label)).toEqual(['Mgmt leaf', 'Leaf 1', 'Leaf 2'])
     expect([left.usedU, mid.usedU, right.usedU]).toEqual([15, 15, 15])
   })
 
   it('spreads a storage group across the racks even when workers fill them unevenly', () => {
     const plan = createEmptyPlan()
-    const rack = plan.partitions[0].racks[0]
-    rack.kind = 'three-rack'
+    const partition = plan.partitions[0]
+    const rack = withRackKind(partition, partition.racks[0], 'rack-group')
+    partition.racks = [rack]
     // 13 worker chassis x 3U pack to 15/15/12U; without the per-group spread
     // the emptiest rack would then take two of the three 2U storage systems.
     rack.servers[0].count = 13 * 8
@@ -96,8 +98,9 @@ describe('three-rack', () => {
 
   it('flags overflow when the three racks are full', () => {
     const plan = createEmptyPlan()
-    const rack = plan.partitions[0].racks[0]
-    rack.kind = 'three-rack'
+    const partition = plan.partitions[0]
+    const rack = withRackKind(partition, partition.racks[0], 'rack-group')
+    partition.racks = [rack]
     // 42 chassis x 3U = 126U > 3x42U minus 3U of switches
     rack.servers[0].count = 42 * 8
     rack.servers[0].uplink = '2x100G'
@@ -111,7 +114,7 @@ describe('three-rack', () => {
     const plan = createEmptyPlan()
     const partition = plan.partitions[0]
     expect(physicalRackCount(partition)).toBe(2)
-    partition.racks[0].kind = 'three-rack'
+    partition.racks[0] = withRackKind(partition, partition.racks[0], 'rack-group')
     expect(physicalRackCount(partition)).toBe(4)
   })
 

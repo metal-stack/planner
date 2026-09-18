@@ -40,7 +40,7 @@ function Value({ f, id }: { f: FamilyResult; id: MetricId }) {
   if (m.value === null) {
     return (
       <HoverHint hint={m.formula}>
-        <span className="text-gray-400">—</span>
+        <span className="text-gray-400">–</span>
       </HoverHint>
     )
   }
@@ -62,7 +62,7 @@ export default function ResultsCard({ result }: { result: IpPlanResult }) {
             icon={SECTION_ICON.limits}
             className="mr-1.5 inline h-4 w-4 align-[-3px] text-gray-500"
           />
-          Limits <span className="font-normal text-gray-500">— hover a value for its formula</span>
+          Limits <span className="font-normal text-gray-500">· hover a value for its formula</span>
         </h3>
       </header>
       <table className="w-full text-sm">
@@ -111,7 +111,7 @@ export default function ResultsCard({ result }: { result: IpPlanResult }) {
                         </HoverHint>
                       ) : (
                         <HoverHint hint="needs valid inputs">
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400">–</span>
                         </HoverHint>
                       )}
                     </td>
