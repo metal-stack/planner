@@ -37,7 +37,9 @@ export interface IssueTarget {
   rackId?: string
   /** Issues of another tab: 'ips' for the IP plan. */
   section?: 'ips'
-  /** Field id within the section (e.g. "ipv4.shootPodCidr"). */
+  /** Field id within the section (e.g. "ipv4.shootPodCidr"). For a rack,
+   *  'advanced' means the fix is in the rack's folded Advanced section,
+   *  which navigation then opens. */
   field?: string
 }
 
@@ -130,15 +132,22 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     where: `${partition.name} / ${rack.name}`,
     target: { partitionId: partition.id, rackId: rack.id },
   }
-  checkSwitchRole(issues, scope, rack.leafModelId, 'leaf', 'Leaf switch')
+  // Leaf model and count are edited in the rack's Advanced section.
+  const inAdvanced: Scope = { ...scope, target: { ...scope.target, field: 'advanced' } }
+  checkSwitchRole(issues, inAdvanced, rack.leafModelId, 'leaf', 'Leaf switch')
 
   const nodes = rack.servers.reduce((n, g) => n + g.count, 0)
   if (nodes > 0 && rack.leafCount === 0) {
-    report(issues, scope, 'error', 'Rack has servers but no leaf switches.')
+    report(issues, inAdvanced, 'error', 'Rack has servers but no leaf switches.')
     return
   }
   if (rack.leafCount === 1) {
-    report(issues, scope, 'warning', 'Only one leaf switch — no rack-level network redundancy.')
+    report(
+      issues,
+      inAdvanced,
+      'warning',
+      'Only one leaf switch — no rack-level network redundancy.',
+    )
   }
 
   const needed = leafPortsNeeded(rack)
@@ -434,13 +443,15 @@ export function validatePlan(plan: Plan): Issue[] {
     // enforced; the physical rack names are what goes on the labels.
     const seen = new Set<string>()
     for (const rack of layout.racks) {
+      const where = `${layout.partitionName} / ${rack.name}`
+      const target = { partitionId: layout.partitionId, rackId: rack.rackId }
+      // Height, power and a group's member names are edited in the rack's
+      // Advanced section; the central rack's budget is partition-level.
+      const inAdvanced = { where, target: { ...target, ...(rack.rackId && { field: 'advanced' }) } }
       if (seen.has(rack.name)) {
         report(
           issues,
-          {
-            where: `${layout.partitionName} / ${rack.name}`,
-            target: { partitionId: layout.partitionId, rackId: rack.rackId },
-          },
+          rack.group ? inAdvanced : { where, target },
           'warning',
           `Rack name "${rack.name}" is used more than once in ${layout.partitionName}. ` +
             `Give every physical rack its own name.`,
@@ -450,10 +461,7 @@ export function validatePlan(plan: Plan): Issue[] {
       if (rack.powerWatts > rack.maxPowerWatts) {
         report(
           issues,
-          {
-            where: `${layout.partitionName} / ${rack.name}`,
-            target: { partitionId: layout.partitionId, rackId: rack.rackId },
-          },
+          inAdvanced,
           'error',
           `Rack power budget exceeded: estimated ${formatPower(rack.powerWatts)} of ` +
             `${formatPower(rack.maxPowerWatts)} allowed. Raise the budget in the rack's ` +
@@ -463,10 +471,7 @@ export function validatePlan(plan: Plan): Issue[] {
       if (rack.usedU > rack.heightUnits) {
         report(
           issues,
-          {
-            where: `${layout.partitionName} / ${rack.name}`,
-            target: { partitionId: layout.partitionId, rackId: rack.rackId },
-          },
+          inAdvanced,
           'error',
           `Rack height exceeded: ${rack.usedU}U of ${rack.heightUnits}U used.`,
         )

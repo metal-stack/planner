@@ -20,10 +20,13 @@ export function anchorFor(target: IssueTarget): string | undefined {
 
 const FLASH_MS = 1600
 
-export function revealSection(anchor: string | undefined): void {
+/** Scrolls to and flashes a section; `openAdvanced` also unfolds its
+ *  Advanced section, for issues whose fix lives there. */
+export function revealSection(anchor: string | undefined, openAdvanced = false): void {
   if (!anchor) return
   const el = document.getElementById(anchor)
   if (!el) return
+  if (openAdvanced) el.querySelector('details[data-advanced]')?.setAttribute('open', '')
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   el.classList.remove('section-flash')
   // Restart the animation even when the same section is flashed twice.
@@ -36,12 +39,13 @@ export function revealSection(anchor: string | undefined): void {
  *  section (switching tabs first lets the section mount). */
 export function navigateTo(target: IssueTarget): void {
   const anchor = anchorFor(target)
+  const openAdvanced = !!target.rackId && target.field === 'advanced'
   const view = target.section === 'ips' ? 'ips' : 'plan'
   const store = usePlanStore.getState()
   if (store.activeView === view) {
-    revealSection(anchor)
+    revealSection(anchor, openAdvanced)
     return
   }
   store.setActiveView(view)
-  setTimeout(() => revealSection(anchor), 30)
+  setTimeout(() => revealSection(anchor, openAdvanced), 30)
 }

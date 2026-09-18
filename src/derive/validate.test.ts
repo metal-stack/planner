@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPlan, defaultRack } from '../model/defaults'
+import { createEmptyPlan, defaultRack, withRackKind } from '../model/defaults'
 import type { Plan } from '../model/plan'
 import {
   countIssues,
@@ -186,7 +186,11 @@ describe('rack power budget', () => {
     rack.servers[0].count = 8 * 8 // 8 MicroClouds ≈ 16 kW + switches
     const issue = validatePlan(plan).find((i) => i.message.includes('Rack power budget'))
     expect(issue?.severity).toBe('error')
-    expect(issue?.target).toEqual({ partitionId: plan.partitions[0].id, rackId: rack.id })
+    expect(issue?.target).toEqual({
+      partitionId: plan.partitions[0].id,
+      rackId: rack.id,
+      field: 'advanced',
+    })
     rack.maxPowerWatts = 20000
     expect(validatePlan(plan).some((i) => i.message.includes('Rack power budget'))).toBe(false)
   })
@@ -322,5 +326,41 @@ describe('rack names', () => {
     const dupes = validatePlan(plan).filter((i) => i.message.includes('used more than once'))
     expect(dupes).toHaveLength(1)
     expect(dupes[0].severity).toBe('warning')
+  })
+})
+
+describe('issues fixed in the Advanced section', () => {
+  const advanced = (plan: Plan) =>
+    validatePlan(plan)
+      .filter((i) => i.target.field === 'advanced')
+      .map((i) => i.message)
+
+  it("points height and power issues into the rack's Advanced section", () => {
+    const plan = basePlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.heightUnits = 4
+    rack.maxPowerWatts = 1000
+    const messages = advanced(plan)
+    expect(messages.some((m) => m.startsWith('Rack height exceeded'))).toBe(true)
+    expect(messages.some((m) => m.startsWith('Rack power budget exceeded'))).toBe(true)
+  })
+
+  it("points duplicate member names there, but not a single rack's name", () => {
+    const plan = basePlan()
+    const partition = plan.partitions[0]
+    partition.racks.push(defaultRack('Rack 1'))
+    expect(advanced(plan)).toEqual([])
+
+    partition.racks[1] = withRackKind(partition, partition.racks[1], 'rack-group')
+    // The group's left rack is now "Rack 1", clashing with the single rack.
+    expect(advanced(plan).some((m) => m.includes('used more than once'))).toBe(true)
+  })
+
+  it('leaves the leaf-port capacity error in the visible section', () => {
+    const plan = basePlan()
+    plan.partitions[0].racks[0].servers[0].count = 400
+    const capacity = validatePlan(plan).find((i) => i.message.includes('leaf'))
+    expect(capacity).toBeDefined()
+    expect(capacity!.target.field).toBeUndefined()
   })
 })
