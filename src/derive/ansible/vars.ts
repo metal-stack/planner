@@ -90,7 +90,12 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
         kv('metal_partition_timezone', dep.timezone),
         kv(
           'metal_partition_metal_api_addr',
-          out.todo(f, 'metal_partition_metal_api_addr', 'address of the control plane metal-api'),
+          dep.metalApiAddress.trim() ||
+            out.todo(
+              f,
+              'metal_partition_metal_api_addr',
+              'address of the control plane metal-api (Ansible tab)',
+            ),
         ),
       ],
       'Connection to the metal-stack control plane (partition/roles/defaults).',

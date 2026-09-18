@@ -2,6 +2,7 @@ import type { Plan } from '../../model/plan'
 import { deriveDevices, slugify, type PartitionDevices } from '../devices'
 import { deriveDeviceAddresses, type PartitionAddresses } from '../ip/deviceAddresses'
 import { deriveIpPlan } from '../ip/ipPlan'
+import { ciFiles } from './ci'
 import { inventoryFile } from './inventory'
 import { staticFiles, readme } from './playbooks'
 import { groupVarFiles, hostVarFiles } from './vars'
@@ -11,6 +12,7 @@ import { groupVarFiles, hostVarFiles } from './vars'
 // like a metal-stack deployment repository:
 //
 //   README.md, ansible.cfg, requirements.yaml, deploy_*.yaml
+//   .gitlab-ci.yml and/or .github/workflows/ (check and deploy pipelines)
 //   inventories/<env>/inventory.yaml
 //   inventories/<env>/group_vars/<group>/<topic>.yaml
 //   inventories/<env>/host_vars/<host>.yaml
@@ -71,6 +73,7 @@ export function deriveAnsible(plan: Plan): AnsibleExport {
   const ctx = { plan, devices, addresses, out }
 
   staticFiles(ctx)
+  ciFiles(ctx)
   inventoryFile(ctx)
   groupVarFiles(ctx)
   hostVarFiles(ctx)

@@ -29,6 +29,10 @@ describe('yaml writer', () => {
     })
   })
 
+  it('quotes YAML 1.1 booleans, which Ansible and GitHub read as such', () => {
+    expect(toYaml(ymap(kv('on', 'off'), kv('a', 'yes')))).toBe('---\n"on": "off"\na: "yes"\n')
+  })
+
   it('writes bare keys for null values (inventory hosts)', () => {
     const text = toYaml(ymap(kv('hosts', ymap(kv('leaf01', null), kv('leaf02', null)))))
     expect(text).toContain('  leaf01:\n')
@@ -40,7 +44,14 @@ describe('yaml writer', () => {
     expect(parse(text)).toEqual([{ name: 'play', hosts: 'leaves', roles: ['a', 'b'] }])
   })
 
-  it('refuses multi-line strings', () => {
-    expect(() => toYaml(ymap(kv('a', 'x\ny')))).toThrow()
+  it('writes multi-line strings as literal blocks', () => {
+    const run = 'set -eu\nfor p in deploy_*.yaml; do\n  ansible-playbook "$p"\ndone\n'
+    const text = toYaml(ymap(kv('run', run), kv('script', ['echo a', 'x\ny'])))
+    expect(text).toContain('run: |\n  set -eu\n')
+    expect(parse(text)).toEqual({ run, script: ['echo a', 'x\ny\n'] })
+  })
+
+  it('refuses multi-line keys', () => {
+    expect(() => toYaml(ymap(kv('a\nb', 1)))).toThrow()
   })
 })

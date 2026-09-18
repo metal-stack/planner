@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { CHANGE_ME, type AnsibleFile } from '../../derive/ansible'
+import { CHANGE_ME, type AnsibleFile, type Placeholder } from '../../derive/ansible'
 import { useToastStore } from '../../store/toastStore'
 import { ACTION_ICON, FILE_ICON, Icon } from '../icons'
 
@@ -30,18 +30,17 @@ function buildTree(files: AnsibleFile[]): Dir {
   return root
 }
 
-const placeholderCount = (f: AnsibleFile) =>
-  f.path.endsWith('.yaml') ? f.content.split(CHANGE_ME).length - 1 : 0
-
 function DirView({
   dir,
   depth,
   selected,
+  todos,
   onSelect,
 }: {
   dir: Dir
   depth: number
   selected: string
+  todos: Map<string, number>
   onSelect: (path: string) => void
 }) {
   const pad = { paddingLeft: `${0.5 + depth * 0.875}rem` }
@@ -56,11 +55,17 @@ function DirView({
             <Icon icon={FILE_ICON.folder} className="h-3.5 w-3.5 text-gray-400" />
             {d.name}
           </summary>
-          <DirView dir={d} depth={depth + 1} selected={selected} onSelect={onSelect} />
+          <DirView
+            dir={d}
+            depth={depth + 1}
+            selected={selected}
+            todos={todos}
+            onSelect={onSelect}
+          />
         </details>
       ))}
       {dir.files.map((f) => {
-        const todo = placeholderCount(f)
+        const todo = todos.get(f.path) ?? 0
         return (
           <button
             key={f.path}
@@ -107,16 +112,20 @@ function Line({ text }: { text: string }) {
 
 export default function FileBrowser({
   files,
+  placeholders,
   selected,
   onSelect,
 }: {
   files: AnsibleFile[]
+  placeholders: Placeholder[]
   selected: string
   onSelect: (path: string) => void
 }) {
   const notify = useToastStore((s) => s.notify)
   const file = files.find((f) => f.path === selected) ?? files[0]
   const tree = buildTree(files)
+  const todos = new Map<string, number>()
+  for (const p of placeholders) todos.set(p.file, (todos.get(p.file) ?? 0) + 1)
 
   return (
     <section className="card grid min-w-0 grid-cols-[minmax(0,1fr)] md:grid-cols-[17rem_minmax(0,1fr)]">
@@ -124,7 +133,7 @@ export default function FileBrowser({
         aria-label="Files"
         className="max-h-[70vh] overflow-y-auto border-b border-gray-100 py-2 font-mono text-xs md:border-r md:border-b-0"
       >
-        <DirView dir={tree} depth={0} selected={file.path} onSelect={onSelect} />
+        <DirView dir={tree} depth={0} selected={file.path} todos={todos} onSelect={onSelect} />
       </nav>
       <div className="min-w-0">
         <header className="flex items-center gap-2 border-b border-gray-100 px-4 py-2">

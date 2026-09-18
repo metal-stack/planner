@@ -1,5 +1,6 @@
 import { ANSIBLE_COMMON_REPO, METAL_ROLES_REPO } from '../../model/ansibleRoles'
 import { formatCidr, formatIp } from '../ip/cidr'
+import { ciReadme } from './ci'
 import type { AnsibleContext } from './index'
 import { fromObject, kv, toYaml, toYamlSeq, ymap, type YValue } from './yaml'
 
@@ -137,6 +138,7 @@ export function readme({ plan, devices, addresses, out }: AnsibleContext, notes:
     'Encrypt `group_vars/partition/secrets.yaml` with `ansible-vault` once filled in.',
     '',
   ]
+  lines.push(...ciReadme({ plan, devices, addresses, out }))
   if (out.placeholders.length > 0) {
     lines.push('## To fill in', '', row(['File', 'Variable', 'What']), row(['---', '---', '---']))
     for (const p of out.placeholders) lines.push(row([`\`${p.file}\``, `\`${p.key}\``, p.reason]))

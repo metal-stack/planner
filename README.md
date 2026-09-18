@@ -79,8 +79,9 @@ consistent — you edit the plan, everything else follows from it.
   metal-core, mgmt-server, dhcp, metal-bmc, pixiecore, image-cache) and the playbooks that apply
   them, laid out like a metal-stack deployment repository. Hostnames, ASNs, loopbacks, management
   addresses, per-leaf PXE networks, DHCP ranges and transfer networks come from the plan and the
-  IP plan; secrets, endpoints and switch ports are marked `CHANGE_ME` and listed. Previewed file
-  by file and downloaded as a zip.
+  IP plan; secrets, endpoints and switch ports are marked `CHANGE_ME` and listed. A GitLab CI
+  pipeline (or GitHub Actions workflows) checks every push and deploys each partition by hand,
+  in order, on a runner inside the partition. Previewed file by file and downloaded as a zip.
 - **Prices** — an optional price book (kept in the browser, separate from the plan, importable
   and exportable as JSON) turns the BOM into a cost estimate with line totals, category
   subtotals and a grand total.

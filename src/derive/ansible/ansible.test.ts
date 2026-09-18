@@ -53,9 +53,10 @@ describe('Ansible export', () => {
     }
   })
 
-  it('lists each CHANGE_ME as a placeholder', () => {
+  it('lists each CHANGE_ME of the inventory as a placeholder', () => {
     const { files, placeholders } = deriveAnsible(createEmptyPlan())
-    for (const f of files.filter((f) => f.path.endsWith('.yaml'))) {
+    // The pipelines mention CHANGE_ME in their check, not as a value.
+    for (const f of files.filter((f) => f.path.startsWith('inventories/'))) {
       const marks = f.content.split(CHANGE_ME).length - 1
       expect(
         placeholders.filter((p) => p.file === f.path),

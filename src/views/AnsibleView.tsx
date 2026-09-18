@@ -50,10 +50,15 @@ export default function AnsibleView() {
         </button>
       </div>
 
-      <SettingsCard deployment={plan.deployment} />
+      <SettingsCard deployment={plan.deployment} partitions={result.devices} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-        <FileBrowser files={result.files} selected={selected} onSelect={setSelected} />
+        <FileBrowser
+          files={result.files}
+          placeholders={result.placeholders}
+          selected={selected}
+          onSelect={setSelected}
+        />
 
         <div className="space-y-4 xl:sticky xl:top-20">
           {result.notes.length > 0 && (

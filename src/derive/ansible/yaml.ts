@@ -41,10 +41,21 @@ export function fromObject(o: Record<string, YValue>): YMap {
 
 function scalar(v: YScalar): string {
   if (typeof v === 'string' && v.includes('\n')) {
-    throw new Error('multi-line strings are not supported')
+    throw new Error('multi-line strings only go in block scalars')
   }
-  return stringify(v, { lineWidth: 0 }).trimEnd()
+  // YAML 1.1 rules, as Ansible and GitHub parse it: `on`, `yes`, `off` …
+  // are booleans there, so they get quoted.
+  return stringify(v, { lineWidth: 0, version: '1.1' }).trimEnd()
 }
+
+/** A multi-line string as a literal block (`|`, keeping one final newline). */
+function block(v: string, indent: string): string[] {
+  const body = v.replace(/\n+$/, '')
+  if (/^\s/.test(body)) throw new Error('a block must not start with whitespace')
+  return body.split('\n').map((line) => (line ? `${indent}${line}` : ''))
+}
+
+const isBlock = (v: YValue): v is string => typeof v === 'string' && v.includes('\n')
 
 function commentLines(comment: string | undefined, indent: string): string[] {
   if (!comment) return []
@@ -54,6 +65,7 @@ function commentLines(comment: string | undefined, indent: string): string[] {
 function writeValue(key: string, value: YValue, indent: string): string[] {
   const head = `${indent}${scalar(key)}:`
   if (value === null) return [head]
+  if (isBlock(value)) return [`${head} |`, ...block(value, `${indent}  `)]
   if (Array.isArray(value)) {
     return value.length === 0 ? [`${head} []`] : [head, ...writeSeq(value, `${indent}  `)]
   }
@@ -82,6 +94,7 @@ function writeSeq(items: YValue[], indent: string): string[] {
     }
     if (Array.isArray(item)) throw new Error('nested sequences are not supported')
     if (item === null) return [`${indent}-`]
+    if (isBlock(item)) return [`${indent}- |`, ...block(item, `${indent}  `)]
     return [`${indent}- ${scalar(item)}`]
   })
 }
