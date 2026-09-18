@@ -254,6 +254,10 @@ export default function RackSection({
       {rack.servers.map((group) => (
         <ServerGroupRow key={group.id} partition={partition} rack={rack} group={group} />
       ))}
+      <button onClick={() => addServerGroup(partition.id, rack.id)} className="btn-secondary mt-3">
+        <Icon icon={ACTION_ICON.add} />
+        Add server group
+      </button>
       <details className="mt-3" data-advanced>
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
@@ -335,10 +339,6 @@ export default function RackSection({
           </div>
         </div>
       </details>
-      <button onClick={() => addServerGroup(partition.id, rack.id)} className="btn-secondary mt-3">
-        <Icon icon={ACTION_ICON.add} />
-        Add server group
-      </button>
     </section>
   )
 }

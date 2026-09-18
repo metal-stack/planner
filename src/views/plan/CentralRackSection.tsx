@@ -145,15 +145,6 @@ export default function CentralRackSection({
           value={fabric.exitSwitchCount}
           onChange={(n) => patch({ exitSwitchCount: n })}
         />
-        <NumberField
-          label="Internet routers"
-          info={{
-            text: 'Routers between the exit switches and the provider uplink (1U servers with dual-port 100G NICs). Each router is linked twice to every exit switch.',
-            href: DOCS.networking,
-          }}
-          value={fabric.routerCount}
-          onChange={(n) => patch({ routerCount: n })}
-        />
         {hasSuperspine && (
           <NumberField
             label="Superspines"
@@ -165,15 +156,6 @@ export default function CentralRackSection({
             onChange={(n) => patch({ superspineCount: n })}
           />
         )}
-        <NumberField
-          label="Storage leaves"
-          info={{
-            text: 'Leaf switches for dedicated storage systems, attached once to every spine. Leave at 0 when storage servers live in the compute racks.',
-            href: DOCS.hardware,
-          }}
-          value={fabric.storageLeafCount}
-          onChange={(n) => patch({ storageLeafCount: n })}
-        />
       </div>
 
       <h4 className="mt-4 mb-3 text-sm font-semibold text-gray-700">
@@ -222,7 +204,7 @@ export default function CentralRackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            — hardware models, network OS, fabric links and rack defaults
+            — devices and models, network OS, fabric links and rack defaults
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -231,8 +213,17 @@ export default function CentralRackSection({
           )}
         </summary>
 
-        <h5 className="mt-3 mb-2 text-xs font-semibold text-gray-500">Hardware models</h5>
+        <h5 className="mt-3 mb-2 text-xs font-semibold text-gray-500">Devices and models</h5>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <NumberField
+            label="Internet routers"
+            info={{
+              text: 'Routers between the exit switches and the provider uplink (1U servers with dual-port 100G NICs). Each router is linked twice to every exit switch.',
+              href: DOCS.networking,
+            }}
+            value={fabric.routerCount}
+            onChange={(n) => patch({ routerCount: n })}
+          />
           <SelectField
             label="Spine model"
             value={fabric.spineModelId}
@@ -252,6 +243,15 @@ export default function CentralRackSection({
             value={fabric.storageLeafModelId}
             options={switchOptions('storage-leaf')}
             onChange={(v) => patch({ storageLeafModelId: v })}
+          />
+          <NumberField
+            label="Storage leaves"
+            info={{
+              text: 'Leaf switches for dedicated storage systems, attached once to every spine. Leave at 0 when storage servers live in the compute racks.',
+              href: DOCS.hardware,
+            }}
+            value={fabric.storageLeafCount}
+            onChange={(n) => patch({ storageLeafCount: n })}
           />
           <SelectField
             label="Mgmt spine model"
