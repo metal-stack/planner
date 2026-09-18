@@ -1,0 +1,188 @@
+import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
+import { KNOWN_VARIABLES } from '../../model/ansibleRoles'
+import { createEmptyPlan } from '../../model/defaults'
+import { templates } from '../../model/templates'
+import { CHANGE_ME, deriveAnsible } from './index'
+
+const plans = () => [
+  { id: 'default', plan: createEmptyPlan() },
+  ...templates.map((t) => ({ id: t.id, plan: t.build() })),
+]
+
+/** Hosts of an inventory tree, depth first. */
+function inventoryHosts(group: Record<string, unknown> | null): string[] {
+  if (!group) return []
+  const hosts = Object.keys((group.hosts as Record<string, unknown>) ?? {})
+  const children = Object.values((group.children as Record<string, unknown>) ?? {})
+  return [...hosts, ...children.flatMap((c) => inventoryHosts(c as Record<string, unknown>))]
+}
+
+describe('Ansible export', () => {
+  it.each(plans())('writes valid YAML with known role variables ($id)', ({ plan }) => {
+    const { files } = deriveAnsible(plan)
+    const paths = files.map((f) => f.path)
+    expect(new Set(paths).size).toBe(paths.length)
+    for (const f of files.filter((f) => f.path.endsWith('.yaml'))) {
+      const doc = parse(f.content)
+      if (!/\/(group|host)_vars\//.test(f.path) || doc === null) continue
+      const unknown = Object.keys(doc).filter((k) => !KNOWN_VARIABLES.has(k))
+      expect(unknown, f.path).toEqual([])
+    }
+  })
+
+  it.each(plans())('gives every inventory host its host_vars ($id)', ({ plan }) => {
+    const { files, devices } = deriveAnsible(plan)
+    const inventory = parse(files.find((f) => f.path.endsWith('inventory.yaml'))!.content)
+    const hosts = [...new Set(inventoryHosts(inventory.all))].sort()
+    const expected = devices.flatMap((p) => p.devices.map((d) => d.hostname)).sort()
+    expect(hosts).toEqual(expected)
+    for (const h of hosts) {
+      expect(files.some((f) => f.path === `inventories/prod/host_vars/${h}.yaml`)).toBe(true)
+    }
+  })
+
+  it('derives every address of the templates, leaving only what the plan cannot know', () => {
+    for (const { plan } of plans()) {
+      const { placeholders, notes } = deriveAnsible(plan)
+      expect(notes).toEqual([])
+      const derivable = placeholders.filter((p) =>
+        /ansible_host|loopback|metal_core_cidr|router_id|mgmt_gateway|bgp_ports|spine_uplinks|nsqd_addr|pixiecore|bmc_superuser$/.test(
+          p.key,
+        ),
+      )
+      expect(derivable).toEqual([])
+    }
+  })
+
+  it('lists each CHANGE_ME of the inventory as a placeholder', () => {
+    const { files, placeholders } = deriveAnsible(createEmptyPlan())
+    // The pipelines mention CHANGE_ME in their check, not as a value.
+    for (const f of files.filter((f) => f.path.startsWith('inventories/'))) {
+      const marks = f.content.split(CHANGE_ME).length - 1
+      expect(
+        placeholders.filter((p) => p.file === f.path),
+        f.path,
+      ).toHaveLength(marks)
+    }
+  })
+
+  it('defaults to public name and NTP servers, leaving release and metal-api open', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].fabric.nos = 'edgecore-sonic'
+    const { files, placeholders } = deriveAnsible(plan)
+    const switches = parse(
+      files.find((f) => f.path.endsWith('group_vars/edgecore_sonic/sonic-config.yaml'))!.content,
+    )
+    expect(switches.sonic_config_nameservers).toEqual(['1.1.1.1', '8.8.8.8'])
+    expect(switches.sonic_config_ntp.servers[0]).toBe('0.europe.pool.ntp.org')
+    const settings = placeholders.filter((p) => p.reason.endsWith('(Ansible tab)'))
+    expect(settings.map((p) => p.key)).toEqual([
+      'metal_stack_release_version',
+      'metal_control_plane_ingress_dns',
+    ])
+  })
+
+  it('uses the deployment settings', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].fabric.nos = 'edgecore-sonic'
+    plan.deployment = {
+      ...plan.deployment,
+      environment: 'Staging',
+      metalStackRelease: 'v0.21.6',
+      nameservers: ['192.0.2.53'],
+      ntpServers: ['192.0.2.123'],
+    }
+    const { files, placeholders } = deriveAnsible(plan)
+    const file = (suffix: string) => parse(files.find((f) => f.path.endsWith(suffix))!.content)
+    expect(file('staging/group_vars/all/release_vector.yaml').metal_stack_release_version).toBe(
+      'v0.21.6',
+    )
+    expect(file('group_vars/edgecore_sonic/sonic-config.yaml')).toMatchObject({
+      sonic_config_nameservers: ['192.0.2.53'],
+      sonic_config_ntp: { servers: ['192.0.2.123'] },
+    })
+    expect(placeholders.some((p) => p.key === 'metal_stack_release_version')).toBe(false)
+    expect(files.find((f) => f.path === 'ansible.cfg')!.content).toContain(
+      'inventory = inventories/staging/inventory.yaml',
+    )
+  })
+
+  it('lays out the default inventory', () => {
+    const { files } = deriveAnsible(createEmptyPlan())
+    expect(files.find((f) => f.path === 'inventories/prod/inventory.yaml')!.content)
+      .toMatchInlineSnapshot(`
+        "---
+        # Generated by the metal-stack planner. Hosts are named after the plan;
+        # ansible_host comes from host_vars (the management addresses).
+        all:
+          children:
+            partition:
+              children:
+                mgmtservers:
+                  children:
+                    partition_1_mgmtservers:
+                mgmtleaves:
+                  children:
+                    partition_1_mgmtleaves:
+                mgmtspines:
+                  children:
+                    partition_1_mgmtspines:
+                inet:
+                  children:
+                    partition_1_inet:
+                leaves:
+                  children:
+                    partition_1_leaves:
+                spines:
+                  children:
+                    partition_1_spines:
+                superspines: {}
+                exits:
+                  children:
+                    partition_1_exits:
+                storageleaves: {}
+                broadcom_sonic:
+                  children:
+                    partition_1_mgmtleaves:
+                    partition_1_mgmtspines:
+                    partition_1_leaves:
+                    partition_1_spines:
+                    partition_1_exits:
+                # Partition 1
+                partition_1:
+                  children:
+                    partition_1_mgmtservers:
+                      hosts:
+                        partition-1-mgmtserver01:
+                        partition-1-mgmtserver02:
+                    partition_1_mgmtleaves:
+                      hosts:
+                        partition-1-r01mgmtleaf:
+                    partition_1_mgmtspines:
+                      hosts:
+                        partition-1-mgmtspine01:
+                        partition-1-mgmtspine02:
+                    partition_1_inet:
+                      hosts:
+                        partition-1-inet01:
+                        partition-1-inet02:
+                    partition_1_leaves:
+                      children:
+                        # Rack 1
+                        partition_1_r01:
+                          hosts:
+                            partition-1-r01leaf01:
+                            partition-1-r01leaf02:
+                    partition_1_spines:
+                      hosts:
+                        partition-1-spine01:
+                        partition-1-spine02:
+                    partition_1_exits:
+                      hosts:
+                        partition-1-exit01:
+                        partition-1-exit02:
+        "
+      `)
+  })
+})

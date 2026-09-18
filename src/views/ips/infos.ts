@@ -42,7 +42,7 @@ export const IP_INFO = {
     text: 'Unique local addresses (RFC 4193) for IPv6 pods and services. A random 40-bit global ID keeps the /48 unique; the presets encode metal-stack in fd8e:7a15:7ac6::/48.',
   },
   infra: {
-    text: 'Per-partition ranges of the switch plane: underlay loopbacks (BGP router ID and VTEP address of every switch and firewall), the PXE VLAN whose DHCP server runs on the exit switches, the management network (mgmt VRF with every switch management interface and every BMC), and the transfer networks to the upstream routers.',
+    text: 'Per-partition ranges of the switch plane: underlay loopbacks (BGP router ID and VTEP address of every switch and firewall), the PXE VLAN (one network per leaf, its metal-core CIDR, plus one for the exit switch SVIs), the management network (mgmt VRF with every switch management interface and every BMC), the management loopbacks of an L3 management network, and the transfer networks to the upstream routers.',
     href: DOCS.networking,
   },
   headroom: {

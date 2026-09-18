@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import { countIssues, validatePlan } from './derive/validate'
 import { useHistory, usePlanStore, type View } from './store/planStore'
 import BomView from './views/BomView'
@@ -12,12 +12,16 @@ import TopologyView from './views/TopologyView'
 import logoUrl from './assets/metal-stack-logo.svg'
 import { ACTION_ICON, Icon, TAB_ICON } from './views/icons'
 
+// The Ansible tab (and its YAML writer) loads on first use.
+const AnsibleView = lazy(() => import('./views/AnsibleView'))
+
 const tabs: { view: View; label: string }[] = [
   { view: 'plan', label: 'Plan' },
   { view: 'topology', label: 'Topology' },
   { view: 'racks', label: 'Racks' },
   { view: 'ips', label: 'IPs' },
   { view: 'bom', label: 'BOM' },
+  { view: 'ansible', label: 'Ansible' },
 ]
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -128,6 +132,11 @@ export default function App() {
         {activeView === 'racks' && <RackLayoutView />}
         {activeView === 'ips' && <IpView />}
         {activeView === 'bom' && <BomView />}
+        {activeView === 'ansible' && (
+          <Suspense fallback={null}>
+            <AnsibleView />
+          </Suspense>
+        )}
       </main>
       <Toaster />
     </div>

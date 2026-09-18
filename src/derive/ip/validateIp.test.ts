@@ -82,6 +82,6 @@ describe('validateIpPlan', () => {
 
     const small = createEmptyPlan()
     small.ipPlan.infra.partitionPrefix = 25
-    expect(messages(small, 'error').some((m) => m.includes('needs a /24'))).toBe(true)
+    expect(messages(small, 'error').some((m) => m.includes('needs a /23'))).toBe(true)
   })
 })

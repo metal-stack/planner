@@ -91,7 +91,14 @@ export interface CatalogItem {
    *  (1600 W / 2200 W per full chassis); the rest are datasheet-based
    *  estimates. Partial chassis are scaled by their node count. */
   powerWatts?: number
-  ports?: { speed: PortSpeed; count: number }[]
+  ports?: {
+    speed: PortSpeed
+    count: number
+    /** SONiC interface names of the group: Ethernet<first + i·step>. From
+     *  the platform's port_config.ini in sonic-net/sonic-buildimage
+     *  (device/accton/…); absent where no public map exists. */
+    sonic?: { first: number; step: number }
+  }[]
   /** metal-stack support status; absent = not applicable (mgmt gear, cables…). */
   status?: SupportStatus
   /** Vendor lifecycle; absent = current. */
@@ -126,7 +133,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '32× 100G QSFP28',
     heightUnits: 1,
     powerWatts: 300,
-    ports: [{ speed: '100G', count: 32 }],
+    ports: [{ speed: '100G', count: 32, sonic: { first: 0, step: 4 } }],
     status: 'stable',
     switchRoles: ['leaf', 'spine', 'superspine', 'exit', 'storage-leaf'],
     licenseClass: '100g',
@@ -140,7 +147,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '32× 100G QSFP28',
     heightUnits: 1,
     powerWatts: 250,
-    ports: [{ speed: '100G', count: 32 }],
+    ports: [{ speed: '100G', count: 32, sonic: { first: 0, step: 4 } }],
     status: 'stable',
     // Edgecore lists AS7712-32X-EC on its end-of-life page.
     availability: 'eol',
@@ -157,9 +164,9 @@ export const catalog: Record<string, CatalogItem> = {
     heightUnits: 1,
     powerWatts: 90,
     ports: [
-      { speed: '1G', count: 48 },
-      { speed: '25G', count: 4 },
-      { speed: '100G', count: 2 },
+      { speed: '1G', count: 48, sonic: { first: 0, step: 1 } },
+      { speed: '25G', count: 4, sonic: { first: 48, step: 1 } },
+      { speed: '100G', count: 2, sonic: { first: 52, step: 4 } },
     ],
     status: 'stable',
     switchRoles: ['mgmt-spine', 'mgmt-leaf'],
@@ -620,6 +627,48 @@ export function catalogItem(id: string): CatalogItem {
 
 export function portCount(item: CatalogItem, speed: PortSpeed): number {
   return item.ports?.find((p) => p.speed === speed)?.count ?? 0
+}
+
+/** Front-panel number of a SONiC port (1-based, counting the `ports`
+ *  groups in order), as Enterprise SONiC names breakout ports ("1/<n>");
+ *  null without a SONiC port map. */
+export function frontPanelIndex(modelId: string, portName: string): number | null {
+  let offset = 0
+  for (const group of catalog[modelId]?.ports ?? []) {
+    const names = sonicPortNames(modelId, group.speed)
+    const i = names?.indexOf(portName) ?? -1
+    if (i >= 0) return offset + i + 1
+    offset += group.count
+  }
+  return null
+}
+
+/** Interfaces a port becomes in an `<n>x<speed>` breakout: its lanes as
+ *  consecutive native names, "Ethernet0" in 4x25G → Ethernet0…Ethernet3. */
+export function breakoutChildren(portName: string, mode: string): string[] {
+  const n = Number(/^(\d+)x/.exec(mode)?.[1] ?? 1)
+  const base = Number(/(\d+)$/.exec(portName)?.[1] ?? NaN)
+  if (Number.isNaN(base)) return [portName]
+  return Array.from({ length: n }, (_, i) => `Ethernet${base + i}`)
+}
+
+/** The BMC superuser metal-hammer creates on a server, per vendor
+ *  (go-hal's SuperUser() of each vendor, metal-stack/go-hal
+ *  internal/vendors/); metal-bmc logs in with it. */
+export const BMC_SUPERUSER: Record<string, string> = {
+  Supermicro: 'root',
+  Lenovo: 'root',
+  Dell: 'superuser',
+  Gigabyte: 'superuser',
+}
+
+/** SONiC interface names of a switch's ports of one speed, in port order;
+ *  null when the catalog has no SONiC port map for the model. */
+export function sonicPortNames(modelId: string, speed: PortSpeed): string[] | null {
+  const group = catalog[modelId]?.ports?.find((p) => p.speed === speed)
+  if (!group?.sonic) return null
+  const { first, step } = group.sonic
+  return Array.from({ length: group.count }, (_, i) => `Ethernet${first + i * step}`)
 }
 
 // Dropdown order: current hardware first, then eol, then withdrawn.

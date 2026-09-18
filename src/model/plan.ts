@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { defaultDeployment, DeploymentSchema } from './deployment'
 import { defaultIpPlan, IpPlanSchema } from './ipPlan'
 import { SCHEMA_VERSION } from './migrate'
 
@@ -165,5 +166,7 @@ export const PlanSchema = z.object({
   sparesPerLine: z.number().int().min(0).default(2),
   /** IPv4/IPv6 address plan (IPs tab). */
   ipPlan: IpPlanSchema.default(defaultIpPlan),
+  /** Settings of the Ansible export (Ansible tab). */
+  deployment: DeploymentSchema.default(defaultDeployment),
 })
 export type Plan = z.infer<typeof PlanSchema>
