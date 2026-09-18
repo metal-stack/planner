@@ -142,12 +142,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     return
   }
   if (rack.leafCount === 1) {
-    report(
-      issues,
-      inAdvanced,
-      'warning',
-      'Only one leaf switch — no rack-level network redundancy.',
-    )
+    report(issues, inAdvanced, 'warning', 'Only one leaf switch: no rack-level network redundancy.')
   }
 
   const needed = leafPortsNeeded(rack)
@@ -286,7 +281,7 @@ function validatePartition(issues: Issue[], partition: Partition): void {
       issues,
       scope,
       'warning',
-      'Management network is not redundant — a single mgmt spine and mgmt server.',
+      'Management network is not redundant: a single mgmt spine and mgmt server.',
     )
   }
 
@@ -305,12 +300,12 @@ function validatePartition(issues: Issue[], partition: Partition): void {
       issues,
       scope,
       'warning',
-      'Superspine count is set but the fabric type is leaf-spine — superspines are ignored.',
+      'Superspine count is set but the fabric type is leaf-spine, so superspines are ignored.',
     )
   }
 
   if (fabric.spineCount === 1) {
-    report(issues, scope, 'warning', 'Only one spine — no fabric redundancy.')
+    report(issues, scope, 'warning', 'Only one spine: no fabric redundancy.')
   }
   if (fabric.spineCount === 0 && partition.racks.length > 0) {
     report(issues, scope, 'error', 'Partition has racks but no spines.')
@@ -430,7 +425,7 @@ function checkAvailability(issues: Issue[], plan: Plan): void {
       issues,
       { where: 'Plan', target: {} },
       'warning',
-      `${itemLabel(id)} ${AVAILABILITY_NOTE[availability]} — it may no longer be orderable.`,
+      `${itemLabel(id)} ${AVAILABILITY_NOTE[availability]}, so it may no longer be orderable.`,
     )
   }
 }

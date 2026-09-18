@@ -34,11 +34,11 @@ export default function ExternalNetworksSection({ plan }: { plan: Plan }) {
             className="mr-1.5 inline h-4 w-4 align-[-3px] text-gray-500"
           />
           External networks{' '}
-          <span className="font-normal text-gray-500">— attach at the exit switches</span>
+          <span className="font-normal text-gray-500">· attach at the exit switches</span>
           <InfoBubble
             label="external networks"
             info={{
-              text: 'Networks outside the fabric — the internet uplink, company networks, storage backends. They enter through the internet routers and exit switches of one partition, or of every partition when none is chosen.',
+              text: 'Networks outside the fabric: the internet uplink, company networks, storage backends. They enter through the internet routers and exit switches of one partition, or of every partition when none is chosen.',
               href: DOCS.networking,
             }}
           />

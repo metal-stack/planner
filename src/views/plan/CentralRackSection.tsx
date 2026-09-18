@@ -70,11 +70,11 @@ export default function CentralRackSection({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <Icon icon={SECTION_ICON.centralRack} className="h-4 w-4 text-gray-500" />
-          Central rack — {partition.name}
+          Central rack · {partition.name}
           <InfoBubble
             label="the central rack"
             info={{
-              text: 'Each partition has one central rack holding the core of its switch plane — internet routers, exit switches, spines (and superspines) — together with the management spines and the management servers. The compute racks with their leaf switches hang below it.',
+              text: 'Each partition has one central rack holding the core of its switch plane (internet routers, exit switches, spines and any superspines) together with the management spines and the management servers. The compute racks with their leaf switches hang below it.',
               href: DOCS.networking,
             }}
           />
@@ -130,7 +130,7 @@ export default function CentralRackSection({
         <NumberField
           label="Spines"
           info={{
-            text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth — at the cost of one leaf port per spine and link.',
+            text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth, at the cost of one leaf port per spine and link.',
             href: DOCS.networking,
           }}
           value={fabric.spineCount}
@@ -163,7 +163,7 @@ export default function CentralRackSection({
           icon={SECTION_ICON.mgmtNetwork}
           className="mr-1.5 inline h-4 w-4 align-[-3px] text-amber-600"
         />
-        Management network <span className="font-normal text-gray-500">— out-of-band</span>
+        Management network <span className="font-normal text-gray-500">· out-of-band</span>
         <InfoBubble
           label="the management network"
           info={{
@@ -204,7 +204,7 @@ export default function CentralRackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            — devices and models, network OS, fabric links and rack defaults
+            · devices and models, network OS, fabric links and rack defaults
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -329,7 +329,7 @@ export default function CentralRackSection({
               <InfoBubble
                 label="a non-blocking fabric"
                 info={{
-                  text: 'In a leaf-spine CLOS fabric, a rack is non-blocking when its leaf uplinks carry at least as much bandwidth as the attached machines — 8 nodes with 2×25G need 400 Gbit/s of uplinks. Above 1:1 the fabric is oversubscribed, which is a common and deliberate trade-off. Tick this to have the planner report oversubscription as an error, for the racks and, with superspines, for the spine tier.',
+                  text: 'In a leaf-spine CLOS fabric, a rack is non-blocking when its leaf uplinks carry at least as much bandwidth as the attached machines: 8 nodes with 2×25G need 400 Gbit/s of uplinks. Above 1:1 the fabric is oversubscribed, which is a common and deliberate trade-off. Tick this to have the planner report oversubscription as an error, for the racks and, with superspines, for the spine tier.',
                   href: DOCS.networking,
                 }}
               />

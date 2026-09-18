@@ -242,7 +242,7 @@ function deriveFamily(
         ? `Σ 2^(32 − p) over ${validInternet.length} ranges = ${formatCount(total)}`
         : 'no internet ranges',
     )
-    m.maxTenants = missing('maxTenants', 'n/a — IPv4 tenants share the internet network')
+    m.maxTenants = missing('maxTenants', 'n/a (IPv4 tenants share the internet network)')
   } else {
     const fitting = validInternet.filter((c) => c.prefix <= tenantPrefix)
     const tenants = fitting.reduce((n, c) => n + subnetCount(c, tenantPrefix), 0n)

@@ -51,7 +51,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
         fill={overflowU > 0 || rack.powerWatts > rack.maxPowerWatts ? '#b91c1c' : '#6b7280'}
       >
         {rack.usedU}U of {rack.heightUnits}U used
-        {overflowU > 0 ? ` — ${overflowU}U over` : ''} · ~{formatPower(rack.powerWatts)} of{' '}
+        {overflowU > 0 ? `, ${overflowU}U over` : ''} · ~{formatPower(rack.powerWatts)} of{' '}
         {formatPower(rack.maxPowerWatts)}
       </text>
 
@@ -112,7 +112,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
               stroke={overflowing ? '#dc2626' : style.stroke}
               strokeWidth={1}
             />
-            <title>{`${slot.label} — ${slot.sublabel ?? ''} (${uRange}, ${slot.units}U)`}</title>
+            <title>{`${slot.label}: ${slot.sublabel ?? ''} (${uRange}, ${slot.units}U)`}</title>
             {slot.units === 1 ? (
               <>
                 <text

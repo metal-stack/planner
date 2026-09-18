@@ -61,7 +61,7 @@ export function requiredSuperspines(partition: Partition): number {
 
 /** "1.0 : 1", "14.4 : 1", or "—" when there is nothing to compare. */
 export function formatRatio(ratio: number | null): string {
-  return ratio === null ? '—' : `${ratio.toFixed(1)} : 1`
+  return ratio === null ? '–' : `${ratio.toFixed(1)} : 1`
 }
 
 /** Large totals as Tbit/s, e.g. "11.5 Tbit/s"; below 1 Tbit/s as Gbit/s. */

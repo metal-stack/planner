@@ -88,6 +88,10 @@ network, two rack groups with 112 workers each and three storage servers.
 
 ### Plan editor with live side panel
 
+The central rack shows the counts that size the fabric; hardware models, routers, storage leaves,
+fabric links and rack defaults sit in its folded Advanced section. Each rack or rack group shows
+its leaf ports, fabric ratio and node count on the right of its header.
+
 ![Plan editor](docs/screenshots/plan.png)
 
 ### Topology
@@ -101,6 +105,9 @@ drawn.
 
 ### Rack elevations
 
+Every physical rack with its own number; a rack group's three racks share one box, with the leaf
+pair and management leaf in the middle rack.
+
 ![Rack elevations](docs/screenshots/racks.png)
 
 ### IP address plan
@@ -111,6 +118,8 @@ left, the derived limits and issues on the right.
 ![IP address plan](docs/screenshots/ips.png)
 
 ### Bill of materials
+
+With derivation shown: every quantity broken down by central rack and rack group.
 
 ![BOM](docs/screenshots/bom.png)
 

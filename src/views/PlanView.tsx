@@ -135,7 +135,7 @@ export default function PlanView() {
                   <InfoBubble
                     label="partitions"
                     info={{
-                      text: 'A partition is the metal-stack term for hardware controlled by one network topology — usually a rack or a group of racks — and therefore one failure domain. Machines in a partition share the same switch plane.',
+                      text: 'A partition is the metal-stack term for hardware controlled by one network topology (usually a rack or a group of racks) and therefore one failure domain. Machines in a partition share the same switch plane.',
                       href: DOCS.architecture,
                     }}
                   />

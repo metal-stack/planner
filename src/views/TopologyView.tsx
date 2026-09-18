@@ -52,7 +52,7 @@ export default function TopologyView() {
   if (!hasContent) {
     return (
       <p className="text-sm text-gray-600">
-        Nothing to draw yet — add spines and racks in the Plan tab.
+        Nothing to draw yet. Add spines and racks in the Plan tab.
       </p>
     )
   }

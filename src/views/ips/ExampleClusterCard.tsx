@@ -22,7 +22,7 @@ const ROWS: { label: string; value: (e: ExampleCluster) => string[] }[] = [
   { label: 'Seed service CIDR', value: (e) => [formatCidr(e.seedServiceCidr)] },
   {
     label: 'Reserve',
-    value: (e) => (e.reserveCidrs.length ? e.reserveCidrs.map(formatCidr) : ['—']),
+    value: (e) => (e.reserveCidrs.length ? e.reserveCidrs.map(formatCidr) : ['–']),
   },
 ]
 
@@ -40,7 +40,7 @@ export default function ExampleClusterCard({ result }: { result: IpPlanResult })
         />
         Example cluster{' '}
         <span className="font-normal text-gray-500">
-          — first project network{name ? ` in ${name}` : ''}
+          · first project network{name ? ` in ${name}` : ''}
         </span>
       </h3>
       <div className="mt-2 overflow-x-auto">

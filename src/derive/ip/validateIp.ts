@@ -239,7 +239,7 @@ function validateFamily(issues: Issue[], plan: Plan, f: FamilyResult): void {
         field('shootPodCidr'),
         `A single cluster can have at most ${formatCount(largest.value)} workers (limited by the ${largest.limitedBy}); ` +
           over.map((p) => `${p.name} plans ${p.workers}`).join(', ') +
-          ' — fine for several clusters, but no single cluster can use them all.',
+          '. Fine for several clusters, but no single cluster can use them all.',
       )
     }
   }

@@ -23,7 +23,7 @@ export default function InfraCard({ infra, result }: { infra: IpInfra; result: I
           icon={SECTION_ICON.infrastructure}
           className="mr-1.5 inline h-4 w-4 align-[-3px] text-gray-500"
         />
-        Infrastructure <span className="font-normal text-gray-500">— IPv4, per partition</span>
+        Infrastructure <span className="font-normal text-gray-500">· IPv4, per partition</span>
         <InfoBubble label="infrastructure ranges" info={IP_INFO.infra} />
       </h3>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -76,7 +76,7 @@ export default function InfraCard({ infra, result }: { infra: IpInfra; result: I
         <div className="mt-4">
           <RangeBar
             domain={base}
-            caption={`Infrastructure CIDR ${formatCidr(base)} — ${
+            caption={`Infrastructure CIDR ${formatCidr(base)}: ${
               result.infra.blocks === null ? '?' : formatCount(result.infra.blocks)
             } blocks of /${infra.partitionPrefix}`}
             segments={result.infra.partitions.flatMap((p) =>
@@ -104,7 +104,7 @@ export default function InfraCard({ infra, result }: { infra: IpInfra; result: I
             </h4>
             <span className={`text-xs ${p.overflow ? 'text-red-700' : 'text-gray-500'}`}>
               {p.block
-                ? `${formatCount(p.usedAddresses)} of ${formatCount(size(p.block))} addresses — needs a /${p.requiredPrefix}`
+                ? `${formatCount(p.usedAddresses)} of ${formatCount(size(p.block))} addresses, needs a /${p.requiredPrefix}`
                 : `needs a /${p.requiredPrefix}`}
             </span>
           </div>
@@ -139,7 +139,7 @@ export default function InfraCard({ infra, result }: { infra: IpInfra; result: I
                       {s.cidr ? (
                         formatCidr(s.cidr)
                       ) : (
-                        <span className="text-red-700">/{s.prefix} — does not fit</span>
+                        <span className="text-red-700">/{s.prefix} does not fit</span>
                       )}
                     </td>
                     <td className="py-1 text-xs text-gray-500">{s.detail}</td>

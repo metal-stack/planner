@@ -114,7 +114,7 @@ describe('issue targets', () => {
     const issues = validatePlan(plan)
     const rackIssues = issuesFor(issues, { partitionId: partition.id, rackId: rack.id })
     expect(rackIssues.map((i) => i.message)).toContain(
-      'Only one leaf switch — no rack-level network redundancy.',
+      'Only one leaf switch: no rack-level network redundancy.',
     )
     expect(rackIssues.every((i) => i.where === `${partition.name} / ${rack.name}`)).toBe(true)
   })

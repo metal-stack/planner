@@ -1,4 +1,10 @@
-import { catalog, gpusForServer, serversForUsage, switchesForRole } from '../../model/catalog'
+import {
+  catalog,
+  gpusForServer,
+  itemLabel,
+  serversForUsage,
+  switchesForRole,
+} from '../../model/catalog'
 import type { Partition, Rack, ServerGroup } from '../../model/plan'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
@@ -166,6 +172,7 @@ export default function RackSection({
   const needed = leafPortsNeeded(rack)
   const available = leafPortsAvailable(rack, partition)
   const overCapacity = needed > available
+  const nodes = rackNodes(rack)
 
   return (
     <section
@@ -183,7 +190,7 @@ export default function RackSection({
         <Icon icon={ACTION_ICON.remove} className="h-3.5 w-3.5" />
         Remove rack
       </button>
-      <div className="mb-2 flex flex-wrap items-end gap-3 pr-24">
+      <div className="mb-3 flex flex-wrap items-end gap-3">
         <Icon
           icon={rack.kind === 'rack-group' ? SECTION_ICON.rackGroup : SECTION_ICON.rack}
           className="mb-2.5 h-5 w-5 text-gray-400"
@@ -218,37 +225,44 @@ export default function RackSection({
         {rack.memberNames && (
           <span className="mb-2 text-xs text-gray-500">{rack.memberNames.join(' · ')}</span>
         )}
-      </div>
-      {/* Tallies on their own line: node count, leaf port usage, fabric ratio. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-          {formatTally(rackNodes(rack))}
-        </span>
-        <span
-          className={`rounded px-2 py-1 text-xs font-medium ${
-            overCapacity ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
-          }`}
-        >
-          Leaf ports: {needed} used / {Math.max(available, 0)} available
-        </span>
-        {bandwidth.ratio !== null && (
+        {/* Tallies on the right, as in the central rack: leaf ports, fabric
+            ratio, issues and node count. */}
+        <span className="mb-1 ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <HoverHint
-            hint={`${formatGbps(bandwidth.downGbps)} of server bandwidth against ${formatGbps(bandwidth.upGbps)} of leaf uplinks (${rack.leafCount} leaves × ${partition.fabric.spineCount} spines × ${partition.fabric.leafSpineLinks} link${partition.fabric.leafSpineLinks === 1 ? '' : 's'} × 100 Gbit/s).`}
+            hint={`${needed} of ${Math.max(available, 0)} leaf ports used: ${rack.leafCount}x ${itemLabel(rack.leafModelId)} after the spine uplinks, 25G servers on 4x25G breakout.`}
           >
             <span
               className={`rounded px-2 py-1 text-xs font-medium ${
-                bandwidth.ratio <= 1
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : partition.fabric.nonBlocking
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-amber-100 text-amber-800'
+                overCapacity ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
               }`}
             >
-              Fabric {formatRatio(bandwidth.ratio)}
+              Leaf ports {needed} / {Math.max(available, 0)}
             </span>
           </HoverHint>
-        )}
-        <IssueBadges issues={own} />
+          {bandwidth.ratio !== null && (
+            <HoverHint
+              hint={`${formatGbps(bandwidth.downGbps)} of server bandwidth against ${formatGbps(bandwidth.upGbps)} of leaf uplinks (${rack.leafCount} leaves × ${partition.fabric.spineCount} spines × ${partition.fabric.leafSpineLinks} link${partition.fabric.leafSpineLinks === 1 ? '' : 's'} × 100 Gbit/s).`}
+            >
+              <span
+                className={`rounded px-2 py-1 text-xs font-medium ${
+                  bandwidth.ratio <= 1
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : partition.fabric.nonBlocking
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                Fabric {formatRatio(bandwidth.ratio)}
+              </span>
+            </HoverHint>
+          )}
+          <IssueBadges issues={own} />
+          <HoverHint hint={formatTally(nodes)}>
+            <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+              {nodes.total} {nodes.total === 1 ? 'node' : 'nodes'}
+            </span>
+          </HoverHint>
+        </span>
       </div>
 
       {rack.servers.map((group) => (
@@ -262,7 +276,7 @@ export default function RackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            — {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
+            · {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
