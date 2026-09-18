@@ -1,7 +1,11 @@
 import { ANSIBLE_COMMON_REPO, METAL_ROLES_REPO } from '../../model/ansibleRoles'
 import { formatCidr, formatIp } from '../ip/cidr'
 import { ciReadme } from './ci'
-import { ENTERPRISE_SONIC_COLLECTION, enterpriseSonicTaskFiles, TOPICS } from './enterpriseSonic'
+import {
+  ENTERPRISE_SONIC_COLLECTION,
+  enterpriseSonicSshTasks,
+  enterpriseSonicTasks,
+} from './enterpriseSonic'
 import type { AnsibleContext } from './index'
 import { fromObject, kv, toYaml, toYamlSeq, ymap, type YValue } from './yaml'
 
@@ -41,12 +45,7 @@ function enterpriseSonicPlays(name: string, hosts: string): YValue[] {
       hosts: target,
       gather_facts: false,
       serial: 1,
-      tasks: TOPICS.map((t) =>
-        fromObject({
-          'ansible.builtin.import_tasks': `tasks/enterprise_sonic/${t.topic}.yaml`,
-          tags: [t.topic],
-        }),
-      ),
+      tasks: enterpriseSonicTasks(),
     }),
     fromObject({
       name: `${name}: DNS and routing mode over SSH (Broadcom SONiC)`,
@@ -54,7 +53,7 @@ function enterpriseSonicPlays(name: string, hosts: string): YValue[] {
       gather_facts: false,
       become: true,
       vars: fromObject(SSH),
-      tasks: [fromObject({ 'ansible.builtin.import_tasks': 'tasks/enterprise_sonic/ssh.yaml' })],
+      tasks: enterpriseSonicSshTasks(),
       handlers: [
         fromObject({
           name: 'Restart bgp',
@@ -71,7 +70,6 @@ export function staticFiles({ plan, out }: AnsibleContext): void {
   const noses = new Set(plan.partitions.map((p) => p.fabric.nos))
   const edgecore = noses.has('edgecore-sonic')
   const broadcom = noses.has('broadcom-sonic')
-  if (broadcom) enterpriseSonicTaskFiles(out)
   out.add(
     'ansible.cfg',
     [

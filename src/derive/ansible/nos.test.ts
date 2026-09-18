@@ -155,35 +155,30 @@ describe('Broadcom SONiC path (dellemc.enterprise_sonic)', () => {
     expect(leaf.metal_core_spine_uplinks).toEqual(['Ethernet120', 'Ethernet124'])
   })
 
-  it('writes the topic tasks, the SSH play and the collection requirement', () => {
+  it('calls the modules in the playbook, then the SSH play, and requires the collection', () => {
     const { files, placeholders } = deriveAnsible(plan)
-    const bgp = read(plan, 'tasks/enterprise_sonic/bgp.yaml')
-    expect(
-      bgp.map((t: Record<string, { state: string }>) => {
+    expect(files.some((f) => f.path.startsWith('tasks/'))).toBe(false)
+    const calls = read(plan, 'deploy_prod_network.yaml')[0].tasks.map(
+      (t: Record<string, { state: string }> & { tags: string[] }) => {
         const module = Object.keys(t)[1]
-        return [module, t[module].state]
-      }),
-    ).toEqual([
-      ['dellemc.enterprise_sonic.sonic_bgp', 'replaced'],
-      ['dellemc.enterprise_sonic.sonic_bgp_af', 'merged'],
-      ['dellemc.enterprise_sonic.sonic_bgp_neighbors', 'replaced'],
-    ])
-    const prodTopics = read(plan, 'deploy_prod_network.yaml')[0].tasks.map(
-      (t: { tags: string[] }) => t.tags[0],
+        return [t.tags[0], module.replace('dellemc.enterprise_sonic.', ''), t[module].state]
+      },
     )
-    expect(prodTopics).toEqual([
-      'breakouts',
-      'system',
-      'lldp',
-      'interfaces',
-      'vlans',
-      'l3',
-      'dhcp-relay',
-      'route-maps',
-      'bgp',
-      'vxlans',
-      'ntp',
-      'vrfs',
+    expect(calls).toEqual([
+      ['breakouts', 'sonic_port_breakout', 'replaced'],
+      ['system', 'sonic_system', 'merged'],
+      ['lldp', 'sonic_lldp_global', 'merged'],
+      ['interfaces', 'sonic_interfaces', 'replaced'],
+      ['vlans', 'sonic_vlans', 'replaced'],
+      ['l3', 'sonic_l3_interfaces', 'replaced'],
+      ['dhcp-relay', 'sonic_dhcp_relay', 'replaced'],
+      ['route-maps', 'sonic_route_maps', 'merged'],
+      ['bgp', 'sonic_bgp', 'replaced'],
+      ['bgp', 'sonic_bgp_af', 'merged'],
+      ['bgp', 'sonic_bgp_neighbors', 'replaced'],
+      ['vxlans', 'sonic_vxlans', 'replaced'],
+      ['ntp', 'sonic_ntp', 'merged'],
+      ['vrfs', 'sonic_vrfs', 'merged'],
     ])
     const prod = read(plan, 'deploy_prod_network.yaml')
     expect(prod.map((p: { hosts: string }) => p.hosts)).toEqual([
