@@ -14,6 +14,13 @@
   --color-brand-strong: #d97706;
   --color-brand-soft: #fcd094;
   --color-brand-tint: #fff8e6;
+  /* Syntax colors of the file previews (Ansible tab); CHANGE_ME uses the brand. */
+  --color-code-key: #1e40af;
+  --color-code-string: #15803d;
+  --color-code-number: #b45309;
+  --color-code-literal: #7e22ce;
+  --color-code-template: #0e7490;
+  --color-code-comment: #6b7280;
 }
 
 @layer base {

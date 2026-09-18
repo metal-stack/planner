@@ -1,7 +1,8 @@
-import { Fragment } from 'react'
-import { CHANGE_ME, type AnsibleFile, type Placeholder } from '../../derive/ansible'
+import { useState } from 'react'
+import type { AnsibleFile, Placeholder } from '../../derive/ansible'
 import { useToastStore } from '../../store/toastStore'
 import { ACTION_ICON, FILE_ICON, Icon } from '../icons'
+import Preview, { type PreviewMode } from './Preview'
 
 interface Dir {
   name: string
@@ -93,23 +94,6 @@ function DirView({
   )
 }
 
-/** One line of a file: comments dimmed, CHANGE_ME highlighted. */
-function Line({ text }: { text: string }) {
-  const comment = /^\s*#/.test(text)
-  const parts = text.split(CHANGE_ME)
-  return (
-    <span className={comment ? 'text-gray-500' : undefined}>
-      {parts.map((part, i) => (
-        <Fragment key={i}>
-          {i > 0 && <mark className="rounded bg-amber-200 px-0.5 text-ink">{CHANGE_ME}</mark>}
-          {part}
-        </Fragment>
-      ))}
-      {'\n'}
-    </span>
-  )
-}
-
 export default function FileBrowser({
   files,
   placeholders,
@@ -122,6 +106,7 @@ export default function FileBrowser({
   onSelect: (path: string) => void
 }) {
   const notify = useToastStore((s) => s.notify)
+  const [mode, setMode] = useState<PreviewMode>('rendered')
   const file = files.find((f) => f.path === selected) ?? files[0]
   const tree = buildTree(files)
   const todos = new Map<string, number>()
@@ -138,6 +123,23 @@ export default function FileBrowser({
       <div className="min-w-0">
         <header className="flex items-center gap-2 border-b border-gray-100 px-4 py-2">
           <span className="min-w-0 truncate font-mono text-xs text-gray-600">{file.path}</span>
+          {file.path.endsWith('.md') && (
+            <div className="ml-auto flex rounded-md border border-gray-300 p-0.5 text-xs">
+              {(['rendered', 'source'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  aria-pressed={mode === m}
+                  className={`rounded px-2 py-0.5 font-medium ${
+                    mode === m ? 'bg-ink text-white' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {m === 'rendered' ? 'Rendered' : 'Source'}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={() =>
@@ -146,20 +148,13 @@ export default function FileBrowser({
                 .then(() => notify(`Copied ${file.path.split('/').pop()}.`))
                 .catch(() => notify('Copying failed.', { kind: 'error' }))
             }
-            className="btn-secondary ml-auto"
+            className={`btn-secondary ${file.path.endsWith('.md') ? '' : 'ml-auto'}`}
           >
             <Icon icon={ACTION_ICON.copy} />
             Copy
           </button>
         </header>
-        <pre className="max-h-[70vh] overflow-auto px-4 py-3 font-mono text-xs leading-relaxed">
-          {file.content
-            .replace(/\n$/, '')
-            .split('\n')
-            .map((line, i) => (
-              <Line key={i} text={line} />
-            ))}
-        </pre>
+        <Preview file={file} mode={mode} />
       </div>
     </section>
   )
