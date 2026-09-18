@@ -629,6 +629,29 @@ export function portCount(item: CatalogItem, speed: PortSpeed): number {
   return item.ports?.find((p) => p.speed === speed)?.count ?? 0
 }
 
+/** Front-panel number of a SONiC port (1-based, counting the `ports`
+ *  groups in order), as Enterprise SONiC names breakout ports ("1/<n>");
+ *  null without a SONiC port map. */
+export function frontPanelIndex(modelId: string, portName: string): number | null {
+  let offset = 0
+  for (const group of catalog[modelId]?.ports ?? []) {
+    const names = sonicPortNames(modelId, group.speed)
+    const i = names?.indexOf(portName) ?? -1
+    if (i >= 0) return offset + i + 1
+    offset += group.count
+  }
+  return null
+}
+
+/** Interfaces a port becomes in an `<n>x<speed>` breakout: its lanes as
+ *  consecutive native names, "Ethernet0" in 4x25G → Ethernet0…Ethernet3. */
+export function breakoutChildren(portName: string, mode: string): string[] {
+  const n = Number(/^(\d+)x/.exec(mode)?.[1] ?? 1)
+  const base = Number(/(\d+)$/.exec(portName)?.[1] ?? NaN)
+  if (Number.isNaN(base)) return [portName]
+  return Array.from({ length: n }, (_, i) => `Ethernet${base + i}`)
+}
+
 /** The BMC superuser metal-hammer creates on a server, per vendor
  *  (go-hal's SuperUser() of each vendor, metal-stack/go-hal
  *  internal/vendors/); metal-bmc logs in with it. */

@@ -79,8 +79,11 @@ consistent — you edit the plan, everything else follows from it.
   metal-core, mgmt-server, dhcp, metal-bmc, pixiecore, image-cache) and the playbooks that apply
   them, laid out like a metal-stack deployment repository. Derived from the plan and the IP plan:
   hostnames, ASNs (leaves unique, spines and exits shared), loopbacks, management addresses,
-  per-leaf PXE networks, DHCP ranges, transfer networks and each switch's BGP ports (uplinks on
-  the last ports, from the SONiC port maps in the catalog). Only the metal-stack release and the
+  per-leaf PXE networks with DHCP relay, DHCP ranges, transfer networks and each switch's ports:
+  4x25G breakouts for 25G servers, speed, MTU and FEC, and the BGP ports (uplinks on the last
+  ports, from the SONiC port maps in the catalog). Switches follow their partition's NOS:
+  Edgecore SONiC through metal-roles' sonic-config, Broadcom Enterprise SONiC through the
+  `dellemc.enterprise_sonic` collection, one module call per topic. Only the metal-stack release and the
   control plane domain need entering (metal-api and NSQ are reached under it); name and NTP
   servers default to public ones, and everything else with a default sits under Advanced. What
   the plan cannot know, the secrets and certificates, is marked `CHANGE_ME` and listed. A GitLab

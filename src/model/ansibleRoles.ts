@@ -10,8 +10,18 @@ export const METAL_ROLES_REPO = 'https://github.com/metal-stack/metal-roles'
 export const ANSIBLE_COMMON_REPO = 'https://github.com/metal-stack/ansible-common'
 
 export const ROLE_VARIABLES: Record<string, readonly string[]> = {
-  // Ansible connection variables.
-  ansible: ['ansible_host', 'ansible_user', 'ansible_become', 'ansible_python_interpreter'],
+  // Ansible connection variables; httpapi ones for the Dell collection.
+  ansible: [
+    'ansible_host',
+    'ansible_user',
+    'ansible_password',
+    'ansible_become',
+    'ansible_python_interpreter',
+    'ansible_connection',
+    'ansible_network_os',
+    'ansible_httpapi_use_ssl',
+    'ansible_httpapi_validate_certs',
+  ],
   // Release vector mapping (common/roles/defaults, mini-lab group_vars/all).
   'common/defaults': ['metal_stack_release_version', 'metal_stack_release_vectors'],
   // control-plane/roles/defaults: the ingress domain metal-api (api.<it>)
@@ -106,6 +116,27 @@ export const ROLE_VARIABLES: Record<string, readonly string[]> = {
     'metal_bmc_console_key',
   ],
   'image-cache': ['image_cache_sync_metal_api_endpoint', 'image_cache_sync_metal_api_view_hmac'],
+  // Not metal-roles: the export's own task files for Broadcom SONiC
+  // (derive/ansible/enterpriseSonic.ts), one variable per module of the
+  // dellemc.enterprise_sonic collection, named after it and holding that
+  // module's config.
+  'export/enterprise-sonic': [
+    'sonic_port_breakout',
+    'sonic_system',
+    'sonic_lldp_global',
+    'sonic_interfaces',
+    'sonic_vlans',
+    'sonic_l3_interfaces',
+    'sonic_dhcp_relay',
+    'sonic_route_maps',
+    'sonic_bgp',
+    'sonic_bgp_af',
+    'sonic_bgp_neighbors',
+    'sonic_vxlans',
+    'sonic_ntp',
+    'sonic_vrfs',
+    'sonic_nameservers',
+  ],
 }
 
 export const KNOWN_VARIABLES: ReadonlySet<string> = new Set(Object.values(ROLE_VARIABLES).flat())

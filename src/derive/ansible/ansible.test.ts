@@ -68,9 +68,11 @@ describe('Ansible export', () => {
   })
 
   it('defaults to public name and NTP servers, leaving release and metal-api open', () => {
-    const { files, placeholders } = deriveAnsible(createEmptyPlan())
+    const plan = createEmptyPlan()
+    plan.partitions[0].fabric.nos = 'edgecore-sonic'
+    const { files, placeholders } = deriveAnsible(plan)
     const switches = parse(
-      files.find((f) => f.path.endsWith('group_vars/partition/switches.yaml'))!.content,
+      files.find((f) => f.path.endsWith('group_vars/edgecore_sonic/sonic-config.yaml'))!.content,
     )
     expect(switches.sonic_config_nameservers).toEqual(['1.1.1.1', '8.8.8.8'])
     expect(switches.sonic_config_ntp.servers[0]).toBe('0.europe.pool.ntp.org')
@@ -83,6 +85,7 @@ describe('Ansible export', () => {
 
   it('uses the deployment settings', () => {
     const plan = createEmptyPlan()
+    plan.partitions[0].fabric.nos = 'edgecore-sonic'
     plan.deployment = {
       ...plan.deployment,
       environment: 'Staging',
@@ -95,7 +98,7 @@ describe('Ansible export', () => {
     expect(file('staging/group_vars/all/release_vector.yaml').metal_stack_release_version).toBe(
       'v0.21.6',
     )
-    expect(file('group_vars/partition/switches.yaml')).toMatchObject({
+    expect(file('group_vars/edgecore_sonic/sonic-config.yaml')).toMatchObject({
       sonic_config_nameservers: ['192.0.2.53'],
       sonic_config_ntp: { servers: ['192.0.2.123'] },
     })
@@ -139,6 +142,13 @@ describe('Ansible export', () => {
                   children:
                     partition_1_exits:
                 storageleaves: {}
+                broadcom_sonic:
+                  children:
+                    partition_1_mgmtleaves:
+                    partition_1_mgmtspines:
+                    partition_1_leaves:
+                    partition_1_spines:
+                    partition_1_exits:
                 # Partition 1
                 partition_1:
                   children:

@@ -1,3 +1,4 @@
+import type { Nos } from '../../model/plan'
 import type { DeviceRole, PartitionDevices } from '../devices'
 import type { AnsibleContext } from './index'
 import { kv, toYaml, ymap, type YEntry, type YMap } from './yaml'
@@ -48,13 +49,43 @@ function partitionEntry(p: PartitionDevices): YEntry {
   return kv(p.group, ymap(kv('children', ymap(...children))), p.partitionName)
 }
 
-export function inventoryFile({ devices, out }: AnsibleContext): void {
+/** Switch roles, grouped by the partition's NOS. */
+export const SWITCH_ROLES: DeviceRole[] = [
+  'mgmt-leaf',
+  'mgmt-spine',
+  'leaf',
+  'spine',
+  'superspine',
+  'exit',
+  'storage-leaf',
+]
+
+/** NOS groups: which switches sonic-config configures (Edgecore SONiC) and
+ *  which the Dell collection (Broadcom SONiC). */
+export const NOS_GROUP: Record<Nos, string> = {
+  'edgecore-sonic': 'edgecore_sonic',
+  'broadcom-sonic': 'broadcom_sonic',
+}
+
+export function inventoryFile({ plan, devices, out }: AnsibleContext): void {
   const functional = ROLES.map((role) => {
     const members = devices
       .filter((p) => p.devices.some((d) => d.role === role))
       .map((p) => kv(partitionGroup(p, role), null))
     return kv(ROLE_GROUP[role], members.length ? ymap(kv('children', ymap(...members))) : ymap())
   })
+  const nosGroups = (Object.keys(NOS_GROUP) as Nos[])
+    .map((nos) => {
+      const members = devices
+        .filter((_, i) => plan.partitions[i].fabric.nos === nos)
+        .flatMap((p) =>
+          SWITCH_ROLES.filter((role) => p.devices.some((d) => d.role === role)).map((role) =>
+            kv(partitionGroup(p, role), null),
+          ),
+        )
+      return members.length > 0 && kv(NOS_GROUP[nos], ymap(kv('children', ymap(...members))))
+    })
+    .filter((e): e is YEntry => !!e)
   out.add(
     `${out.inventory}/inventory.yaml`,
     toYaml(
@@ -67,7 +98,12 @@ export function inventoryFile({ devices, out }: AnsibleContext): void {
               ymap(
                 kv(
                   'partition',
-                  ymap(kv('children', ymap(...functional, ...devices.map(partitionEntry)))),
+                  ymap(
+                    kv(
+                      'children',
+                      ymap(...functional, ...nosGroups, ...devices.map(partitionEntry)),
+                    ),
+                  ),
                 ),
               ),
             ),

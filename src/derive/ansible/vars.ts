@@ -1,16 +1,20 @@
 import { BMC_SUPERUSER, catalog } from '../../model/catalog'
+import type { Nos } from '../../model/plan'
 import { devicesOf, type Device, type PartitionDevices } from '../devices'
-import { derivePorts } from '../ports'
-import { formatCidr, formatIp, type Cidr } from '../ip/cidr'
+import { derivePorts, type SwitchPorts } from '../ports'
+import { formatCidr, formatIp, lastAddr, parseIp, type Cidr } from '../ip/cidr'
 import type { PartitionAddresses } from '../ip/deviceAddresses'
+import { enterpriseSonicGroupVars, enterpriseSonicHostVars } from './enterpriseSonic'
 import type { AnsibleContext } from './index'
 import { partitionGroup, rackGroup } from './inventory'
 import { kv, note, toYaml, ymap, type YEntry, type YValue } from './yaml'
 
 // group_vars and host_vars for the metal-roles partition roles
-// (sonic-config on every switch, metal-core on the leaves, mgmt-server,
-// dhcp, metal-bmc, pixiecore and image-cache on the management servers).
-// Variable names are checked against model/ansibleRoles.ts by the tests.
+// (sonic-config on Edgecore SONiC switches, metal-core on the leaves,
+// mgmt-server, dhcp, metal-bmc, pixiecore and image-cache on the
+// management servers). Broadcom SONiC switches get the variables of the
+// export's Dell collection tasks instead (enterpriseSonic.ts). Variable
+// names are checked against model/ansibleRoles.ts by the tests.
 
 const PXE_VLAN = 4000
 
@@ -24,8 +28,9 @@ const PORT_COMMENT: Partial<Record<Device['role'], string>> = {
   'mgmt-leaf': 'Mgmt spine uplinks on the last ports.',
   'mgmt-spine': 'Mgmt servers on the first copper ports, mgmt leaves on the first fiber ports.',
 }
-const PORTS_NOTE =
-  'BGP ports are set per switch in host_vars. Breakouts and port settings\n(sonic_config_breakouts, sonic_config_ports) are left to the cabling.'
+const PORTS_NOTE = 'BGP ports, breakouts and port settings are set per switch in host_vars.'
+
+const edgecore = (nos: Nos) => nos === 'edgecore-sonic'
 
 function netmask(prefix: number): string {
   const all = (1n << 32n) - 1n
@@ -75,12 +80,13 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
     )
   }
 
-  // Settings shared by the whole partition inventory.
-  {
-    const f = `${inv}/group_vars/partition/switches.yaml`
+  // Settings of every Edgecore SONiC switch (sonic-config).
+  const noses = new Set(plan.partitions.map((p) => p.fabric.nos))
+  if (noses.has('edgecore-sonic')) {
+    const f = `${inv}/group_vars/edgecore_sonic/sonic-config.yaml`
     const list = (key: string, values: string[], what: string) =>
       values.length ? values : [out.todo(f, key, `${what} (Ansible tab)`)]
-    file('partition', 'switches', [
+    file('edgecore_sonic', 'sonic-config', [
       kv('sonic_config_mgmt_vrf', true),
       kv('sonic_config_timezone', dep.timezone),
       kv(
@@ -94,6 +100,7 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
       kv('sonic_config_ssh_sourceranges', dep.sshSourceRanges),
     ])
   }
+  if (noses.has('broadcom-sonic')) enterpriseSonicGroupVars(out, dep.nameservers)
   {
     const f = `${inv}/group_vars/partition/metal.yaml`
     file(
@@ -190,6 +197,7 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
       p,
       addresses[i],
       plan.partitions[i].fabric.mgmt.layer === 'l3',
+      edgecore(plan.partitions[i].fabric.nos),
       file,
       out,
       dep,
@@ -197,10 +205,32 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
   )
 }
 
+/** The mgmt servers' router ids, where leaves relay PXE DHCP to. */
+function dhcpServers(p: PartitionDevices, addr: PartitionAddresses, l3: boolean): string[] {
+  return devicesOf(p, 'mgmt-server')
+    .map((d) => {
+      const a = addr.byHost.get(d.hostname)
+      return (l3 ? a?.loopback : a?.mgmt?.ip) ?? ''
+    })
+    .filter(Boolean)
+}
+
+/** Network, first host and broadcast of an "a.b.c.d/p" host address. */
+function hostCidr(value: string): { net: Cidr; host: bigint } | null {
+  const [ip, prefix] = value.split('/')
+  const parsed = parseIp(ip)
+  if (!parsed || parsed.family !== 4) return null
+  const p = Number(prefix)
+  const mask = ((1n << 32n) - 1n) ^ ((1n << BigInt(32 - p)) - 1n)
+  return { net: { family: 4, addr: parsed.addr & mask, prefix: p }, host: parsed.addr }
+}
+
 function partitionGroupVars(
   p: PartitionDevices,
   addr: PartitionAddresses,
   l3: boolean,
+  /** sonic-config variables only for Edgecore SONiC partitions. */
+  ec: boolean,
   file: (group: string, topic: string, entries: (YEntry | false)[], header?: string) => void,
   out: AnsibleContext['out'],
   dep: AnsibleContext['plan']['deployment'],
@@ -230,22 +260,30 @@ function partitionGroupVars(
 
   if (has('leaf')) {
     const g = partitionGroup(p, 'leaf')
-    file(g, 'sonic', [
-      kv(
-        'lo',
-        '{{ sonic_config_loopback_address }}',
-        'metal-core reads the loopback and the ASN as lo / asn.',
-      ),
-      kv('asn', '{{ sonic_config_asn }}'),
-      kv(
-        'sonic_config_frr_render',
-        false,
-        'metal-core writes frr.conf, which needs the split routing mode.',
-      ),
-      kv('sonic_config_docker_routing_config_mode', 'split'),
-      kv('sonic_config_frr_l2vpn_evpn', true),
-      note(PORTS_NOTE),
-    ])
+    if (ec) {
+      file(g, 'sonic', [
+        kv(
+          'lo',
+          '{{ sonic_config_loopback_address }}',
+          'metal-core reads the loopback and the ASN as lo / asn.',
+        ),
+        kv('asn', '{{ sonic_config_asn }}'),
+        kv(
+          'sonic_config_frr_render',
+          false,
+          'metal-core writes frr.conf, which needs the split routing mode.',
+        ),
+        kv('sonic_config_docker_routing_config_mode', 'split'),
+        kv('sonic_config_frr_l2vpn_evpn', true),
+        kv('sonic_config_vtep', ymap(kv('enabled', true))),
+        kv(
+          'sonic_config_mgmt_vrf',
+          false,
+          'Leaves run without the mgmt VRF: metal-core reaches metal-api over eth0.',
+        ),
+        note(PORTS_NOTE),
+      ])
+    }
     for (const rack of p.racks) {
       if (!p.devices.some((d) => d.role === 'leaf' && d.rack?.rackId === rack.rackId)) continue
       const rg = rackGroup(p, rack.tag)
@@ -268,12 +306,13 @@ function partitionGroupVars(
     }
   }
 
+  // The rest configures sonic-config; Broadcom SONiC switches get host_vars.
   for (const role of ['spine', 'superspine', 'storage-leaf'] as const) {
-    if (!has(role)) continue
+    if (!has(role) || !ec) continue
     const g = partitionGroup(p, role)
     file(g, 'sonic', [kv('sonic_config_frr_l2vpn_evpn', true), note(PORTS_NOTE)])
   }
-  if (has('exit')) {
+  if (has('exit') && ec) {
     const g = partitionGroup(p, 'exit')
     file(g, 'sonic', [
       kv('sonic_config_frr_l2vpn_evpn', true),
@@ -289,7 +328,7 @@ function partitionGroupVars(
     ])
   }
   for (const role of ['mgmt-spine', 'mgmt-leaf'] as const) {
-    if (!has(role)) continue
+    if (!has(role) || !ec) continue
     const g = partitionGroup(p, role)
     file(
       g,
@@ -313,7 +352,7 @@ function partitionGroupVars(
       ),
       dep.nameservers.length > 0 && kv('mgmt_server_nameservers', dep.nameservers),
     ])
-    const subnets: YValue[] = addr.mgmtSubnets
+    const bmcs: YValue[] = addr.mgmtSubnets
       .filter((s) => s.dhcpRange)
       .map((s) =>
         ymap(
@@ -330,11 +369,41 @@ function partitionGroupVars(
           kv('options', [`routers ${formatIp(4, s.gateway)}`]),
         ),
       )
+    // Every leaf routes its own PXE network and relays DHCP here.
+    const pxe: YValue[] = devicesOf(p, 'leaf').flatMap((leaf) => {
+      const c = hostCidr(addr.byHost.get(leaf.hostname)?.pxe ?? '')
+      if (!c) return []
+      return [
+        ymap(
+          kv('comment', `PXE network of ${leaf.hostname}`),
+          kv('network', formatIp(4, c.net.addr)),
+          kv('netmask', netmask(c.net.prefix)),
+          kv(
+            'range',
+            ymap(
+              kv('begin', formatIp(4, c.host + 1n)),
+              kv('end', formatIp(4, lastAddr(c.net) - 1n)),
+            ),
+          ),
+          kv('options', [`routers ${formatIp(4, c.host)}`]),
+        ),
+      ]
+    })
+    // dhcpd needs a declaration for the network it listens on.
+    const own: YValue[] = addr.mgmtLoopbacks
+      ? [
+          ymap(
+            kv('comment', 'Mgmt loopbacks: the network dhcpd listens on, no leases'),
+            kv('network', formatIp(4, addr.mgmtLoopbacks.addr)),
+            kv('netmask', netmask(addr.mgmtLoopbacks.prefix)),
+          ),
+        ]
+      : []
     file(
       g,
       'dhcp',
-      [kv('dhcp_subnets', subnets)],
-      'BMC addresses: the management subnets after the gateway and the switches.',
+      [kv('dhcp_subnets', [...own, ...bmcs, ...pxe])],
+      'BMC addresses after the gateway and the switches; one PXE network per leaf.',
     )
     file(g, 'metal-bmc', [
       kv('metal_bmc_allowed_cidrs', cidrs(addr.mgmtSubnets.map((s) => s.cidr))),
@@ -354,11 +423,53 @@ function partitionGroupVars(
   }
 }
 
+/** sonic-config port settings from the port plan. */
+function sonicConfigPorts(sp: SwitchPorts): YEntry[] {
+  if (sp.reason) return [note(`Port settings left open: ${sp.reason}.`)]
+  const out: YEntry[] = []
+  // As the reference deployments: metal-core owns the leaves' server ports.
+  const ports = sp.ports.filter((p) => p.use !== 'servers')
+  if (sp.breakouts.length > 0) {
+    out.push(
+      kv(
+        'sonic_config_breakouts',
+        ymap(...sp.breakouts.map((b) => kv(b.port, b.mode))),
+        'Server ports: 4x25G breakouts on the first ports.',
+      ),
+    )
+  }
+  if (ports.length > 0) {
+    const mtu = ports[0].mtu
+    out.push(
+      kv(
+        'sonic_config_ports',
+        ymap(
+          kv('default_mtu', mtu),
+          kv(
+            'list',
+            ports.map((p) =>
+              ymap(
+                kv('name', p.name),
+                kv('speed', p.speed),
+                ...(p.mtu !== mtu ? [kv('mtu', p.mtu)] : []),
+              ),
+            ),
+          ),
+        ),
+        `Used ports: ${[...new Set(ports.map((p) => p.use))].join(', ')}.`,
+      ),
+    )
+  }
+  return out
+}
+
 export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext): void {
   const ports = derivePorts(plan, devices)
   devices.forEach((p, i) => {
     const addr = addresses[i]
     const l3 = plan.partitions[i].fabric.mgmt.layer === 'l3'
+    const ec = edgecore(plan.partitions[i].fabric.nos)
+    const relay = dhcpServers(p, addr, l3)
     for (const d of p.devices) {
       const f = `${out.inventory}/host_vars/${d.hostname}.yaml`
       const a = addr.byHost.get(d.hostname)!
@@ -400,7 +511,8 @@ export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext):
                 out.todo(f, 'mgmt_server_router_id', 'router id of the mgmt server'),
             ),
           )
-        } else {
+        } else if (ec) {
+          const sp = ports.get(d.hostname)
           if (isBgpSpeaker(d, l3)) {
             entries.push(
               kv('sonic_config_asn', d.asn ?? 0),
@@ -409,9 +521,6 @@ export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext):
                 a.loopback ??
                   out.todo(f, 'sonic_config_loopback_address', 'loopback (the pool is not placed)'),
               ),
-            )
-            const sp = ports.get(d.hostname)
-            entries.push(
               kv(
                 'sonic_config_bgp_ports',
                 sp?.bgp ?? [
@@ -420,17 +529,8 @@ export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext):
                 PORT_COMMENT[d.role],
               ),
             )
-            if (d.role === 'leaf') {
-              entries.push(
-                kv(
-                  'metal_core_spine_uplinks',
-                  sp?.uplinks ?? [
-                    out.todo(f, 'metal_core_spine_uplinks', `spine uplinks (${sp?.reason})`),
-                  ],
-                ),
-              )
-            }
           }
+          if (sp) entries.push(...sonicConfigPorts(sp))
           entries.push(
             a.mgmt
               ? kv(
@@ -442,22 +542,76 @@ export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext):
                 )
               : note('No management address: the management subnet is not placed.'),
           )
+          if (d.role === 'leaf' && a.pxe) {
+            entries.push(
+              kv(
+                'sonic_config_vlans',
+                [ymap(kv('id', PXE_VLAN), kv('ip', a.pxe), kv('dhcp_servers', relay))],
+                'PXE network of the leaf, DHCP relayed to the mgmt servers.',
+              ),
+            )
+          }
+          if (d.role === 'exit' && a.pxe) {
+            entries.push(
+              kv(
+                'sonic_config_vlans',
+                [ymap(kv('id', PXE_VLAN), kv('ip', a.pxe))],
+                'PXE network of the exits.',
+              ),
+            )
+          }
+        } else {
+          // Broadcom SONiC: the variables of the Dell collection tasks.
+          if (d.role === 'leaf') {
+            entries.push(
+              kv(
+                'lo',
+                a.loopback ?? out.todo(f, 'lo', 'loopback (the pool is not placed)'),
+                'metal-core reads the loopback and the ASN as lo / asn.',
+              ),
+              kv('asn', d.asn ?? 0),
+            )
+          }
+          entries.push(
+            ...enterpriseSonicHostVars({
+              device: d,
+              addresses: a,
+              ports: ports.get(d.hostname),
+              bgp: isBgpSpeaker(d, l3),
+              evpn: ['spine', 'superspine', 'exit', 'storage-leaf'].includes(d.role),
+              mgmtVrf: d.role !== 'leaf',
+              dhcpServers: relay,
+              ntpServers: plan.deployment.ntpServers,
+            }),
+          )
+          const sp = ports.get(d.hostname)
+          if (isBgpSpeaker(d, l3) && !sp?.bgp) {
+            // No port plan: the BGP neighbors are the fabric ports, cabled by hand.
+            entries.push(
+              kv(
+                'sonic_bgp_neighbors',
+                out.todo(
+                  f,
+                  'sonic_bgp_neighbors',
+                  `BGP neighbors on the fabric ports (${sp?.reason ?? 'unknown'})`,
+                ),
+              ),
+            )
+          }
         }
         if (d.role === 'leaf') {
+          const sp = ports.get(d.hostname)
           entries.push(
+            kv(
+              'metal_core_spine_uplinks',
+              sp?.uplinks ?? [
+                out.todo(f, 'metal_core_spine_uplinks', `spine uplinks (${sp?.reason})`),
+              ],
+            ),
             kv(
               'metal_core_cidr',
               a.pxe ?? out.todo(f, 'metal_core_cidr', 'PXE network of the leaf (see the IPs tab)'),
               "The leaf's address in its own PXE network.",
-            ),
-          )
-        }
-        if (d.role === 'exit' && a.pxe) {
-          entries.push(
-            kv(
-              'sonic_config_vlans',
-              [ymap(kv('id', PXE_VLAN), kv('ip', a.pxe))],
-              'PXE network of the exits.',
             ),
           )
         }

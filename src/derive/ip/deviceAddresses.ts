@@ -63,6 +63,8 @@ export interface PartitionAddresses {
   partitionId: string
   byHost: Map<string, DeviceAddresses>
   mgmtSubnets: MgmtSubnet[]
+  /** L3 management: the mgmt loopback pool (the mgmt servers' own network). */
+  mgmtLoopbacks: Cidr | null
   pxe: Cidr | null
   transfers: TransferLink[]
   notes: string[]
@@ -90,6 +92,7 @@ function partitionAddresses(
     partitionId: devices.partitionId,
     byHost,
     mgmtSubnets: [],
+    mgmtLoopbacks: find('mgmt-loopbacks'),
     pxe: find('pxe'),
     transfers: [],
     notes,
