@@ -74,6 +74,26 @@ describe('three-rack', () => {
     expect([left.usedU, mid.usedU, right.usedU]).toEqual([15, 15, 15])
   })
 
+  it('spreads a storage group across the racks even when workers fill them unevenly', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.kind = 'three-rack'
+    // 13 worker chassis x 3U pack to 15/15/12U; without the per-group spread
+    // the emptiest rack would then take two of the three 2U storage systems.
+    rack.servers[0].count = 13 * 8
+    rack.servers.push({
+      id: 'storage',
+      role: 'storage',
+      modelId: 'server-superserver-tn12',
+      count: 3,
+      uplink: '2x25G',
+    })
+    const layout = deriveRackLayout(plan)[0]
+    for (const physical of layout.racks.slice(1)) {
+      expect(physical.slots.filter((s) => s.kind === 'storage')).toHaveLength(1)
+    }
+  })
+
   it('flags overflow when the three racks are full', () => {
     const plan = createEmptyPlan()
     const rack = plan.partitions[0].racks[0]
