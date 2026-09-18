@@ -430,7 +430,23 @@ export function validatePlan(plan: Plan): Issue[] {
 
   // Physical height: no rack may hold more units than it has.
   for (const layout of deriveRackLayout(plan)) {
+    // Rack names are editable, so uniqueness is checked rather than
+    // enforced; the physical rack names are what goes on the labels.
+    const seen = new Set<string>()
     for (const rack of layout.racks) {
+      if (seen.has(rack.name)) {
+        report(
+          issues,
+          {
+            where: `${layout.partitionName} / ${rack.name}`,
+            target: { partitionId: layout.partitionId, rackId: rack.rackId },
+          },
+          'warning',
+          `Rack name "${rack.name}" is used more than once in ${layout.partitionName}. ` +
+            `Give every physical rack its own name.`,
+        )
+      }
+      seen.add(rack.name)
       if (rack.powerWatts > rack.maxPowerWatts) {
         report(
           issues,

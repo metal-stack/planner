@@ -142,6 +142,9 @@ function ServerGroupRow({
   )
 }
 
+/** Physical racks of a rack group, in `memberNames` order. */
+const MEMBER_LABELS = ['Left rack', 'Middle rack (leaves, mgmt leaf)', 'Right rack']
+
 export default function RackSection({
   partition,
   rack,
@@ -154,6 +157,7 @@ export default function RackSection({
   const own = issuesFor(issues, { partitionId: partition.id, rackId: rack.id })
   const hasErrors = own.some((i) => i.severity === 'error')
   const patchRack = usePlanStore((s) => s.patchRack)
+  const setRackKind = usePlanStore((s) => s.setRackKind)
   const removeRack = usePlanStore((s) => s.removeRack)
   const addServerGroup = usePlanStore((s) => s.addServerGroup)
 
@@ -180,11 +184,13 @@ export default function RackSection({
       </button>
       <div className="mb-2 flex flex-wrap items-end gap-3 pr-24">
         <Icon
-          icon={rack.kind === 'three-rack' ? SECTION_ICON.threeRack : SECTION_ICON.rack}
+          icon={rack.kind === 'rack-group' ? SECTION_ICON.rackGroup : SECTION_ICON.rack}
           className="mb-2.5 h-5 w-5 text-gray-400"
         />
         <label className="block text-sm">
-          <span className="mb-1 block text-gray-600">Rack name</span>
+          <span className="mb-1 block text-gray-600">
+            {rack.kind === 'rack-group' ? 'Group name' : 'Rack name'}
+          </span>
           <input
             type="text"
             value={rack.name}
@@ -196,16 +202,16 @@ export default function RackSection({
           <SelectField
             label="Rack type"
             info={{
-              text: 'A three-rack is one entity of three physical racks that share the leaf pair and the management leaf of the middle rack; server chassis are spread evenly across the three. See the rack spreading proposal.',
+              text: 'A rack group is one entity of three physical racks that share the leaf pair and the management leaf of the middle rack; server chassis are spread evenly across the three. See the rack spreading proposal.',
               href: DOCS.rackSpreading,
               linkLabel: 'MEP-12',
             }}
             value={rack.kind}
             options={[
               { value: 'single', label: 'Single rack' },
-              { value: 'three-rack', label: 'Three-rack' },
+              { value: 'rack-group', label: 'Rack group (3 racks)' },
             ]}
-            onChange={(v) => patchRack(partition.id, rack.id, { kind: v as Rack['kind'] })}
+            onChange={(v) => setRackKind(partition.id, rack.id, v as Rack['kind'])}
           />
         </div>
         <div className="w-44">
@@ -235,6 +241,25 @@ export default function RackSection({
           />
         </div>
       </div>
+      {rack.memberNames && (
+        <div className="mb-3 flex flex-wrap items-end gap-3 pl-8">
+          {MEMBER_LABELS.map((label, i) => (
+            <label key={label} className="block text-sm">
+              <span className="mb-1 block text-gray-600">{label}</span>
+              <input
+                type="text"
+                value={rack.memberNames![i]}
+                onChange={(e) => {
+                  const memberNames = [...rack.memberNames!] as [string, string, string]
+                  memberNames[i] = e.target.value
+                  patchRack(partition.id, rack.id, { memberNames })
+                }}
+                className="w-40 rounded-md border border-gray-300 bg-white px-2 py-1.5"
+              />
+            </label>
+          ))}
+        </div>
+      )}
       {/* Tallies on their own line: node count, leaf port usage, fabric ratio. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
@@ -284,7 +309,7 @@ export default function RackSection({
           <NumberField
             label="Max power draw (kW)"
             info={{
-              text: 'Power budget of this physical rack (each rack of a three-rack). The estimate sums typical per-device draw from the catalog; validation reports racks over budget.',
+              text: 'Power budget of this physical rack (each rack of a rack group). The estimate sums typical per-device draw from the catalog; validation reports racks over budget.',
             }}
             value={rack.maxPowerWatts / 1000}
             min={1}

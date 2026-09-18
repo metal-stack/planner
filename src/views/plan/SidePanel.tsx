@@ -85,7 +85,7 @@ export default function SidePanel({ plan, issues }: { plan: Plan; issues: Issue[
     ? bom.reduce((sum, l) => sum + (lineTotal({ currency, prices }, l) ?? 0), 0)
     : 0
   const complete = bom.every((l) => lineTotal({ currency, prices }, l) !== undefined)
-  // Physical racks, central racks included (a three-rack counts as three).
+  // Physical racks, central racks included (a rack group counts as three).
   const racks = plan.partitions.reduce((n, p) => n + physicalRackCount(p), 0)
   const graph = filterTopology(deriveTopology(plan), 'production')
   const hasTopology = graph.partitions.some(

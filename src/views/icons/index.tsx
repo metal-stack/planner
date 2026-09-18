@@ -52,7 +52,7 @@ import type { TopoNodeKind } from '../../derive/topology'
 import type { CatalogCategory } from '../../model/catalog'
 import type { ExternalNetwork } from '../../model/plan'
 import type { View } from '../../store/planStore'
-import { NetworkSwitch, Rack, ThreeRack } from './custom'
+import { NetworkSwitch, Rack, RackGroup } from './custom'
 
 // The single place icons come from (Lucide plus the custom switch and rack
 // glyphs). Views import from here, never from lucide-react directly — an
@@ -61,7 +61,7 @@ import { NetworkSwitch, Rack, ThreeRack } from './custom'
 // icon a type error.
 
 export type { LucideIcon }
-export { NetworkSwitch, Rack, ThreeRack }
+export { NetworkSwitch, Rack, RackGroup }
 
 export const TAB_ICON: Record<View, LucideIcon> = {
   plan: PencilRuler,
@@ -96,7 +96,7 @@ export const SECTION_ICON = {
   centralRack: Rack,
   mgmtNetwork: Cable,
   rack: Rack,
-  threeRack: ThreeRack,
+  rackGroup: RackGroup,
   externalNetworks: Globe,
   internet: Globe,
   projectNetworks: Layers,

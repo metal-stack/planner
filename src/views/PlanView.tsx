@@ -177,12 +177,12 @@ export default function PlanView() {
                 Add rack to {partition.name}
               </button>
               <button
-                onClick={() => addRack(partition.id, 'three-rack')}
+                onClick={() => addRack(partition.id, 'rack-group')}
                 title="Three physical racks sharing the middle rack's leaf pair and mgmt leaf"
                 className="btn-secondary"
               >
-                <Icon icon={SECTION_ICON.threeRack} />
-                Add three-rack to {partition.name}
+                <Icon icon={SECTION_ICON.rackGroup} />
+                Add rack group to {partition.name}
               </button>
             </div>
           </section>

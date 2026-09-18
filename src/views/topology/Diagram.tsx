@@ -80,7 +80,7 @@ export interface DiagramTarget {
 interface BoxLayout {
   rect: Rect
   name: string
-  /** Enclosing box of a three-rack entity (drawn dashed, behind its racks). */
+  /** Enclosing box of a rack group (drawn dashed, behind its racks). */
   entity?: boolean
   target?: DiagramTarget
 }
@@ -147,8 +147,8 @@ function layoutRack(
     rects.set(group.id, { x: x + RACK_PAD, y: cy, w: innerW, h: SRV_H })
     cy += SRV_H + 8
   }
-  // An empty physical rack (a three-rack side nothing spread into) still
-  // gets a small body so the entity reads as three racks.
+  // An empty physical rack (a rack-group side nothing spread into) still
+  // gets a small body so the group reads as three racks.
   if (cy === y + RACK_HEAD) cy += 22
   return {
     rect: { x, y, w: innerW + 2 * RACK_PAD, h: cy - y + RACK_PAD - 8 },
@@ -158,14 +158,14 @@ function layoutRack(
 }
 
 const RACK_GAP = 24
-/** Gap between the physical racks of one three-rack entity. */
+/** Gap between the physical racks of one rack group. */
 const ENTITY_GAP = 10
-/** Padding of the box drawn around a three-rack entity, and the room its
+/** Padding of the box drawn around a rack group, and the room its
  *  label needs above the physical racks' own headers. */
 const ENTITY_PAD = 8
 const ENTITY_HEAD = 26
 
-/** Whether two adjacent racks belong to the same three-rack entity. */
+/** Whether two adjacent racks belong to the same rack group. */
 function sameEntity(a: TopoRack | undefined, b: TopoRack | undefined): boolean {
   return !!a?.entity && !!b?.entity && a.entity.id === b.entity.id
 }
@@ -246,7 +246,7 @@ function layoutPartition(
   }
 
   // Compute racks and the storage box below. The physical racks of a
-  // three-rack entity sit close together inside an enclosing box.
+  // rack group sit close together inside an enclosing box.
   const rackY = boxRect.y + boxRect.h + 56
   let x = Math.max(0, (fabricW - racksW - storageW) / 2)
   let maxRackH = 0
@@ -276,7 +276,7 @@ function layoutPartition(
           w: x - entityStartX,
           h: h + ENTITY_HEAD + ENTITY_PAD,
         },
-        name: `${rack.entity!.name} (three-rack)`,
+        name: rack.entity!.name,
         entity: true,
         target: { partitionId: partition.id, rackId: rack.entity!.id },
       })
@@ -418,7 +418,7 @@ export default function Diagram({
 }: {
   graph: TopologyGraph
   fit?: boolean
-  /** Click on a rack, three-rack or central rack box → jump to its editor section. */
+  /** Click on a rack, rack group or central rack box → jump to its editor section. */
   onNavigate?: (target: DiagramTarget) => void
 }) {
   const layout = computeLayout(graph)

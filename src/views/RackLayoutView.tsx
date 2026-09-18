@@ -5,7 +5,7 @@ import {
   type SlotKind,
 } from '../derive/rackLayout'
 import { usePlanStore } from '../store/planStore'
-import { Icon, SLOT_ICON } from './icons'
+import { Icon, SECTION_ICON, SLOT_ICON } from './icons'
 import { navigateTo } from './plan/navigate'
 
 // Rack elevations with a height-unit scale. U numbers count from the
@@ -177,6 +177,19 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
   )
 }
 
+/** Consecutive elevations of one rack group, or a lone rack, in order. */
+function groupRuns(
+  racks: RackElevation[],
+): { group?: RackElevation['group']; racks: RackElevation[] }[] {
+  const runs: { group?: RackElevation['group']; racks: RackElevation[] }[] = []
+  for (const rack of racks) {
+    const last = runs.at(-1)
+    if (rack.group && last?.group?.id === rack.group.id) last.racks.push(rack)
+    else runs.push({ group: rack.group, racks: [rack] })
+  }
+  return runs
+}
+
 export default function RackLayoutView() {
   const plan = usePlanStore((s) => s.plan)
   const partitions = deriveRackLayout(plan)
@@ -191,13 +204,44 @@ export default function RackLayoutView() {
             <h3 className="mb-3 text-sm font-semibold text-gray-700">{partition.partitionName}</h3>
           )}
           <div className="flex flex-wrap gap-6 card p-4">
-            {partition.racks.map((rack) => (
-              <Rack
-                key={rack.id}
-                rack={rack}
-                onClick={() => goTo(partition.partitionId, rack.rackId)}
-              />
-            ))}
+            {groupRuns(partition.racks).map((run) =>
+              run.group ? (
+                <div
+                  key={run.group.id}
+                  className="rounded-md border border-dashed border-gray-300 bg-gray-50/60 px-2 pt-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => goTo(partition.partitionId, run.group!.id)}
+                    title={`Edit ${run.group.name} in the plan`}
+                    className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:underline"
+                  >
+                    <Icon icon={SECTION_ICON.rackGroup} className="h-3.5 w-3.5 text-gray-500" />
+                    {run.group.name}
+                    <span className="font-normal text-gray-500">
+                      · leaf pair and mgmt leaf in {run.racks[1]?.name}
+                    </span>
+                  </button>
+                  <div className="flex gap-3">
+                    {run.racks.map((rack) => (
+                      <Rack
+                        key={rack.id}
+                        rack={rack}
+                        onClick={() => goTo(partition.partitionId, rack.rackId)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                run.racks.map((rack) => (
+                  <Rack
+                    key={rack.id}
+                    rack={rack}
+                    onClick={() => goTo(partition.partitionId, rack.rackId)}
+                  />
+                ))
+              ),
+            )}
             <p className="w-full text-xs text-gray-500">
               Estimated power, all racks: ~
               {formatPower(partition.racks.reduce((w, r) => w + r.powerWatts, 0))} · per-device

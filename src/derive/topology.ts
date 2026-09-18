@@ -46,13 +46,13 @@ export interface TopoLink {
   network: LinkNetwork
 }
 
-/** One physical rack. A three-rack plan rack yields three of these that
+/** One physical rack. A rack group yields three of these that
  *  share `entity`; only the middle one holds the leaves and mgmt leaf, and
  *  the left/right racks' server groups uplink to those. */
 export interface TopoRack {
   id: string
   name: string
-  /** Set for the physical racks of a three-rack entity. */
+  /** Set for the physical racks of a rack group. */
   entity?: { id: string; name: string; position: RackPosition }
   leaves: TopoNode[]
   mgmtLeaves: TopoNode[]
@@ -130,7 +130,7 @@ function deriveRack(partition: Partition, rack: Rack, links: TopoLink[]): TopoRa
   const physical = physicalRacks(rack, partition.fabric)
   return physical.map((phys): TopoRack => {
     // Nodes of each group that landed in this physical rack (chassis-level
-    // spread for three-racks; everything for a single rack).
+    // spread for rack groups; everything for a single rack).
     const nodesByGroup = new Map<string, number>()
     for (const chassis of phys.chassis) {
       if (chassis.groupId === undefined) continue
@@ -145,7 +145,7 @@ function deriveRack(partition: Partition, rack: Rack, links: TopoLink[]): TopoRa
     for (const group of rack.servers) {
       const count = nodesByGroup.get(group.id) ?? 0
       // Keep an empty group visible in a single rack so the user sees it;
-      // skip it in three-rack positions it didn't spread into.
+      // skip it in rack-group positions it didn't spread into.
       if (count === 0 && phys.position) continue
       const nodeId = `${idPrefix}${group.id}`
       serverGroups.push({

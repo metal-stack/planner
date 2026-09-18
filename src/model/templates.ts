@@ -26,11 +26,11 @@ function group(
   return { id: id(), role, modelId, count, uplink }
 }
 
-/** Three-rack entity: 112 MicroCloud workers (14 chassis, spread mid → left),
+/** Rack group: 112 MicroCloud workers (14 chassis, spread mid → left),
  *  optionally with storage servers. The 2x AS7726 leaf pair has 60 ports for
  *  servers; 112 workers + 3 storage on 2x25G use 58. */
-function threeRack(name: string, storageServers = 0): Rack {
-  const rack = defaultRack(name, 'three-rack')
+function rackGroup(name: string, memberNames: [string, string, string], storageServers = 0): Rack {
+  const rack = defaultRack(name, 'rack-group', DEFAULT_RACK_DEFAULTS, memberNames)
   rack.servers = [group('worker', 'server-microcloud-h13', 112)]
   if (storageServers > 0) {
     rack.servers.push(group('storage', 'server-superserver-tn12', storageServers))
@@ -38,7 +38,7 @@ function threeRack(name: string, storageServers = 0): Rack {
   return rack
 }
 
-/** One partition with a redundant management network, two three-racks and
+/** One partition with a redundant management network, two rack groups and
  *  three storage servers. */
 function redundantPartition(name: string): Partition {
   const fabric = defaultFabric()
@@ -47,7 +47,10 @@ function redundantPartition(name: string): Partition {
     id: id(),
     name,
     fabric,
-    racks: [threeRack('Rack 1', 3), threeRack('Rack 2')],
+    racks: [
+      rackGroup('Rack group 1', ['Rack 1', 'Rack 2', 'Rack 3'], 3),
+      rackGroup('Rack group 2', ['Rack 4', 'Rack 5', 'Rack 6']),
+    ],
     rackDefaults: { ...DEFAULT_RACK_DEFAULTS },
   }
 }
@@ -83,7 +86,7 @@ export const templates: PlanTemplate[] = [
     id: 'redundant',
     name: 'Redundant',
     description:
-      'One partition, redundant management network, two three-racks with 224 workers and 3 storage servers.',
+      'One partition, redundant management network, two rack groups with 224 workers and 3 storage servers.',
     build: () => plan('Redundant', 'single-zone', [redundantPartition('Partition 1')]),
   },
   {

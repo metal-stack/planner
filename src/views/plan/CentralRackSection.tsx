@@ -234,7 +234,7 @@ export default function CentralRackSection({
         <SelectField
           label="Mgmt leaf model"
           info={{
-            text: 'One management leaf per compute rack (a three-rack shares one in its middle rack). It terminates the BMC/IPMI ports of the server chassis and the management interfaces of the leaves; metal-bmc discovers machines through it.',
+            text: 'One management leaf per compute rack (a rack group shares one in its middle rack). It terminates the BMC/IPMI ports of the server chassis and the management interfaces of the leaves; metal-bmc discovers machines through it.',
             href: DOCS.metalBmc,
           }}
           value={fabric.mgmt.leafModelId}

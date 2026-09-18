@@ -49,10 +49,10 @@ export const ServerGroupSchema = z.object({
 })
 export type ServerGroup = z.infer<typeof ServerGroupSchema>
 
-/** 'three-rack': one entity of three physical racks sharing the middle
+/** 'rack-group': one entity of three physical racks sharing the middle
  *  rack's leaf pair and mgmt leaf — compute spreads middle, then left,
  *  then right. heightUnits applies per physical rack. */
-export const RackKindSchema = z.enum(['single', 'three-rack'])
+export const RackKindSchema = z.enum(['single', 'rack-group'])
 export type RackKind = z.infer<typeof RackKindSchema>
 
 /** Defaults a partition applies to racks it creates; each rack keeps its
@@ -67,6 +67,9 @@ export const RackSchema = z.object({
   id: z.string(),
   name: z.string(),
   kind: RackKindSchema.default('single'),
+  /** Names of a rack group's left, middle and right physical racks; `name`
+   *  then names the group itself. Absent for a single rack. */
+  memberNames: z.tuple([z.string(), z.string(), z.string()]).optional(),
   heightUnits: z.number().int().positive(),
   /** Power budget per physical rack, W; the estimate is checked against it. */
   maxPowerWatts: z.number().int().positive().default(10000),

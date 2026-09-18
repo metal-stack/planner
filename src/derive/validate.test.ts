@@ -312,3 +312,15 @@ describe('validatePlan GPUs and vendor availability', () => {
     ).toEqual(['S-ECSONIC-10-25G-3Y', 'S-ECSONIC-40-100G-3Y'])
   })
 })
+
+describe('rack names', () => {
+  it('warns when two physical racks share a name', () => {
+    const plan = basePlan()
+    const partition = plan.partitions[0]
+    expect(validatePlan(plan).some((i) => i.message.includes('used more than once'))).toBe(false)
+    partition.racks.push(defaultRack('Rack 1'))
+    const dupes = validatePlan(plan).filter((i) => i.message.includes('used more than once'))
+    expect(dupes).toHaveLength(1)
+    expect(dupes[0].severity).toBe('warning')
+  })
+})
