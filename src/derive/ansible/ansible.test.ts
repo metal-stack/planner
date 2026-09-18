@@ -65,6 +65,20 @@ describe('Ansible export', () => {
     }
   })
 
+  it('defaults to public name and NTP servers, leaving release and metal-api open', () => {
+    const { files, placeholders } = deriveAnsible(createEmptyPlan())
+    const switches = parse(
+      files.find((f) => f.path.endsWith('group_vars/partition/switches.yaml'))!.content,
+    )
+    expect(switches.sonic_config_nameservers).toEqual(['1.1.1.1', '8.8.8.8'])
+    expect(switches.sonic_config_ntp.servers[0]).toBe('0.europe.pool.ntp.org')
+    const settings = placeholders.filter((p) => p.reason.endsWith('(Ansible tab)'))
+    expect(settings.map((p) => p.key)).toEqual([
+      'metal_stack_release_version',
+      'metal_partition_metal_api_addr',
+    ])
+  })
+
   it('uses the deployment settings', () => {
     const plan = createEmptyPlan()
     plan.deployment = {

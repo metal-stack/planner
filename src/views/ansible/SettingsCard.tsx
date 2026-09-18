@@ -143,44 +143,45 @@ export default function SettingsCard({
           required
           onChange={(metalApiAddress) => patch({ metalApiAddress })}
         />
-        <div className={wide}>
-          <ListField
-            label="Name servers"
-            values={d.nameservers}
-            placeholder="192.0.2.53, 198.51.100.53"
-            required
-            onChange={(nameservers) => patch({ nameservers })}
-          />
-        </div>
-        <div className={wide}>
-          <ListField
-            label="NTP servers"
-            values={d.ntpServers}
-            placeholder="192.0.2.123"
-            required
-            onChange={(ntpServers) => patch({ ntpServers })}
-          />
-        </div>
-        <div className={wide}>
-          <SelectField
-            label="CI/CD pipeline"
-            info={ANSIBLE_INFO.ci}
-            value={d.ci.platform}
-            options={PLATFORMS}
-            onChange={(platform) => patchCi({ platform: platform as CiPlatform })}
-          />
-        </div>
       </div>
 
       <details className="mt-4" data-advanced>
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            · inventory, role versions{d.ci.platform !== 'none' ? ' and pipeline' : ''}, with
-            defaults
+            · servers, inventory, role versions and pipeline, with defaults
           </span>
         </summary>
         <div className="mt-3 space-y-4">
+          <Group title="Servers">
+            <div className={wide}>
+              <ListField
+                label="Name servers"
+                values={d.nameservers}
+                placeholder="1.1.1.1, 8.8.8.8"
+                required
+                onChange={(nameservers) => patch({ nameservers })}
+              />
+            </div>
+            <div className={wide}>
+              <ListField
+                label="NTP servers"
+                values={d.ntpServers}
+                placeholder="0.europe.pool.ntp.org"
+                required
+                onChange={(ntpServers) => patch({ ntpServers })}
+              />
+            </div>
+            <div className={wide}>
+              <ListField
+                label="SSH source ranges (switches)"
+                values={d.sshSourceRanges}
+                placeholder="10.0.0.0/8"
+                onChange={(sshSourceRanges) => patch({ sshSourceRanges })}
+              />
+            </div>
+          </Group>
+
           <Group title="Inventory">
             <TextField
               label="Inventory name"
@@ -213,63 +214,68 @@ export default function SettingsCard({
               value={d.ansibleCommonVersion}
               onChange={(ansibleCommonVersion) => patch({ ansibleCommonVersion })}
             />
-            <ListField
-              label="SSH source ranges"
-              values={d.sshSourceRanges}
-              placeholder="10.0.0.0/8"
-              onChange={(sshSourceRanges) => patch({ sshSourceRanges })}
-            />
           </Group>
 
-          {d.ci.platform !== 'none' && (
-            <Group title="Pipeline">
-              <div className={wide}>
-                <TextField
-                  label="Container image"
-                  value={d.ci.image}
-                  onChange={(image) => patchCi({ image })}
-                />
-              </div>
-              <TextField
-                label="Deploy branch"
-                value={d.ci.branch}
-                onChange={(branch) => patchCi({ branch })}
+          <Group title="Pipeline">
+            <div className={wide}>
+              <SelectField
+                label="CI/CD pipeline"
+                info={ANSIBLE_INFO.ci}
+                value={d.ci.platform}
+                options={PLATFORMS}
+                onChange={(platform) => patchCi({ platform: platform as CiPlatform })}
               />
-              <TextField
-                label="SSH user"
-                value={d.ci.sshUser}
-                placeholder="Ansible default"
-                onChange={(sshUser) => patchCi({ sshUser })}
-              />
-              <div className="col-span-2 flex flex-col justify-end gap-1.5 pb-1">
-                <Check
-                  label="Check SSH host keys (SSH_KNOWN_HOSTS)"
-                  checked={d.ci.hostKeyChecking}
-                  onChange={(hostKeyChecking) => patchCi({ hostKeyChecking })}
-                />
-                <Check
-                  label="Dry run before deploying (--check --diff)"
-                  checked={d.ci.dryRun}
-                  onChange={(dryRun) => patchCi({ dryRun })}
-                />
-              </div>
-              {partitions.map((p) => (
+            </div>
+            {d.ci.platform !== 'none' && (
+              <>
+                <div className={wide}>
+                  <TextField
+                    label="Container image"
+                    value={d.ci.image}
+                    onChange={(image) => patchCi({ image })}
+                  />
+                </div>
                 <TextField
-                  key={p.partitionId}
-                  label={`Runner tag, ${p.partitionName}`}
-                  value={d.ci.runnerTags[p.partitionId] ?? ''}
-                  placeholder={p.slug}
-                  onChange={(tag) =>
-                    patchCi({ runnerTags: { ...d.ci.runnerTags, [p.partitionId]: tag } })
-                  }
+                  label="Deploy branch"
+                  value={d.ci.branch}
+                  onChange={(branch) => patchCi({ branch })}
                 />
-              ))}
-              <span className="col-span-2 self-end pb-2 text-xs text-gray-500">
-                Runners must reach the partition&apos;s management network
-                <InfoBubble label="runner tags" info={ANSIBLE_INFO.runners} />
-              </span>
-            </Group>
-          )}
+                <TextField
+                  label="SSH user"
+                  value={d.ci.sshUser}
+                  placeholder="Ansible default"
+                  onChange={(sshUser) => patchCi({ sshUser })}
+                />
+                <div className="col-span-2 flex flex-col justify-end gap-1.5 pb-1">
+                  <Check
+                    label="Check SSH host keys (SSH_KNOWN_HOSTS)"
+                    checked={d.ci.hostKeyChecking}
+                    onChange={(hostKeyChecking) => patchCi({ hostKeyChecking })}
+                  />
+                  <Check
+                    label="Dry run before deploying (--check --diff)"
+                    checked={d.ci.dryRun}
+                    onChange={(dryRun) => patchCi({ dryRun })}
+                  />
+                </div>
+                {partitions.map((p) => (
+                  <TextField
+                    key={p.partitionId}
+                    label={`Runner tag, ${p.partitionName}`}
+                    value={d.ci.runnerTags[p.partitionId] ?? ''}
+                    placeholder={p.slug}
+                    onChange={(tag) =>
+                      patchCi({ runnerTags: { ...d.ci.runnerTags, [p.partitionId]: tag } })
+                    }
+                  />
+                ))}
+                <span className="col-span-2 self-end pb-2 text-xs text-gray-500">
+                  Runners must reach the partition&apos;s management network
+                  <InfoBubble label="runner tags" info={ANSIBLE_INFO.runners} />
+                </span>
+              </>
+            )}
+          </Group>
         </div>
       </details>
     </section>

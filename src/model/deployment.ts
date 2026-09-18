@@ -6,9 +6,20 @@ import { z } from 'zod'
 //
 // Role versions default to the pins in metal-stack/mini-lab's
 // requirements.yaml, the CI image to the one metal-stack deployment
-// repositories use (checked 2026-09-18); the release vector version and
-// the metal-api address are left for the operator, the export marks them
-// as placeholders.
+// repositories use, name and NTP servers to the public ones mini-lab and
+// metal-roles use (checked 2026-09-18). Only the release vector version
+// and the metal-api address are left for the operator; the export marks
+// them as placeholders.
+
+/** Public resolvers, as in mini-lab. */
+export const PUBLIC_NAMESERVERS = ['1.1.1.1', '8.8.8.8']
+/** The NTP pool's European servers, as in metal-roles. */
+export const PUBLIC_NTP_SERVERS = [
+  '0.europe.pool.ntp.org',
+  '1.europe.pool.ntp.org',
+  '2.europe.pool.ntp.org',
+  '3.europe.pool.ntp.org',
+]
 
 export const CiPlatformSchema = z.enum(['gitlab', 'github', 'both', 'none'])
 export type CiPlatform = z.infer<typeof CiPlatformSchema>
@@ -38,8 +49,8 @@ export const DeploymentSchema = z.object({
   /** First ASN of the private 4-byte range (RFC 6996); see derive/devices.ts. */
   asnBase: z.number().int().min(4200000000).max(4294967294).default(4200000000),
   timezone: z.string().default('Europe/Berlin'),
-  nameservers: z.array(z.string()).default([]),
-  ntpServers: z.array(z.string()).default([]),
+  nameservers: z.array(z.string()).default(() => [...PUBLIC_NAMESERVERS]),
+  ntpServers: z.array(z.string()).default(() => [...PUBLIC_NTP_SERVERS]),
   /** Ranges the switches accept SSH from on their production addresses. */
   sshSourceRanges: z.array(z.string()).default([]),
   /** metal-stack release (tag of github.com/metal-stack/releases). */
