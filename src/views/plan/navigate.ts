@@ -39,7 +39,7 @@ export function revealSection(anchor: string | undefined, openAdvanced = false):
  *  section (switching tabs first lets the section mount). */
 export function navigateTo(target: IssueTarget): void {
   const anchor = anchorFor(target)
-  const openAdvanced = !!target.rackId && target.field === 'advanced'
+  const openAdvanced = target.field === 'advanced'
   const view = target.section === 'ips' ? 'ips' : 'plan'
   const store = usePlanStore.getState()
   if (store.activeView === view) {

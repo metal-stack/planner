@@ -356,6 +356,20 @@ describe('issues fixed in the Advanced section', () => {
     expect(advanced(plan).some((m) => m.includes('used more than once'))).toBe(true)
   })
 
+  it("points the central rack's model issues there, but not its count issues", () => {
+    const plan = basePlan()
+    const partition = plan.partitions[0]
+    partition.fabric.spineModelId = 'switch-as4630' // management-only switch
+    partition.fabric.spineCount = 1
+    partition.fabric.mgmt.serverModelId = 'server-microcloud-h13'
+    const central = validatePlan(plan).filter((i) => !i.target.rackId)
+    const inAdvanced = central.filter((i) => i.target.field === 'advanced').map((i) => i.message)
+    expect(inAdvanced.some((m) => m.startsWith('Spine switch:'))).toBe(true)
+    expect(inAdvanced.some((m) => m.startsWith('Mgmt server:'))).toBe(true)
+    const single = central.find((i) => i.message.startsWith('Only one spine'))
+    expect(single?.target.field).toBeUndefined()
+  })
+
   it('leaves the leaf-port capacity error in the visible section', () => {
     const plan = basePlan()
     plan.partitions[0].racks[0].servers[0].count = 400
