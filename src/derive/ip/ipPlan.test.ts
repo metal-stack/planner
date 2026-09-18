@@ -138,11 +138,12 @@ describe('infrastructure ranges', () => {
     const byPurpose = Object.fromEntries(p.subnets.map((s) => [`${s.purpose}|${s.scope}`, s]))
     // 2 leaves + 2 spines + 2 exits + 4 firewalls = 10, doubled = 20 → /27
     expect(byPurpose['Underlay loopbacks|Partition']).toMatchObject({ needed: 10, prefix: 27 })
-    // 8 nodes + 2 exit SVIs = 10, doubled + 3 reserved = 23 → /27
+    // One PXE network per leaf plus one for the exits: 4 slices, each for
+    // the rack's 8 nodes, doubled + 3 reserved = 19 → /27, so 4 × 32 → /25
     expect(byPurpose['PXE (vlan4000)|Partition']).toMatchObject({
       needed: 10,
-      sized: 23,
-      prefix: 27,
+      sized: 128,
+      prefix: 25,
     })
     // L3 management: central 2 spines + 2 exits + 2 mgmt spines + 2 mgmt servers × 2 + 2 routers
     expect(byPurpose['Management|Central rack']).toMatchObject({ needed: 12, prefix: 27 })
@@ -150,9 +151,12 @@ describe('infrastructure ranges', () => {
     expect(byPurpose['Management|Rack 1']).toMatchObject({ needed: 11, prefix: 27 })
     // 2 routers × 2 exits × 2 links × /30 = 32 addresses
     expect(byPurpose['Transfer networks|Partition']).toMatchObject({ needed: 8, prefix: 27 })
+    // L3 management: 2 mgmt spines + 1 mgmt leaf + 2 mgmt servers, doubled → /28
+    expect(byPurpose['Management loopbacks|Partition']).toMatchObject({ needed: 5, prefix: 28 })
     expect(formatCidr(p.block!)).toBe('172.16.0.0/20')
     expect(p.overflow).toBe(false)
-    expect(p.requiredPrefix).toBe(24)
+    // 128 PXE + 4 × 32 + 16 = 272 → /23
+    expect(p.requiredPrefix).toBe(23)
     expect(p.subnets.every((s) => s.cidr !== null)).toBe(true)
   })
 
@@ -163,13 +167,15 @@ describe('infrastructure ranges', () => {
     expect(p.subnets.filter((s) => s.purpose === 'Management').map((s) => s.scope)).toEqual([
       'Partition',
     ])
+    expect(p.subnets.some((s) => s.kind === 'mgmt-loopbacks')).toBe(false)
   })
 
   it('sizes the Redundant template per rack group and overflows a small block', () => {
     const plan = templates.find((t) => t.id === 'redundant')!.build()
     const p = deriveIpPlan(plan).infra.partitions[0]
     const pxe = p.subnets.find((s) => s.purpose === 'PXE (vlan4000)')!
-    expect(pxe).toMatchObject({ needed: 229, prefix: 23 })
+    // 4 leaves + exits → 8 slices, each for the 115 nodes of rack group 1 → /24
+    expect(pxe).toMatchObject({ needed: 229, prefix: 21 })
     const racks = p.subnets.filter((s) => s.purpose === 'Management' && s.scope !== 'Central rack')
     expect(racks.map((s) => [s.scope, s.needed, s.prefix])).toEqual([
       ['Rack group 1', 118, 24],
@@ -178,7 +184,7 @@ describe('infrastructure ranges', () => {
     plan.ipPlan.infra.partitionPrefix = 23
     const small = deriveIpPlan(plan).infra.partitions[0]
     expect(small.overflow).toBe(true)
-    // 512 PXE + 2 × 256 rack mgmt + 3 × 32 (underlay, central mgmt, transfer) = 1120
-    expect(small.requiredPrefix).toBe(21)
+    // 2048 PXE + 2 × 256 rack mgmt + 3 × 32 (underlay, central mgmt, transfer) + 16 = 2672
+    expect(small.requiredPrefix).toBe(20)
   })
 })

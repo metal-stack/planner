@@ -27,9 +27,11 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.45.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.15"

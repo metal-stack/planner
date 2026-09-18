@@ -17,6 +17,10 @@ import {
   Download,
   EthernetPort,
   ExternalLink,
+  FileCode,
+  FileText,
+  Folder,
+  Copy,
   Globe,
   HardDrive,
   Info,
@@ -69,6 +73,7 @@ export const TAB_ICON: Record<View, LucideIcon> = {
   racks: Rack,
   ips: Binary,
   bom: ListChecks,
+  ansible: FileCode,
 }
 
 export const ACTION_ICON = {
@@ -89,6 +94,7 @@ export const ACTION_ICON = {
   random: Dices,
   fit: Scan,
   fill: RefreshCw,
+  copy: Copy,
 } satisfies Record<string, LucideIcon>
 
 export const SECTION_ICON = {
@@ -105,6 +111,14 @@ export const SECTION_ICON = {
   example: Boxes,
   infrastructure: Cable,
   bom: ListChecks,
+  deployment: SlidersHorizontal,
+  files: FileCode,
+  placeholders: PencilRuler,
+} satisfies Record<string, LucideIcon>
+
+export const FILE_ICON = {
+  folder: Folder,
+  file: FileText,
 } satisfies Record<string, LucideIcon>
 
 export const SEVERITY_ICON = {

@@ -29,13 +29,18 @@ import {
 // - Underlay: one loopback per BGP speaker — used as router ID and VTEP
 //   address — for leaves, spines, exits, superspines, storage leaves and
 //   firewalls (EVPN-to-the-host VTEPs).
-// - PXE (vlan4000): one address per server node plus one per exit switch,
-//   whose SVI runs the PXE DHCP server.
+// - PXE (vlan4000): every leaf routes its own PXE network (its metal-core
+//   CIDR), and the exit switches' SVIs share one more. The subnet is a
+//   power of two of equal slices (at least leaves + 1), each sized for the
+//   largest rack's server nodes (or the exits) with headroom; the Ansible
+//   export hands the slices out in derive/ip/deviceAddresses.ts.
 // - Management (mgmt VRF / out-of-band): one per switch management
 //   interface (production and management switches), one BMC per server
 //   node, management server and internet router, and each management
 //   server's own interface. L2 management: one subnet per partition; L3:
 //   a central subnet plus one per compute rack (a rack group once).
+// - Management loopbacks (L3 management only): one per BGP speaker of the
+//   management network, i.e. mgmt spines, mgmt leaves and mgmt servers.
 // - Transfer networks: one per router ↔ exit link (2 × routers × exits).
 // Host subnets reserve 3 addresses (network, broadcast, gateway), the
 // loopback pool none. Every size except the transfer networks gets the
@@ -134,7 +139,14 @@ export interface FamilyResult {
   example: ExampleCluster | null
 }
 
+/** What an infrastructure subnet is for, so consumers (the Ansible
+ *  export) need not match display strings. */
+export type InfraSubnetKind = 'underlay' | 'pxe' | 'mgmt' | 'mgmt-loopbacks' | 'transfer'
+
 export interface InfraSubnet {
+  kind: InfraSubnetKind
+  /** Set on the per-rack management subnets of an L3 management network. */
+  rackId?: string
   purpose: string
   scope: string
   /** Devices / addresses needed today. */
@@ -424,6 +436,7 @@ function withHeadroom(needed: number, headroomPercent: number): number {
 }
 
 function hostSubnet(
+  kind: InfraSubnetKind,
   purpose: string,
   scope: string,
   needed: number,
@@ -433,7 +446,47 @@ function hostSubnet(
 ): InfraSubnet | null {
   if (needed <= 0) return null
   const sized = withHeadroom(needed, infra.headroomPercent) + reserved
-  return { purpose, scope, needed, sized, prefix: fitPrefix(4, sized), cidr: null, detail }
+  return { kind, purpose, scope, needed, sized, prefix: fitPrefix(4, sized), cidr: null, detail }
+}
+
+/** Number of equal PXE slices: one per leaf plus one for the exits. */
+export function pxeSliceCount(leaves: number): number {
+  let n = 1
+  while (n < leaves + 1) n *= 2
+  return n
+}
+
+function pxeSubnet(
+  partition: Partition,
+  leaves: number,
+  nodes: number,
+  infra: IpInfra,
+): InfraSubnet | null {
+  const exits = partition.fabric.exitSwitchCount
+  const needed = nodes + exits
+  if (needed <= 0) return null
+  const largestRack = Math.max(
+    0,
+    ...partition.racks.filter((r) => r.leafCount > 0).map((r) => rackNodes(r).total),
+  )
+  const slices = pxeSliceCount(leaves)
+  const slicePrefix = fitPrefix(
+    4,
+    withHeadroom(Math.max(largestRack, exits), infra.headroomPercent) + HOST_RESERVED,
+  )
+  const sized = slices * 2 ** (32 - slicePrefix)
+  return {
+    kind: 'pxe',
+    purpose: 'PXE (vlan4000)',
+    scope: 'Partition',
+    needed,
+    sized,
+    prefix: fitPrefix(4, sized),
+    cidr: null,
+    detail:
+      `${slices} × /${slicePrefix}, one per leaf (${leaves}) and one for the ${exits} exit SVIs, ` +
+      `each for up to ${largestRack} server nodes`,
+  }
 }
 
 /** Subnets a partition needs, in display order, not yet placed. */
@@ -450,6 +503,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
     leaves + fabric.spineCount + fabric.exitSwitchCount + superspines + fabric.storageLeafCount
   out.push(
     hostSubnet(
+      'underlay',
       'Underlay loopbacks',
       'Partition',
       speakers + infra.firewallsPerPartition,
@@ -461,15 +515,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
       0,
     ),
   )
-  out.push(
-    hostSubnet(
-      'PXE (vlan4000)',
-      'Partition',
-      nodes + fabric.exitSwitchCount,
-      `${nodes} server nodes + ${fabric.exitSwitchCount} exit SVIs`,
-      infra,
-    ),
-  )
+  out.push(pxeSubnet(partition, leaves, nodes, infra))
 
   const centralSwitches =
     fabric.spineCount + fabric.exitSwitchCount + superspines + fabric.storageLeafCount + mgmtCount
@@ -480,6 +526,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
   if (fabric.mgmt.layer === 'l2') {
     out.push(
       hostSubnet(
+        'mgmt',
         'Management',
         'Partition',
         centralSwitches + centralServers + leaves + mgmtLeaves + nodes,
@@ -490,6 +537,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
   } else {
     out.push(
       hostSubnet(
+        'mgmt',
         'Management',
         'Central rack',
         centralSwitches + centralServers,
@@ -499,16 +547,27 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
     )
     for (const rack of partition.racks) {
       const rackNodeCount = rackNodes(rack).total
-      out.push(
-        hostSubnet(
-          'Management',
-          rack.name,
-          rack.leafCount + fabric.mgmt.leafPerRack + rackNodeCount,
-          `${rack.leafCount} leaves + ${fabric.mgmt.leafPerRack} mgmt leaf + ${rackNodeCount} BMCs`,
-          infra,
-        ),
+      const rackSubnet = hostSubnet(
+        'mgmt',
+        'Management',
+        rack.name,
+        rack.leafCount + fabric.mgmt.leafPerRack + rackNodeCount,
+        `${rack.leafCount} leaves + ${fabric.mgmt.leafPerRack} mgmt leaf + ${rackNodeCount} BMCs`,
+        infra,
       )
+      out.push(rackSubnet && { ...rackSubnet, rackId: rack.id })
     }
+    out.push(
+      hostSubnet(
+        'mgmt-loopbacks',
+        'Management loopbacks',
+        'Partition',
+        2 * mgmtCount + mgmtLeaves,
+        `${mgmtCount} mgmt spines + ${mgmtLeaves} mgmt leaves + ${mgmtCount} mgmt servers`,
+        infra,
+        0,
+      ),
+    )
   }
 
   const links = 2 * fabric.routerCount * fabric.exitSwitchCount
@@ -516,6 +575,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
     const perLink = 2 ** (32 - infra.transferPrefix)
     const total = links * perLink
     out.push({
+      kind: 'transfer',
       purpose: 'Transfer networks',
       scope: 'Partition',
       needed: links,

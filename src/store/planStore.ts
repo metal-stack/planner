@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
 import { temporal } from 'zundo'
 import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../model/defaults'
+import type { Deployment } from '../model/deployment'
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
 import { normalizePlan } from '../model/normalize'
@@ -17,7 +18,7 @@ import {
   type TopologyVariant,
 } from '../model/plan'
 
-export type View = 'plan' | 'topology' | 'racks' | 'ips' | 'bom'
+export type View = 'plan' | 'topology' | 'racks' | 'ips' | 'bom' | 'ansible'
 
 interface PlannerState {
   plan: Plan
@@ -30,6 +31,7 @@ interface PlannerState {
   patchIpInfra: (patch: Partial<IpInfra>) => void
   setIpv6Enabled: (enabled: boolean) => void
   applyIpPreset: (presetId: string) => void
+  patchDeployment: (patch: Partial<Deployment>) => void
   addPartition: () => void
   removePartition: (partitionId: string) => void
   renamePartition: (partitionId: string, name: string) => void
@@ -127,6 +129,10 @@ export const usePlanStore = create<PlannerState>()(
               }),
             }
           }),
+        patchDeployment: (patch) =>
+          set((s) => ({
+            plan: touched(s.plan, { deployment: { ...s.plan.deployment, ...patch } }),
+          })),
         addPartition: () =>
           set((s) => ({
             plan: touched(s.plan, {
