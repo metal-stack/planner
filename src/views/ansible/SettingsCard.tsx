@@ -4,17 +4,20 @@ import type { Ci, CiPlatform, Deployment } from '../../model/deployment'
 import { usePlanStore } from '../../store/planStore'
 import { NumberField, SelectField } from '../plan/fields'
 import InfoBubble from '../plan/InfoBubble'
+import type { Info } from '../plan/docs'
 import { ANSIBLE_INFO } from './infos'
 import { Icon, SECTION_ICON } from '../icons'
 
 function TextField({
   label,
+  info,
   value,
   placeholder,
   required,
   onChange,
 }: {
   label: string
+  info?: Info
   value: string
   placeholder?: string
   /** Marks the field while it is empty (the export writes CHANGE_ME). */
@@ -24,7 +27,10 @@ function TextField({
   const missing = required && !value.trim()
   return (
     <label className="block text-sm">
-      <span className="mb-1 block text-gray-600">{label}</span>
+      <span className="mb-1 block text-gray-600">
+        {label}
+        {info && <InfoBubble label={label} info={info} />}
+      </span>
       <input
         type="text"
         value={value}
@@ -136,13 +142,16 @@ export default function SettingsCard({
           required
           onChange={(metalStackRelease) => patch({ metalStackRelease })}
         />
-        <TextField
-          label="metal-api address"
-          value={d.metalApiAddress}
-          placeholder="api.example.com"
-          required
-          onChange={(metalApiAddress) => patch({ metalApiAddress })}
-        />
+        <div className={wide}>
+          <TextField
+            label="Control plane domain"
+            info={ANSIBLE_INFO.controlPlane}
+            value={d.controlPlaneDomain}
+            placeholder="metal.example.com"
+            required
+            onChange={(controlPlaneDomain) => patch({ controlPlaneDomain })}
+          />
+        </div>
       </div>
 
       <details className="mt-4" data-advanced>

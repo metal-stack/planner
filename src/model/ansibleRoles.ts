@@ -14,6 +14,9 @@ export const ROLE_VARIABLES: Record<string, readonly string[]> = {
   ansible: ['ansible_host', 'ansible_user', 'ansible_become', 'ansible_python_interpreter'],
   // Release vector mapping (common/roles/defaults, mini-lab group_vars/all).
   'common/defaults': ['metal_stack_release_version', 'metal_stack_release_vectors'],
+  // control-plane/roles/defaults: the ingress domain metal-api (api.<it>)
+  // and NSQ (<it>:4150) are served under.
+  'control-plane/defaults': ['metal_control_plane_ingress_dns'],
   // partition/README.md, partition/roles/defaults.
   'partition/defaults': [
     'metal_partition_id',
@@ -79,6 +82,8 @@ export const ROLE_VARIABLES: Record<string, readonly string[]> = {
   'mgmt-server': [
     'mgmt_server_asn',
     'mgmt_server_router_id',
+    // Read by the role's frr.conf.j2 (the assert checks mgmt_server_router_id).
+    'mgmt_server_routerid',
     'mgmt_server_spine_facing_interface',
     'mgmt_server_firewall_facing_interface',
     'mgmt_server_firewall_ip',

@@ -9,6 +9,9 @@ export const ANSIBLE_INFO = {
     href: DOCS.networking,
     linkLabel: 'Networking',
   },
+  controlPlane: {
+    text: 'DNS name of the control plane ingress (metal_control_plane_ingress_dns). The partition reaches metal-api at api.<domain> and NSQ at <domain>:4150, as the control plane roles serve them by default.',
+  },
   ci: {
     text: 'Pipelines that check every push (inventory, playbook syntax, no CHANGE_ME left) and deploy per partition by hand, in the order management servers, management network, production network. GitLab CI gets one .gitlab-ci.yml, GitHub Actions a check and a deploy workflow. SSH key, vault password and known hosts are CI secrets, never files in the repository.',
   },

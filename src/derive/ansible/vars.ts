@@ -1,4 +1,6 @@
+import { BMC_SUPERUSER, catalog } from '../../model/catalog'
 import { devicesOf, type Device, type PartitionDevices } from '../devices'
+import { derivePorts } from '../ports'
 import { formatCidr, formatIp, type Cidr } from '../ip/cidr'
 import type { PartitionAddresses } from '../ip/deviceAddresses'
 import type { AnsibleContext } from './index'
@@ -11,8 +13,19 @@ import { kv, note, toYaml, ymap, type YEntry, type YValue } from './yaml'
 // Variable names are checked against model/ansibleRoles.ts by the tests.
 
 const PXE_VLAN = 4000
+
+/** How derive/ports.ts laid the BGP ports out, per role. */
+const PORT_COMMENT: Partial<Record<Device['role'], string>> = {
+  leaf: 'Spine uplinks on the last ports.',
+  exit: 'Spine uplinks on the last ports.',
+  'storage-leaf': 'Spine uplinks on the last ports.',
+  spine: 'Leaves, storage leaves and exits from the first port; superspines on the last.',
+  superspine: 'Spines from the first port.',
+  'mgmt-leaf': 'Mgmt spine uplinks on the last ports.',
+  'mgmt-spine': 'Mgmt servers on the first copper ports, mgmt leaves on the first fiber ports.',
+}
 const PORTS_NOTE =
-  'Port layout (sonic_config_breakouts, sonic_config_ports) depends on the\nswitch model and the cabling, which the planner does not model yet.'
+  'BGP ports are set per switch in host_vars. Breakouts and port settings\n(sonic_config_breakouts, sonic_config_ports) are left to the cabling.'
 
 function netmask(prefix: number): string {
   const all = (1n << 32n) - 1n
@@ -89,14 +102,17 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
       [
         kv('metal_partition_timezone', dep.timezone),
         kv(
-          'metal_partition_metal_api_addr',
-          dep.metalApiAddress.trim() ||
+          'metal_control_plane_ingress_dns',
+          dep.controlPlaneDomain.trim() ||
             out.todo(
               f,
-              'metal_partition_metal_api_addr',
-              'address of the control plane metal-api (Ansible tab)',
+              'metal_control_plane_ingress_dns',
+              'domain of the metal-stack control plane (Ansible tab)',
             ),
+          'metal-api and NSQ as the control plane serves them by default.',
         ),
+        kv('metal_partition_metal_api_addr', 'api.{{ metal_control_plane_ingress_dns }}'),
+        kv('metal_bmc_nsqd_addr', '{{ metal_control_plane_ingress_dns }}:4150'),
       ],
       'Connection to the metal-stack control plane (partition/roles/defaults).',
     )
@@ -113,7 +129,6 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
         secret('metal_partition_metal_api_grpc_ca_cert', 'metal-api gRPC CA certificate'),
         secret('metal_partition_metal_api_grpc_client_cert', 'metal-api gRPC client certificate'),
         secret('metal_partition_metal_api_grpc_client_key', 'metal-api gRPC client key'),
-        secret('metal_bmc_bmc_superuser', 'BMC superuser name'),
         secret('metal_bmc_bmc_superuser_pwd', 'BMC superuser password'),
         secret('metal_bmc_nsqd_ca_cert', 'NSQ CA certificate'),
         secret('metal_bmc_nsqd_client_cert', 'NSQ client certificate'),
@@ -126,6 +141,48 @@ export function groupVarFiles({ plan, devices, addresses, out }: AnsibleContext)
       ],
       'Secrets: fill in and encrypt this file with ansible-vault before committing it.',
     )
+  }
+  {
+    // The superuser metal-hammer creates depends on the servers' vendor.
+    const f = `${inv}/group_vars/partition/metal.yaml`
+    const vendors = [
+      ...new Set(
+        plan.partitions.flatMap((p) =>
+          p.racks.flatMap((r) => r.servers.map((g) => catalog[g.modelId]?.vendor ?? '')),
+        ),
+      ),
+    ]
+    const users = [...new Set(vendors.map((v) => BMC_SUPERUSER[v]))]
+    file('partition', 'bmc', [
+      kv(
+        'metal_bmc_bmc_superuser',
+        users.length === 1 && users[0]
+          ? users[0]
+          : out.todo(
+              f.replace('metal.yaml', 'bmc.yaml'),
+              'metal_bmc_bmc_superuser',
+              `BMC superuser (servers from ${vendors.join(', ') || 'no vendor'})`,
+            ),
+        `The superuser metal-hammer creates on ${vendors.join(', ')} BMCs.`,
+      ),
+    ])
+  }
+
+  // Hardware of the mgmt servers: asked once for all partitions, a
+  // partition group can override it.
+  if (devices.some((p) => devicesOf(p, 'mgmt-server').length > 0)) {
+    const f = `${inv}/group_vars/mgmtservers/mgmt-server.yaml`
+    file('mgmtservers', 'mgmt-server', [
+      kv(
+        'mgmt_server_spine_facing_interface',
+        out.todo(
+          f,
+          'mgmt_server_spine_facing_interface',
+          'NIC of the mgmt servers towards the mgmt spines (e.g. eno1)',
+        ),
+        'Network interface cabled to the mgmt spines; depends on the server and cabling.',
+      ),
+    ])
   }
 
   devices.forEach((p, i) =>
@@ -171,11 +228,6 @@ function partitionGroupVars(
     )
   }
 
-  const bgpPorts = (group: string, what: string): YEntry => {
-    const f = `${inv}/group_vars/${group}/sonic.yaml`
-    return kv('sonic_config_bgp_ports', [out.todo(f, 'sonic_config_bgp_ports', what)])
-  }
-
   if (has('leaf')) {
     const g = partitionGroup(p, 'leaf')
     file(g, 'sonic', [
@@ -192,7 +244,6 @@ function partitionGroupVars(
       ),
       kv('sonic_config_docker_routing_config_mode', 'split'),
       kv('sonic_config_frr_l2vpn_evpn', true),
-      bgpPorts(g, 'spine-facing ports of the leaves'),
       note(PORTS_NOTE),
     ])
     for (const rack of p.racks) {
@@ -205,13 +256,6 @@ function partitionGroupVars(
         'rack',
         [
           kv('metal_core_rack_id', `${p.slug}-rack${String(rack.number).padStart(2, '0')}`),
-          kv('metal_core_spine_uplinks', [
-            out.todo(
-              f,
-              'metal_core_spine_uplinks',
-              `spine-facing ports of the leaves in ${rack.name}`,
-            ),
-          ]),
           l3 &&
             kv(
               'metal_partition_mgmt_gateway',
@@ -227,16 +271,7 @@ function partitionGroupVars(
   for (const role of ['spine', 'superspine', 'storage-leaf'] as const) {
     if (!has(role)) continue
     const g = partitionGroup(p, role)
-    file(g, 'sonic', [
-      kv('sonic_config_frr_l2vpn_evpn', true),
-      bgpPorts(
-        g,
-        role === 'spine'
-          ? 'leaf- and exit-facing ports of the spines'
-          : `spine-facing ports of the ${role}s`,
-      ),
-      note(PORTS_NOTE),
-    ])
+    file(g, 'sonic', [kv('sonic_config_frr_l2vpn_evpn', true), note(PORTS_NOTE)])
   }
   if (has('exit')) {
     const g = partitionGroup(p, 'exit')
@@ -247,7 +282,6 @@ function partitionGroupVars(
         ymap(kv('enabled', true)),
         'Exits terminate the external networks as VTEPs.',
       ),
-      bgpPorts(g, 'spine-facing ports of the exits'),
       note(
         "Upstream peerings to the internet routers (sonic_config_interconnects) are\nindividual; the transfer networks are listed in each exit's host_vars.",
       ),
@@ -261,11 +295,7 @@ function partitionGroupVars(
       g,
       'sonic',
       l3
-        ? [
-            kv('sonic_config_frr_l2vpn_evpn', false),
-            bgpPorts(g, `uplink ports of the ${role}s`),
-            note(PORTS_NOTE),
-          ]
+        ? [kv('sonic_config_frr_l2vpn_evpn', false), note(PORTS_NOTE)]
         : [
             kv('sonic_config_frr_render', false, 'L2 management network: switching only, no BGP.'),
             note(PORTS_NOTE),
@@ -275,23 +305,11 @@ function partitionGroupVars(
 
   if (has('mgmt-server')) {
     const g = partitionGroup(p, 'mgmt-server')
-    const f = (topic: string) => `${inv}/group_vars/${g}/${topic}.yaml`
     file(g, 'mgmt-server', [
       kv(
-        'mgmt_server_spine_facing_interface',
-        out.todo(
-          f('mgmt-server'),
-          'mgmt_server_spine_facing_interface',
-          'NIC of the mgmt server towards the mgmt spines',
-        ),
-      ),
-      kv(
-        'mgmt_server_firewall_facing_interface',
-        out.todo(
-          f('mgmt-server'),
-          'mgmt_server_firewall_facing_interface',
-          'NIC of the mgmt server towards the mgmt firewall',
-        ),
+        'mgmt_server_routerid',
+        '{{ mgmt_server_router_id }}',
+        'The role checks mgmt_server_router_id, its frr.conf reads mgmt_server_routerid.',
       ),
       dep.nameservers.length > 0 && kv('mgmt_server_nameservers', dep.nameservers),
     ])
@@ -320,19 +338,12 @@ function partitionGroupVars(
     )
     file(g, 'metal-bmc', [
       kv('metal_bmc_allowed_cidrs', cidrs(addr.mgmtSubnets.map((s) => s.cidr))),
-      kv(
-        'metal_bmc_nsqd_addr',
-        out.todo(
-          f('metal-bmc'),
-          'metal_bmc_nsqd_addr',
-          'NSQ daemon of the control plane (host:port)',
-        ),
-      ),
     ])
     file(g, 'pixiecore', [
       kv(
         'pixiecore_api_host',
-        out.todo(f('pixiecore'), 'pixiecore_api_host', 'address pixiecore serves the PXE API on'),
+        'http://{{ mgmt_server_router_id }}',
+        'Booting machines fetch from pixiecore on the mgmt server itself.',
       ),
       dep.nameservers.length > 0 && kv('pixiecore_dns_servers', dep.nameservers),
       dep.ntpServers.length > 0 && kv('pixiecore_metal_hammer_ntp_servers', dep.ntpServers),
@@ -344,6 +355,7 @@ function partitionGroupVars(
 }
 
 export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext): void {
+  const ports = derivePorts(plan, devices)
   devices.forEach((p, i) => {
     const addr = addresses[i]
     const l3 = plan.partitions[i].fabric.mgmt.layer === 'l3'
@@ -398,6 +410,26 @@ export function hostVarFiles({ plan, devices, addresses, out }: AnsibleContext):
                   out.todo(f, 'sonic_config_loopback_address', 'loopback (the pool is not placed)'),
               ),
             )
+            const sp = ports.get(d.hostname)
+            entries.push(
+              kv(
+                'sonic_config_bgp_ports',
+                sp?.bgp ?? [
+                  out.todo(f, 'sonic_config_bgp_ports', `BGP ports (${sp?.reason ?? 'unknown'})`),
+                ],
+                PORT_COMMENT[d.role],
+              ),
+            )
+            if (d.role === 'leaf') {
+              entries.push(
+                kv(
+                  'metal_core_spine_uplinks',
+                  sp?.uplinks ?? [
+                    out.todo(f, 'metal_core_spine_uplinks', `spine uplinks (${sp?.reason})`),
+                  ],
+                ),
+              )
+            }
           }
           entries.push(
             a.mgmt

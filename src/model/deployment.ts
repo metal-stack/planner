@@ -8,8 +8,8 @@ import { z } from 'zod'
 // requirements.yaml, the CI image to the one metal-stack deployment
 // repositories use, name and NTP servers to the public ones mini-lab and
 // metal-roles use (checked 2026-09-18). Only the release vector version
-// and the metal-api address are left for the operator; the export marks
-// them as placeholders.
+// and the control plane's domain are left for the operator; the export
+// marks them as placeholders.
 
 /** Public resolvers, as in mini-lab. */
 export const PUBLIC_NAMESERVERS = ['1.1.1.1', '8.8.8.8']
@@ -55,8 +55,9 @@ export const DeploymentSchema = z.object({
   sshSourceRanges: z.array(z.string()).default([]),
   /** metal-stack release (tag of github.com/metal-stack/releases). */
   metalStackRelease: z.string().default(''),
-  /** Address of the control plane's metal-api (metal_partition_metal_api_addr). */
-  metalApiAddress: z.string().default(''),
+  /** DNS name of the control plane's ingress (metal_control_plane_ingress_dns):
+   *  metal-api is served at api.<it>, NSQ at <it>:4150 (metal-roles defaults). */
+  controlPlaneDomain: z.string().default(''),
   ansibleCommonVersion: z.string().default('v0.7.4'),
   metalRolesVersion: z.string().default('v0.17.26'),
   ci: CiSchema.default(() => CiSchema.parse({})),

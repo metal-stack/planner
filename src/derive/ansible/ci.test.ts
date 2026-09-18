@@ -93,13 +93,16 @@ describe('CI/CD pipelines', () => {
     expect(gh.jobs['partition-1'].steps[3].run).toContain("inputs.dry_run && '--check --diff'")
   })
 
-  it('fills the metal-api address from the settings', () => {
+  it('reaches metal-api and NSQ under the control plane domain', () => {
     const p = plan()
-    expect(deriveAnsible(p).placeholders.some((x) => x.key.endsWith('api_addr'))).toBe(true)
-    p.deployment.metalApiAddress = 'api.example.com'
-    expect(deriveAnsible(p).placeholders.some((x) => x.key.endsWith('api_addr'))).toBe(false)
-    expect(
-      file(p, 'inventories/prod/group_vars/partition/metal.yaml').metal_partition_metal_api_addr,
-    ).toBe('api.example.com')
+    const open = () => deriveAnsible(p).placeholders.map((x) => x.key)
+    expect(open()).toContain('metal_control_plane_ingress_dns')
+    p.deployment.controlPlaneDomain = 'metal.example.com'
+    expect(open()).not.toContain('metal_control_plane_ingress_dns')
+    expect(file(p, 'inventories/prod/group_vars/partition/metal.yaml')).toMatchObject({
+      metal_control_plane_ingress_dns: 'metal.example.com',
+      metal_partition_metal_api_addr: 'api.{{ metal_control_plane_ingress_dns }}',
+      metal_bmc_nsqd_addr: '{{ metal_control_plane_ingress_dns }}:4150',
+    })
   })
 })

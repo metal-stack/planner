@@ -47,7 +47,9 @@ describe('Ansible export', () => {
       const { placeholders, notes } = deriveAnsible(plan)
       expect(notes).toEqual([])
       const derivable = placeholders.filter((p) =>
-        /ansible_host|loopback|metal_core_cidr|router_id|mgmt_gateway/.test(p.key),
+        /ansible_host|loopback|metal_core_cidr|router_id|mgmt_gateway|bgp_ports|spine_uplinks|nsqd_addr|pixiecore|bmc_superuser$/.test(
+          p.key,
+        ),
       )
       expect(derivable).toEqual([])
     }
@@ -75,7 +77,7 @@ describe('Ansible export', () => {
     const settings = placeholders.filter((p) => p.reason.endsWith('(Ansible tab)'))
     expect(settings.map((p) => p.key)).toEqual([
       'metal_stack_release_version',
-      'metal_partition_metal_api_addr',
+      'metal_control_plane_ingress_dns',
     ])
   })
 
