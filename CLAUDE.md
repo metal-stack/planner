@@ -13,7 +13,8 @@ A client-only single-page app (React + Vite + TypeScript) to plan a [metal-stack
 - `npm run test` — `vitest run`; single test file: `npx vitest run src/derive/bom.test.ts`
 - `npm run test:watch` — vitest watch mode
 - `npm run preview` — serve the production build
-- `npm run lint` — ESLint (flat config in `eslint.config.js`); `npm run format` / `npm run format:check` — Prettier (`.prettierrc`: single quotes, no semicolons, 100 columns). CI (`.github/workflows/ci.yml`) runs lint, format check, build and tests.
+- `npm run lint` — ESLint (flat config in `eslint.config.js`); `npm run format` / `npm run format:check` — Prettier (`.prettierrc`: single quotes, no semicolons, 100 columns). CI (`.github/workflows/ci.yml`) runs lint, format check, the notices check, build and tests.
+- `npm run notices` — regenerate `THIRD-PARTY-NOTICES.md` from the production dependencies; run it after adding, removing or upgrading any runtime dependency (`npm run notices:check` is the CI step).
 - TypeScript: `typescript` is aliased to `@typescript/typescript6` (the TS 6 API that typescript-eslint needs) and `@typescript/native` to TypeScript 7, which provides the `tsc` binary used by `npm run build`. Keep both aliases until typescript-eslint supports TS 7.
 
 ## Architecture
