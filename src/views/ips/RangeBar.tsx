@@ -1,4 +1,5 @@
 import { formatCidr, formatIp, lastAddr, size, type Cidr } from '../../derive/ip/cidr'
+import { COLOR } from '../colors'
 
 export interface BarSegment {
   cidr: Cidr
@@ -32,7 +33,7 @@ export default function RangeBar({
         role="img"
         aria-label={caption}
       >
-        <rect x={0} y={0} width={1000} height={28} fill="#f3f4f6" />
+        <rect x={0} y={0} width={1000} height={28} fill={COLOR.gray100} />
         {segments.map((s, i) => {
           const start = s.cidr.addr > domain.addr ? s.cidr.addr : domain.addr
           const stop = lastAddr(s.cidr) < end ? lastAddr(s.cidr) + 1n : end + 1n
@@ -40,13 +41,13 @@ export default function RangeBar({
           const x = pos(start)
           const w = Math.max(2, pos(stop) - x)
           return (
-            <rect key={i} x={x} y={0} width={w} height={28} fill={s.color} stroke="#fff">
+            <rect key={i} x={x} y={0} width={w} height={28} fill={s.color} stroke={COLOR.white}>
               <title>{`${s.label}: ${formatCidr(s.cidr)}`}</title>
             </rect>
           )
         })}
       </svg>
-      <div className="flex justify-between font-mono text-[10px] text-gray-400">
+      <div className="flex justify-between font-mono text-xs text-gray-500">
         <span>{formatIp(domain.family, domain.addr)}</span>
         <span>{formatIp(domain.family, end)}</span>
       </div>

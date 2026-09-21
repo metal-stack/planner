@@ -1,19 +1,24 @@
 @import 'tailwindcss';
 
-/* Look and feel follows metal-stack.io: Inter on near-black text, a light
+/* Look and feel follows metal-stack.io: Inter (bundled via
+   @fontsource-variable/inter, see main.tsx) on near-black text, a light
    gray page with white cards, and the brand amber (the logo's #f59e0b) as
    the single accent — used for the primary action, the active tab, focus
    rings, and everything "management" in the diagrams. */
 @theme {
   --font-sans:
-    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans', sans-serif;
+    'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
   --color-ink: #1c1e21;
   --color-page: #f5f6f7;
   --color-brand: #f59e0b;
   --color-brand-strong: #d97706;
   --color-brand-soft: #fcd094;
   --color-brand-tint: #fff8e6;
+  /* Network colors shared by the diagrams, legends and address bars:
+     production traffic is blue, management takes the brand amber. */
+  --color-production: #0369a1;
+  --color-mgmt: #d97706;
 }
 
 @layer base {

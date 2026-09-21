@@ -2,15 +2,16 @@ import { commonSupernet, contains, formatCidr, size, type Cidr } from '../../der
 import type { FamilyResult, IpPlanResult } from '../../derive/ip/ipPlan'
 import RangeBar, { type BarSegment } from './RangeBar'
 import { Icon, SECTION_ICON } from '../icons'
+import { COLOR as PALETTE } from '../colors'
 
 const COLOR = {
-  partition: '#f59e0b',
-  blocked: '#fca5a5',
-  shootPod: '#0369a1',
-  shootService: '#38bdf8',
-  seedPod: '#7c3aed',
-  seedService: '#c4b5fd',
-  reserve: '#9ca3af',
+  partition: PALETTE.brand,
+  blocked: PALETTE.dangerSoft,
+  shootPod: PALETTE.production,
+  shootService: PALETTE.service,
+  seedPod: PALETTE.seed,
+  seedService: PALETTE.seedSoft,
+  reserve: PALETTE.gray400,
 }
 
 function projectMap(f: FamilyResult): { domain: Cidr; segments: BarSegment[] } | null {

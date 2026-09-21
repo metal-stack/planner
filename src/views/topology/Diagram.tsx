@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { EXTERNAL_NETWORK_ICON, NODE_ICON } from '../icons'
+import { COLOR } from '../colors'
 import type {
   TopoLink,
   TopoNode,
@@ -45,9 +46,9 @@ const EXT_W = 132
 const EXT_H = 34
 
 const LINK_COLOR: Record<TopoLink['network'], string> = {
-  production: '#0369a1',
-  management: '#d97706',
-  external: '#6b7280',
+  production: COLOR.production,
+  management: COLOR.mgmt,
+  external: COLOR.gray500,
 }
 
 const LINK_WIDTH: Record<NonNullable<TopoLink['speed']> | 'none', number> = {
@@ -373,7 +374,7 @@ function NodeBox({ node, r }: { node: TopoNode; r: Rect }) {
       : NODE_ICON[node.kind]
   const glyphX = r.x + (isExternal ? 12 : 8)
   const textX = glyphX + GLYPH + (r.x + r.w - glyphX - GLYPH) / 2
-  const glyphColor = isMgmt ? '#d97706' : isExternal ? '#9ca3af' : '#6b7280'
+  const glyphColor = isMgmt ? COLOR.mgmt : isExternal ? COLOR.gray400 : COLOR.gray500
 
   return (
     <g>
@@ -383,8 +384,10 @@ function NodeBox({ node, r }: { node: TopoNode; r: Rect }) {
         width={r.w}
         height={r.h}
         rx={isExternal ? r.h / 2 : 5}
-        fill={isServer ? '#f5f6f7' : '#ffffff'}
-        stroke={isServer ? 'none' : isExternal ? '#9ca3af' : isMgmt ? '#f59e0b' : '#6b7280'}
+        fill={isServer ? COLOR.page : COLOR.white}
+        stroke={
+          isServer ? 'none' : isExternal ? COLOR.gray400 : isMgmt ? COLOR.brand : COLOR.gray500
+        }
         strokeWidth={1.1}
         strokeDasharray={isExternal ? '4 3' : undefined}
       />
@@ -396,11 +399,18 @@ function NodeBox({ node, r }: { node: TopoNode; r: Rect }) {
         color={glyphColor}
         aria-hidden="true"
       />
-      <text x={textX} y={labelY} textAnchor="middle" fontSize={11} fontWeight={600} fill="#1c1e21">
+      <text
+        x={textX}
+        y={labelY}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight={600}
+        fill={COLOR.ink}
+      >
         {node.label}
       </text>
       {node.sublabel && (
-        <text x={textX} y={subY} textAnchor="middle" fontSize={8.5} fill="#6b7280">
+        <text x={textX} y={subY} textAnchor="middle" fontSize={9} fill={COLOR.gray500}>
           {node.sublabel}
         </text>
       )}
@@ -479,8 +489,8 @@ export default function Diagram({
               width={box.rect.w}
               height={box.rect.h}
               rx={8}
-              fill={box.entity ? '#f3f4f6' : '#f9fafb'}
-              stroke={box.entity ? '#d1d5db' : '#e5e7eb'}
+              fill={box.entity ? COLOR.gray100 : COLOR.gray50}
+              stroke={box.entity ? COLOR.gray300 : COLOR.gray200}
               strokeDasharray={box.entity ? '5 4' : undefined}
             />
             <text
@@ -488,7 +498,7 @@ export default function Diagram({
               y={box.rect.y + 13}
               fontSize={9.5}
               fontWeight={600}
-              fill="#6b7280"
+              fill={COLOR.gray500}
             >
               {box.name}
             </text>
@@ -496,7 +506,7 @@ export default function Diagram({
         ))}
         {showPartitionLabels &&
           layout.partitionLabels.map((p, i) => (
-            <text key={i} x={p.x} y={p.y} fontSize={12} fontWeight={700} fill="#374151">
+            <text key={i} x={p.x} y={p.y} fontSize={12} fontWeight={700} fill={COLOR.gray700}>
               {p.name}
             </text>
           ))}

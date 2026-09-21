@@ -103,7 +103,7 @@ export default function CentralRackSection({
           </span>
         </span>
       </div>
-      <p className="-mt-2 mb-3 text-xs text-gray-500">{modelSummary(fabric)}</p>
+      <p className="-mt-2 mb-3 text-sm text-gray-600">{modelSummary(fabric)}</p>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SelectField
           label="Fabric type"
