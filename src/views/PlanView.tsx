@@ -150,7 +150,7 @@ export default function PlanView() {
                   className="w-56 rounded-md border border-gray-300 bg-white px-2 py-1.5"
                 />
               </label>
-              <span className="pb-2 text-xs text-gray-500">
+              <span className="pb-2 text-sm text-gray-600">
                 {physicalRackCount(partition)} racks incl. central
               </span>
               <button
