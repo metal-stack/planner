@@ -6,22 +6,61 @@ import {
 } from '../derive/rackLayout'
 import { usePlanStore } from '../store/planStore'
 import { Icon, SECTION_ICON, SLOT_ICON } from './icons'
+import { COLOR } from './colors'
 import { navigateTo } from './plan/navigate'
 
 // Rack elevations with a height-unit scale. U numbers count from the
 // bottom (U1) to the top, the way physical racks are labeled; devices fill
 // from the top.
 
-const U_PX = 12
-const RAIL_W = 26
-const SLOT_W = 168
-const HEAD_H = 40
+const U_PX = 18
+const RAIL_W = 30
+const SLOT_W = 220
+const HEAD_H = 56
+/** Height of the U and power meters in the rack header. */
+const METER_H = 5
 
 const SLOT_STYLE: Record<SlotKind, { fill: string; stroke: string; text: string }> = {
-  network: { fill: '#ffffff', stroke: '#6b7280', text: '#1c1e21' },
-  mgmt: { fill: '#fffbeb', stroke: '#f59e0b', text: '#1c1e21' },
-  server: { fill: '#f5f6f7', stroke: '#d1d5db', text: '#1c1e21' },
-  storage: { fill: '#e0f2fe', stroke: '#7dd3fc', text: '#0c4a6e' },
+  network: { fill: COLOR.white, stroke: COLOR.gray500, text: COLOR.ink },
+  mgmt: { fill: COLOR.brandTint, stroke: COLOR.brand, text: COLOR.ink },
+  server: { fill: COLOR.page, stroke: COLOR.gray300, text: COLOR.ink },
+  storage: { fill: COLOR.storageTint, stroke: COLOR.storageLine, text: COLOR.storageText },
+}
+
+/** A labeled usage bar in the rack header; red once the budget is exceeded. */
+function Meter(props: {
+  x: number
+  y: number
+  w: number
+  used: number
+  max: number
+  label: string
+}) {
+  const over = props.used > props.max
+  const share = props.max > 0 ? Math.min(1, props.used / props.max) : 1
+  return (
+    <g>
+      <text x={props.x} y={props.y} fontSize={10.5} fill={over ? COLOR.dangerText : COLOR.gray500}>
+        {props.label}
+      </text>
+      <rect
+        x={props.x}
+        y={props.y + 5}
+        width={props.w}
+        height={METER_H}
+        rx={METER_H / 2}
+        fill={COLOR.gray200}
+      />
+      <rect
+        x={props.x}
+        y={props.y + 5}
+        width={props.w * share}
+        height={METER_H}
+        rx={METER_H / 2}
+        fill={over ? COLOR.danger : COLOR.gray500}
+      />
+    </g>
+  )
 }
 
 function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) {
@@ -30,6 +69,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
   const width = RAIL_W + SLOT_W + 8
   const height = HEAD_H + bodyH + 10
   const yOfTopU = (topU: number) => HEAD_H + (rack.heightUnits - topU) * U_PX
+  const meterW = SLOT_W / 2 - 8
 
   return (
     <svg
@@ -41,19 +81,25 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
       style={onClick ? { cursor: 'pointer' } : undefined}
     >
       {onClick && <title>Edit {rack.name} in the plan</title>}
-      <text x={RAIL_W} y={14} fontSize={11.5} fontWeight={700} fill="#1c1e21">
+      <text x={RAIL_W} y={16} fontSize={14} fontWeight={700} fill={COLOR.ink}>
         {rack.name}
       </text>
-      <text
+      <Meter
         x={RAIL_W}
-        y={28}
-        fontSize={9}
-        fill={overflowU > 0 || rack.powerWatts > rack.maxPowerWatts ? '#b91c1c' : '#6b7280'}
-      >
-        {rack.usedU}U of {rack.heightUnits}U used
-        {overflowU > 0 ? `, ${overflowU}U over` : ''} · ~{formatPower(rack.powerWatts)} of{' '}
-        {formatPower(rack.maxPowerWatts)}
-      </text>
+        y={34}
+        w={meterW}
+        used={rack.usedU}
+        max={rack.heightUnits}
+        label={`${rack.usedU} of ${rack.heightUnits} U${overflowU > 0 ? `, ${overflowU} over` : ''}`}
+      />
+      <Meter
+        x={RAIL_W + SLOT_W / 2 + 8}
+        y={34}
+        w={meterW}
+        used={rack.powerWatts}
+        max={rack.maxPowerWatts}
+        label={`~${formatPower(rack.powerWatts)} of ${formatPower(rack.maxPowerWatts)}`}
+      />
 
       {/* U scale: a tick per unit, a number every 5 plus the top unit. */}
       {Array.from({ length: rack.heightUnits }, (_, i) => {
@@ -62,9 +108,15 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
         const numbered = u % 5 === 0 || u === rack.heightUnits || u === 1
         return (
           <g key={u}>
-            <line x1={RAIL_W - 4} y1={y} x2={RAIL_W} y2={y} stroke="#d1d5db" />
+            <line x1={RAIL_W - 4} y1={y} x2={RAIL_W} y2={y} stroke={COLOR.gray300} />
             {numbered && (
-              <text x={RAIL_W - 7} y={y + U_PX - 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">
+              <text
+                x={RAIL_W - 7}
+                y={y + U_PX / 2 + 3.5}
+                textAnchor="end"
+                fontSize={9.5}
+                fill={COLOR.gray400}
+              >
                 {u}
               </text>
             )}
@@ -78,8 +130,8 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
         y={HEAD_H}
         width={SLOT_W}
         height={rack.heightUnits * U_PX}
-        fill="#fcfcfd"
-        stroke="#9ca3af"
+        fill={COLOR.gray50}
+        stroke={COLOR.gray400}
       />
       {Array.from({ length: rack.heightUnits - 1 }, (_, i) => (
         <line
@@ -88,7 +140,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
           y1={HEAD_H + (i + 1) * U_PX}
           x2={RAIL_W + SLOT_W}
           y2={HEAD_H + (i + 1) * U_PX}
-          stroke="#f3f4f6"
+          stroke={COLOR.gray100}
         />
       ))}
 
@@ -108,28 +160,28 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
               width={SLOT_W - 2}
               height={h - 2}
               rx={2}
-              fill={overflowing ? '#fee2e2' : style.fill}
-              stroke={overflowing ? '#dc2626' : style.stroke}
+              fill={overflowing ? COLOR.dangerTint : style.fill}
+              stroke={overflowing ? COLOR.danger : style.stroke}
               strokeWidth={1}
             />
             <title>{`${slot.label}: ${slot.sublabel ?? ''} (${uRange}, ${slot.units}U)`}</title>
             {slot.units === 1 ? (
               <>
                 <text
-                  x={RAIL_W + 6}
-                  y={centerY + 2.5}
-                  fontSize={7.5}
+                  x={RAIL_W + 8}
+                  y={centerY + 3.5}
+                  fontSize={10.5}
                   fontWeight={600}
                   fill={style.text}
                 >
                   {slot.label}
                 </text>
                 <text
-                  x={RAIL_W + SLOT_W - 6}
-                  y={centerY + 2.5}
+                  x={RAIL_W + SLOT_W - 8}
+                  y={centerY + 3.5}
                   textAnchor="end"
-                  fontSize={7}
-                  fill="#6b7280"
+                  fontSize={10}
+                  fill={COLOR.gray500}
                 >
                   {slot.sublabel}
                 </text>
@@ -140,11 +192,11 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                   const Glyph = SLOT_ICON[slot.kind]
                   return (
                     <Glyph
-                      x={RAIL_W + 7}
-                      y={centerY - 6}
-                      width={12}
-                      height={12}
-                      color="#6b7280"
+                      x={RAIL_W + 9}
+                      y={centerY - 7}
+                      width={14}
+                      height={14}
+                      color={COLOR.gray500}
                       aria-hidden="true"
                     />
                   )
@@ -153,7 +205,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                   x={RAIL_W + SLOT_W / 2}
                   y={centerY - 2}
                   textAnchor="middle"
-                  fontSize={8.5}
+                  fontSize={12}
                   fontWeight={600}
                   fill={style.text}
                 >
@@ -161,10 +213,10 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                 </text>
                 <text
                   x={RAIL_W + SLOT_W / 2}
-                  y={centerY + 8}
+                  y={centerY + 12}
                   textAnchor="middle"
-                  fontSize={7.5}
-                  fill="#6b7280"
+                  fontSize={10.5}
+                  fill={COLOR.gray500}
                 >
                   {slot.sublabel} · {uRange}
                 </text>
@@ -214,7 +266,7 @@ export default function RackLayoutView() {
                     type="button"
                     onClick={() => goTo(partition.partitionId, run.group!.id)}
                     title={`Edit ${run.group.name} in the plan`}
-                    className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:underline"
+                    className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:underline"
                   >
                     <Icon icon={SECTION_ICON.rackGroup} className="h-3.5 w-3.5 text-gray-500" />
                     {run.group.name}
@@ -242,7 +294,7 @@ export default function RackLayoutView() {
                 ))
               ),
             )}
-            <p className="w-full text-xs text-gray-500">
+            <p className="w-full text-sm text-gray-600">
               Estimated power, all racks: ~
               {formatPower(partition.racks.reduce((w, r) => w + r.powerWatts, 0))} · per-device
               figures in the catalog, partial chassis scaled by node count
@@ -257,7 +309,7 @@ export default function RackLayoutView() {
           Network
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm border border-brand bg-amber-50" />
+          <span className="h-3 w-3 rounded-sm border border-brand bg-brand-tint" />
           <Icon icon={SLOT_ICON.mgmt} className="h-3.5 w-3.5 text-gray-500" />
           Management
         </span>

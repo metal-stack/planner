@@ -189,7 +189,7 @@ export default function FamilyInputs({ ipPlan }: { ipPlan: IpPlan }) {
               </span>
               {families.map((fk) => (
                 <div key={fk} className="min-w-0">
-                  <span className="mb-0.5 block text-[11px] font-semibold text-gray-400 md:hidden">
+                  <span className="mb-0.5 block text-xs font-semibold text-gray-500 md:hidden">
                     {fk === 'ipv4' ? 'IPv4' : 'IPv6'}
                   </span>
                   <Cell

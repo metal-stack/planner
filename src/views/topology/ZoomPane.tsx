@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ACTION_ICON, Icon } from '../icons'
 
 // Pan/zoom container for the topology: wheel zooms about the cursor, drag
-// pans, "Fit" scales the content to the pane, "100 %" resets. Pure CSS
+// pans, "Fit" scales the content to the pane (enlarging small diagrams up to
+// MAX_FIT, so a single rack doesn't sit tiny in an empty canvas), "100 %"
+// resets. An optional footer (the legend) sits inside the same card. Pure CSS
 // transform on an inner element — no library, nothing persisted.
 
 const MIN_SCALE = 0.15
 const MAX_SCALE = 3
+const MAX_FIT = 1.6
 const PAD = 16
 
 interface View {
@@ -15,7 +18,13 @@ interface View {
   k: number
 }
 
-export default function ZoomPane({ children }: { children: ReactNode }) {
+export default function ZoomPane({
+  children,
+  footer,
+}: {
+  children: ReactNode
+  footer?: ReactNode
+}) {
   const outer = useRef<HTMLDivElement>(null)
   const inner = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ x: PAD, y: PAD, k: 1 })
@@ -26,8 +35,8 @@ export default function ZoomPane({ children }: { children: ReactNode }) {
   function fit(w = content.w, h = content.h) {
     const el = outer.current
     if (!el || w === 0 || h === 0) return
-    const k = Math.min((el.clientWidth - 2 * PAD) / w, (el.clientHeight - 2 * PAD) / h, 1)
-    setView({ k, x: (el.clientWidth - w * k) / 2, y: PAD })
+    const k = Math.min((el.clientWidth - 2 * PAD) / w, (el.clientHeight - 2 * PAD) / h, MAX_FIT)
+    setView({ k, x: (el.clientWidth - w * k) / 2, y: Math.max(PAD, (el.clientHeight - h * k) / 2) })
   }
 
   // Measure the content; refit whenever its size changes (plan edits).
@@ -119,6 +128,11 @@ export default function ZoomPane({ children }: { children: ReactNode }) {
           {children}
         </div>
       </div>
+      {footer && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-gray-100 px-4 py-2.5 text-xs text-gray-600">
+          {footer}
+        </div>
+      )}
     </div>
   )
 }

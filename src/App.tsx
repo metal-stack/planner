@@ -63,27 +63,27 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-40 border-t-[3px] border-b border-t-brand border-b-gray-200 bg-white px-6 py-2.5">
-        <div className="flex items-center gap-8">
+      <header className="sticky top-0 z-40 border-t-[3px] border-b border-t-brand border-b-gray-200 bg-white px-4 py-2.5 sm:px-6">
+        <div className="flex items-center gap-3 sm:gap-8">
           <a
             href="https://metal-stack.io"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2.5"
+            className="flex shrink-0 items-center gap-2.5"
             title="metal-stack.io"
           >
             <img src={logoUrl} alt="" width={28} height={28} className="h-7 w-7" />
-            <span className="text-base font-bold tracking-tight">
+            <span className="hidden text-base font-bold tracking-tight whitespace-nowrap md:inline">
               metal-stack
               <span className="ml-1.5 font-medium text-gray-500">planner</span>
             </span>
           </a>
-          <nav className="flex gap-1">
+          <nav className="-my-1 flex min-w-0 gap-1 overflow-x-auto py-1">
             {tabs.map(({ view, label }) => (
               <button
                 key={view}
                 onClick={() => setActiveView(view)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   activeView === view
                     ? 'bg-ink text-white'
                     : 'text-gray-600 hover:bg-brand-tint hover:text-ink'
@@ -94,7 +94,7 @@ export default function App() {
                 {(errorsByView[view] ?? 0) > 0 && (
                   <span
                     title={`${errorsByView[view]} error${errorsByView[view] === 1 ? '' : 's'}`}
-                    className="rounded-full bg-red-500 px-1.5 text-[10px] leading-4 font-bold text-white"
+                    className="rounded-full bg-red-500 px-1.5 text-xs leading-4 font-semibold text-white tabular-nums"
                   >
                     {errorsByView[view]}
                   </span>
@@ -102,31 +102,33 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <div className="ml-auto flex gap-1">
+          <div className="ml-auto flex shrink-0 gap-1">
             <button
               type="button"
               onClick={() => undo()}
               disabled={!canUndo}
               title={`Undo (${mod}+Z)`}
+              aria-label="Undo"
               className="btn-secondary"
             >
               <Icon icon={ACTION_ICON.undo} />
-              Undo
+              <span className="hidden lg:inline">Undo</span>
             </button>
             <button
               type="button"
               onClick={() => redo()}
               disabled={!canRedo}
               title={`Redo (${mod}+Shift+Z)`}
+              aria-label="Redo"
               className="btn-secondary"
             >
               <Icon icon={ACTION_ICON.redo} />
-              Redo
+              <span className="hidden lg:inline">Redo</span>
             </button>
           </div>
         </div>
       </header>
-      <main className="p-6">
+      <main className="p-4 sm:p-6">
         {activeView === 'plan' && <PlanView />}
         {activeView === 'topology' && <TopologyView />}
         {activeView === 'racks' && <RackLayoutView />}

@@ -81,7 +81,7 @@ export default function ResultsCard({ result }: { result: IpPlanResult }) {
             <tr className="border-y border-gray-200 bg-gray-50">
               <th
                 colSpan={families.length + 1}
-                className="px-3 py-1 text-left text-xs font-semibold text-gray-600 uppercase"
+                className="px-3 py-1 text-left text-sm font-semibold text-gray-700"
               >
                 {group.title}
               </th>

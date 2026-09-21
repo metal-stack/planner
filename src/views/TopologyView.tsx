@@ -6,6 +6,7 @@ import { EXTERNAL_NETWORK_ICON, Icon, NODE_ICON, type LucideIcon } from './icons
 import { navigateTo } from './plan/navigate'
 import ZoomPane from './topology/ZoomPane'
 import Diagram from './topology/Diagram'
+import { COLOR } from './colors'
 
 const LEGEND_DEVICES: [LucideIcon, string][] = [
   [NODE_ICON.leaf, 'Switch'],
@@ -82,28 +83,33 @@ export default function TopologyView() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-500">{modes.find((m) => m.mode === mode)?.hint}</span>
+        <span className="text-sm text-gray-600">{modes.find((m) => m.mode === mode)?.hint}</span>
       </div>
-      <ZoomPane>
+      <ZoomPane
+        footer={
+          <>
+            {mode !== 'management' && (
+              <LegendLine color={COLOR.production} width={2.2} label="Production 100G" />
+            )}
+            {mode !== 'production' && (
+              <LegendLine color={COLOR.mgmt} width={1} label="Management 1G" />
+            )}
+            {mode !== 'management' && (
+              <LegendLine color={COLOR.gray500} width={1.4} dashed label="External network" />
+            )}
+            <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+              {LEGEND_DEVICES.map(([icon, label]) => (
+                <span key={label} className="flex items-center gap-1.5">
+                  <Icon icon={icon} className="h-3.5 w-3.5 text-gray-500" />
+                  {label}
+                </span>
+              ))}
+            </span>
+          </>
+        }
+      >
         <Diagram graph={graph} onNavigate={navigateTo} />
       </ZoomPane>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-600">
-        {mode !== 'management' && (
-          <LegendLine color="#0369a1" width={2.2} label="Production 100G" />
-        )}
-        {mode !== 'production' && <LegendLine color="#d97706" width={1} label="Management 1G" />}
-        {mode !== 'management' && (
-          <LegendLine color="#6b7280" width={1.4} dashed label="External network" />
-        )}
-        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
-          {LEGEND_DEVICES.map(([icon, label]) => (
-            <span key={label} className="flex items-center gap-1.5">
-              <Icon icon={icon} className="h-3.5 w-3.5 text-gray-500" />
-              {label}
-            </span>
-          ))}
-        </span>
-      </div>
     </div>
   )
 }

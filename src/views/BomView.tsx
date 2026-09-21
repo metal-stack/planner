@@ -22,12 +22,25 @@ import { bomToXlsxBlob } from '../io/xlsx'
 import { usePlanStore } from '../store/planStore'
 import { usePriceStore } from '../store/priceStore'
 import { useToastStore } from '../store/toastStore'
-import { NumberField, SelectField } from './plan/fields'
+import { SelectField } from './plan/fields'
 import { ACTION_ICON, CATEGORY_ICON, Icon } from './icons'
 
 /** Network scopes, mirroring the topology view's modes. A line can have
  *  contributions from both networks, so the quantities are filtered per
  *  contributing rule in deriveBom — the two scopes add up to "All". */
+/** Plural, sentence-case names for the category rows of the table. */
+const CATEGORY_LABEL = {
+  switch: 'Switches',
+  server: 'Servers',
+  router: 'Routers',
+  nic: 'NICs',
+  gpu: 'GPUs',
+  transceiver: 'Transceivers',
+  cable: 'Cables',
+  license: 'Licenses',
+  spare: 'Spares',
+} satisfies Record<keyof typeof CATEGORY_ICON, string>
+
 const scopes: { scope: BomScope; label: string; hint: string }[] = [
   { scope: 'all', label: 'All', hint: 'Everything the plan needs' },
   {
@@ -142,7 +155,7 @@ export default function BomView() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-500">
+        <span className="text-sm text-gray-600">
           {scopes.find((option) => option.scope === network)?.hint}
         </span>
       </div>
@@ -161,13 +174,19 @@ export default function BomView() {
           </div>
         )}
         {!scoped && (
-          <div className="w-44">
-            <NumberField
-              label="Spares per transceiver/cable line"
+          <label className="flex items-center gap-2 pb-1 text-sm">
+            Spares per transceiver and cable line
+            <input
+              type="number"
+              min={0}
               value={plan.sparesPerLine}
-              onChange={setSparesPerLine}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isInteger(n) && n >= 0) setSparesPerLine(n)
+              }}
+              className="w-16 rounded-md border border-gray-300 bg-white px-2 py-1.5 tabular-nums"
             />
-          </div>
+          </label>
         )}
         <label className="flex items-center gap-2 pb-2 text-sm">
           <input
@@ -271,7 +290,7 @@ export default function BomView() {
               <tr className="border-y border-gray-200 bg-gray-50">
                 <th
                   colSpan={colSpan}
-                  className="px-3 py-1.5 text-left text-xs font-semibold text-gray-600 uppercase"
+                  className="px-3 py-1.5 text-left text-sm font-semibold text-gray-700"
                 >
                   <Icon
                     icon={
@@ -280,8 +299,8 @@ export default function BomView() {
                     }
                     className="mr-1.5 inline h-3.5 w-3.5 align-[-2px] text-gray-500"
                   />
-                  {group.category}
-                  <span className="ml-2 font-normal text-gray-500 normal-case">
+                  {CATEGORY_LABEL[group.category as keyof typeof CATEGORY_LABEL] ?? group.category}
+                  <span className="ml-2 text-xs font-normal text-gray-500">
                     {group.lines.length} {group.lines.length === 1 ? 'line' : 'lines'}
                   </span>
                 </th>

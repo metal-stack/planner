@@ -28,8 +28,8 @@ export default function IntroCard() {
           topology, rack elevations and IP address plan, and get an orderable hardware bill of
           materials. Nothing leaves your browser; plans are saved locally and export as JSON.
         </p>
-        <p className="flex items-baseline gap-2 text-xs text-gray-500">
-          <span className="rounded bg-brand-tint px-1.5 py-0.5 font-semibold text-brand-strong">
+        <p className="flex items-baseline gap-2 text-sm text-gray-600">
+          <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-semibold text-brand-strong">
             Alpha
           </span>
           <span>

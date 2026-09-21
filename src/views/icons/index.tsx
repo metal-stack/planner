@@ -36,19 +36,15 @@ import {
   RefreshCw,
   RotateCcw,
   Router,
-  Ruler,
   Scan,
   Server,
   ServerCog,
   SlidersHorizontal,
   Trash,
   TriangleAlert,
-  Gauge,
   Undo2,
   Upload,
-  Wallet,
   X,
-  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import type { SlotKind } from '../../derive/rackLayout'
@@ -166,18 +162,6 @@ export const SLOT_ICON: Record<SlotKind, LucideIcon> = {
   server: Server,
   storage: HardDrive,
 }
-
-export const STAT_ICON = {
-  nodes: Server,
-  partitions: Layers,
-  racks: Rack,
-  rackUnits: Ruler,
-  switches: NetworkSwitch,
-  chassis: Boxes,
-  power: Zap,
-  bandwidth: Gauge,
-  cost: Wallet,
-} satisfies Record<string, LucideIcon>
 
 /** A decorative icon at text size (16 px by default). */
 export function Icon({

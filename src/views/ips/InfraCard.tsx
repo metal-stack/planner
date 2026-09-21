@@ -9,6 +9,7 @@ import { IP_INFO } from './infos'
 import { CidrInput, PrefixInput } from './inputs'
 import RangeBar from './RangeBar'
 import { Icon, SECTION_ICON } from '../icons'
+import { COLOR } from '../colors'
 
 /** Infrastructure ranges (IPv4) per partition, sized from the plan's
  *  switches, servers and racks. */
@@ -82,10 +83,10 @@ export default function InfraCard({ infra, result }: { infra: IpInfra; result: I
             segments={result.infra.partitions.flatMap((p) =>
               p.block
                 ? [
-                    { cidr: p.block, label: 'Partition blocks', color: '#fcd094' },
+                    { cidr: p.block, label: 'Partition blocks', color: COLOR.brandSoft },
                     ...p.subnets
                       .filter((s) => s.cidr)
-                      .map((s) => ({ cidr: s.cidr!, label: 'Used', color: '#d97706' })),
+                      .map((s) => ({ cidr: s.cidr!, label: 'Used', color: COLOR.mgmt })),
                   ]
                 : [],
             )}
