@@ -142,7 +142,7 @@ With derivation shown: every quantity broken down by central rack and rack group
 ### Ansible deployment
 
 The Redundant template with a release and control plane domain entered: a leaf's host variables
-with its ASN, loopback, BGP ports and PXE network, and the secrets still to fill in on the right.
+with its loopback, ASN and port breakouts, and the secrets still to fill in on the right.
 
 ![Ansible deployment](docs/screenshots/ansible.png)
 
