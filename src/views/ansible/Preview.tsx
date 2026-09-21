@@ -51,7 +51,7 @@ function InlineText({ text }: { text: string }) {
         s.kind === 'code' ? (
           <code
             key={i}
-            className={`rounded px-1 font-mono text-[0.85em] ${
+            className={`rounded px-1 font-mono text-xs ${
               s.text === CHANGE_ME ? 'bg-brand-soft font-semibold' : 'bg-gray-100'
             }`}
           >
@@ -68,9 +68,9 @@ function InlineText({ text }: { text: string }) {
 }
 
 const HEADING_CLASS = [
-  'text-lg font-semibold',
-  'mt-2 text-base font-semibold',
-  'text-sm font-semibold',
+  'text-base font-semibold',
+  'mt-2 text-sm font-semibold',
+  'text-sm font-semibold text-gray-700',
 ]
 
 function Block({ block }: { block: MdBlock }) {
@@ -112,7 +112,7 @@ function Block({ block }: { block: MdBlock }) {
             <thead>
               <tr className="border-b border-gray-200 text-left">
                 {block.header.map((h, i) => (
-                  <th key={i} className="px-2 py-1.5 font-semibold text-gray-600">
+                  <th key={i} className="px-2 py-1.5 font-semibold text-gray-700">
                     <InlineText text={h} />
                   </th>
                 ))}

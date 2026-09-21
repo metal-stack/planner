@@ -105,7 +105,7 @@ const PLATFORMS: { value: CiPlatform; label: string }[] = [
 
 const Group = ({ title, children }: { title: string; children: ReactNode }) => (
   <div>
-    <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">{title}</h4>
+    <h4 className="mb-2 text-sm font-semibold text-gray-700">{title}</h4>
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{children}</div>
   </div>
 )
@@ -278,7 +278,7 @@ export default function SettingsCard({
                     }
                   />
                 ))}
-                <span className="col-span-2 self-end pb-2 text-xs text-gray-500">
+                <span className="col-span-2 self-end pb-2 text-sm text-gray-600">
                   Runners must reach the partition&apos;s management network
                   <InfoBubble label="runner tags" info={ANSIBLE_INFO.runners} />
                 </span>

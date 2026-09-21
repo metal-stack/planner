@@ -41,7 +41,7 @@ export default function AnsibleView() {
           Ansible deployment
           <InfoBubble label="the Ansible export" info={ANSIBLE_INFO.tab} />
         </h2>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-600">
           {result.files.length} files, {result.placeholders.length} values to fill in
         </span>
         <button type="button" onClick={download} className="btn-primary ml-auto">

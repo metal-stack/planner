@@ -82,7 +82,7 @@ function DirView({
             {todo > 0 && (
               <span
                 title={`${todo} value${todo === 1 ? '' : 's'} to fill in`}
-                className="ml-auto rounded bg-amber-100 px-1 text-[10px] leading-4 font-bold text-amber-800"
+                className="ml-auto rounded bg-amber-100 px-1 text-xs leading-4 font-semibold text-amber-800 tabular-nums"
               >
                 {todo}
               </span>
