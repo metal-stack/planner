@@ -12,9 +12,27 @@ import {
 } from './bom'
 
 function planWithWorkers(count: number, uplink: ServerGroup['uplink']): Plan {
+  return planWithServer('server-microcloud-x11', count, uplink)
+}
+
+function planWithServer(
+  modelId: string,
+  count: number,
+  uplink: ServerGroup['uplink'] = '2x25G',
+): Plan {
   const plan = createEmptyPlan()
   const rack = defaultRack('Rack 1')
-  rack.servers = [{ id: 'g1', role: 'worker', modelId: 'server-microcloud-x11', count, uplink }]
+  rack.servers = [
+    {
+      id: 'g1',
+      role: 'worker',
+      modelId,
+      count,
+      uplink,
+      sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
+    },
+  ]
   plan.partitions[0].racks = [rack]
   return plan
 }
@@ -39,6 +57,8 @@ describe('chassisCount', () => {
       modelId: 'server-microcloud-x11', // 8 nodes per chassis
       count: 9,
       uplink: '2x25G',
+      sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     }
     expect(chassisCount(group)).toBe(2)
   })
@@ -55,6 +75,50 @@ describe('deriveBom NIC rules', () => {
     const plan = planWithWorkers(4, '2x100G')
     expect(quantity(plan, 'nic-e810-cqda2')).toBe(4)
     expect(quantity(plan, 'nic-e810-xxvda2')).toBe(0)
+  })
+
+  it('uses an explicit NIC without changing uplink cabling', () => {
+    const plan = planWithWorkers(4, '2x25G')
+    plan.partitions[0].racks[0].servers[0].nicModelId = 'nic-connectx5'
+    expect(quantity(plan, 'nic-connectx5')).toBe(4)
+    expect(quantity(plan, 'nic-e810-xxvda2')).toBe(0)
+    expect(serverQuantity(plan, 'sfp-25g-sr')).toBe(8)
+    expect(serverQuantity(plan, 'cable-mtp-breakout')).toBe(2)
+  })
+})
+
+describe('deriveBom node size rules', () => {
+  it('adds one board-specific CPU and the preset DIMMs per node', () => {
+    const h13 = planWithServer('server-microcloud-h13', 8)
+    expect(quantity(h13, 'cpu-epyc-4344p')).toBe(8)
+    expect(quantity(h13, 'mem-ddr5u-16g')).toBe(16)
+    expect(
+      deriveBom(h13).find((line) => line.catalogId === 'cpu-epyc-4344p')?.reasons[0].detail,
+    ).toBe('8 worker nodes × 1 CPU (n1-medium-x86)')
+    expect(
+      deriveBom(h13).find((line) => line.catalogId === 'mem-ddr5u-16g')?.reasons[0].detail,
+    ).toBe('8 worker nodes × 2 DIMMs (n1-medium-x86)')
+
+    const x13 = planWithServer('server-microcloud-x13', 3)
+    expect(quantity(x13, 'cpu-xeon-e2488')).toBe(3)
+    expect(quantity(x13, 'mem-ddr5u-16g')).toBe(6)
+  })
+
+  it('marks custom parts in the reason and applies their quantity', () => {
+    const plan = planWithServer('server-microcloud-h13', 4)
+    plan.partitions[0].racks[0].servers[0].compute = {
+      dimmModelId: 'mem-ddr5u-32g',
+      dimmsPerNode: 4,
+    }
+    const line = deriveBom(plan).find((item) => item.catalogId === 'mem-ddr5u-32g')
+    expect(line?.quantity).toBe(16)
+    expect(line?.reasons[0].detail).toBe('4 worker nodes × 4 DIMMs (n1-medium-x86, customized)')
+  })
+
+  it('does not add CPU or DIMM lines for a socketless board', () => {
+    const plan = planWithWorkers(8, '2x25G')
+    expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
+    expect(deriveBom(plan).some((line) => line.category === 'memory')).toBe(false)
   })
 })
 
@@ -358,6 +422,51 @@ describe('deriveBom GPUs', () => {
       (l) => l.catalogId === 'lic-sonic-eb-100g',
     )
     expect(formatReasons(line!.reasons)).toContain('AS7726-32X')
+  })
+})
+
+describe('deriveBom per-position node configurations', () => {
+  // Two chassis: a position's configuration applies to that node in both.
+  function planWithNodeConfigs(): Plan {
+    const plan = planWithServer('server-microcloud-h13', 16)
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      2: { sizeId: 'c1-medium-x86' },
+      5: { sizeId: 'n1-medium-x86', nicModelId: 'nic-connectx5' },
+    }
+    return plan
+  }
+
+  it('splits CPU and DIMM lines by configuration, once per chassis', () => {
+    const plan = planWithNodeConfigs()
+    // Both sizes use the same AM5 CPU; the DIMMs differ per bucket:
+    // 14 nodes on n1-medium (2× 16 GB), position 3 of both chassis on
+    // c1-medium (4× 32 GB each).
+    expect(quantity(plan, 'cpu-epyc-4344p')).toBe(16)
+    expect(quantity(plan, 'mem-ddr5u-16g')).toBe(28)
+    expect(quantity(plan, 'mem-ddr5u-32g')).toBe(8)
+  })
+
+  it('orders each position its own NIC in every chassis', () => {
+    const plan = planWithNodeConfigs()
+    expect(quantity(plan, 'nic-e810-xxvda2')).toBe(14)
+    expect(quantity(plan, 'nic-connectx5')).toBe(2)
+  })
+
+  it('names deviating positions in the reason', () => {
+    const line = deriveBom(planWithNodeConfigs()).find((l) => l.catalogId === 'mem-ddr5u-32g')
+    expect(
+      line?.reasons.some(
+        (r) => r.detail === '2 worker nodes at chassis position 3 × 4 DIMMs (c1-medium-x86)',
+      ),
+    ).toBe(true)
+  })
+
+  it('fits per-position GPUs in every chassis', () => {
+    const plan = planWithServer('server-microcloud-h13', 16)
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      0: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+    }
+    expect(quantity(plan, 'gpu-h100-pcie')).toBe(2)
   })
 })
 

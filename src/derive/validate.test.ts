@@ -34,8 +34,24 @@ describe('leaf port capacity', () => {
   it('computes needed ports with breakout math', () => {
     const rack = defaultRack('r')
     rack.servers = [
-      { id: 'a', role: 'worker', modelId: 'server-microcloud-x11', count: 30, uplink: '2x25G' },
-      { id: 'b', role: 'worker', modelId: 'server-bigtwin-x11', count: 2, uplink: '2x100G' },
+      {
+        id: 'a',
+        role: 'worker',
+        modelId: 'server-microcloud-x11',
+        count: 30,
+        uplink: '2x25G',
+        sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
+      },
+      {
+        id: 'b',
+        role: 'worker',
+        modelId: 'server-bigtwin-x11',
+        count: 2,
+        uplink: '2x100G',
+        sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
+      },
     ]
     // 30 nodes x 2 = 60 x25G -> ceil(60/4)=15 ports; 2 nodes x 2 = 4 x100G ports
     expect(leafPortsNeeded(rack)).toBe(19)
@@ -45,7 +61,15 @@ describe('leaf port capacity', () => {
     const plan = basePlan()
     // 120 x 2x100G nodes need 240 ports; 2x AS7726 provide 56 after uplinks
     plan.partitions[0].racks[0].servers = [
-      { id: 'a', role: 'worker', modelId: 'server-bigtwin-x11', count: 120, uplink: '2x100G' },
+      {
+        id: 'a',
+        role: 'worker',
+        modelId: 'server-bigtwin-x11',
+        count: 120,
+        uplink: '2x100G',
+        sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
+      },
     ]
     expect(errors(plan).some((m) => m.includes('Leaf capacity exceeded'))).toBe(true)
   })
@@ -75,6 +99,84 @@ describe('compatibility list', () => {
     plan.partitions[0].racks[0].servers[0].modelId = 'server-lenovo-sd530'
     const warnings = validatePlan(plan).filter((i) => i.severity === 'warning')
     expect(warnings.some((i) => i.message.includes('alpha'))).toBe(true)
+  })
+})
+
+describe('node compute and NIC configuration', () => {
+  function group(plan = basePlan()) {
+    return plan.partitions[0].racks[0].servers[0]
+  }
+
+  it('rejects an unknown node size', () => {
+    const plan = basePlan()
+    group(plan).sizeId = 'x1-huge'
+    expect(errors(plan)).toContain('Unknown node size "x1-huge".')
+  })
+
+  it('rejects a size unavailable for the board without full overrides', () => {
+    const plan = basePlan()
+    group(plan).sizeId = 'c1-large-x86'
+    expect(errors(plan)).toContain(
+      'c1-large-x86 (24 cores, 192 GiB) is not orderable for AS-3015MR-H8TNR (AM5). Pick another size or server model, or set a custom CPU and memory.',
+    )
+  })
+
+  it('warns when CPU and memory are not modeled for a board', () => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-microcloud-x11'
+    expect(validatePlan(plan).map((issue) => issue.message)).toContain(
+      'CPU and memory are not modeled for SYS-5039MD8-H8TNR, so the BOM has no CPU or DIMM lines for this group.',
+    )
+  })
+
+  it('rejects an unknown CPU override', () => {
+    const plan = basePlan()
+    group(plan).compute = { cpuModelId: 'cpu-foo' }
+    expect(errors(plan)).toContain('Unknown CPU model "cpu-foo".')
+  })
+
+  it('rejects a CPU from the wrong socket', () => {
+    const plan = basePlan()
+    group(plan).compute = { cpuModelId: 'cpu-xeon-e2488' }
+    expect(errors(plan)).toContain('Xeon E-2488 (LGA-1700) does not fit AS-3015MR-H8TNR (AM5).')
+  })
+
+  it('rejects a DIMM with the wrong memory type', () => {
+    const plan = basePlan()
+    group(plan).compute = { dimmModelId: 'mem-ddr4r-32g' }
+    expect(errors(plan)).toContain(
+      'MTA36ASF4G72PZ-3G2R is DDR4-3200 RDIMM, but AS-3015MR-H8TNR takes DDR5-4800 ECC UDIMM.',
+    )
+  })
+
+  it('rejects more DIMMs than the board has slots', () => {
+    const plan = basePlan()
+    group(plan).compute = { dimmsPerNode: 6 }
+    expect(errors(plan)).toContain(
+      'AS-3015MR-H8TNR has 4 DIMM slots per node, but 6 DIMMs per node are configured.',
+    )
+  })
+
+  it('rejects an unknown NIC override', () => {
+    const plan = basePlan()
+    group(plan).nicModelId = 'nic-foo'
+    expect(errors(plan)).toContain('Unknown NIC model "nic-foo".')
+  })
+
+  it('prefixes issues from per-position configurations with the chassis position', () => {
+    const plan = basePlan()
+    group(plan).nodeConfigs = {
+      1: { sizeId: 'n1-medium-x86', nicModelId: 'nic-e810-cqda2' },
+    }
+    expect(errors(plan)).toContain(
+      "Chassis position 2: E810-CQDA2 has no 25G ports, but the group's uplink is 2x25G.",
+    )
+  })
+
+  it('rejects a NIC without ports at the uplink speed', () => {
+    const plan = basePlan()
+    group(plan).nicModelId = 'nic-e810-cqda2'
+    expect(errors(plan)).toContain("E810-CQDA2 has no 25G ports, but the group's uplink is 2x25G.")
   })
 })
 
@@ -244,6 +346,8 @@ describe('validatePlan GPUs and vendor availability', () => {
         modelId: serverModelId,
         count: 8,
         uplink: '2x25G',
+        sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
         gpu: { modelId, perNode },
       },
     ]

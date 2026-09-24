@@ -89,6 +89,8 @@ describe('rack group', () => {
       modelId: 'server-superserver-tn12',
       count: 3,
       uplink: '2x25G',
+      sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     })
     const layout = deriveRackLayout(plan)[0]
     for (const physical of layout.racks.slice(1)) {
@@ -128,5 +130,19 @@ describe('rack group', () => {
 
     plan.partitions[0].racks[0].servers[0].count = 4 // half a MicroCloud
     expect(deriveRackLayout(plan)[0].racks[1].powerWatts).toBe(690 + 1000)
+  })
+
+  it('adds per-position GPU watts to every chassis holding that position', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.count = 9 // a full chassis plus one node in a second
+    group.nodeConfigs = {
+      0: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+    }
+    const layout = deriveRackLayout(plan)[0]
+    const chassis = layout.racks[1].slots.filter((s) => s.kind === 'server')
+    // Position 1 exists in both chassis, so each carries a 350 W H100.
+    expect(chassis[0].powerWatts).toBe(2000 + 350)
+    expect(chassis[1].powerWatts).toBe(250 + 350)
   })
 })

@@ -22,8 +22,9 @@ function group(
   modelId: string,
   count: number,
   uplink: ServerGroup['uplink'] = '2x25G',
+  sizeId: ServerGroup['sizeId'] = 'n1-medium-x86',
 ): ServerGroup {
-  return { id: id(), role, modelId, count, uplink }
+  return { id: id(), role, modelId, count, uplink, sizeId, nodeConfigs: {} }
 }
 
 /** Rack group: 112 MicroCloud workers (14 chassis, spread mid → left),

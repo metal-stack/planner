@@ -34,6 +34,53 @@ describe('plan JSON round-trip', () => {
     const broken = { ...createEmptyPlan(), partitions: 'nope' }
     expect(() => importPlanJson(JSON.stringify(broken))).toThrow('not a valid plan')
   })
+
+  it('round-trips compute and NIC overrides', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.sizeId = 'c1-medium-x86'
+    group.compute = {
+      cpuModelId: 'cpu-epyc-4344p',
+      dimmModelId: 'mem-ddr5u-32g',
+      dimmsPerNode: 4,
+    }
+    group.nicModelId = 'nic-connectx5'
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
+
+  it('round-trips per-node configurations', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      1: { sizeId: 'c1-medium-x86', nicModelId: 'nic-connectx5' },
+      3: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+    }
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
+
+  it('imports files written before per-node configurations with none', () => {
+    const raw = JSON.parse(exportPlanJson(createEmptyPlan())) as {
+      partitions: { racks: { servers: Record<string, unknown>[] }[] }[]
+    }
+    delete raw.partitions[0].racks[0].servers[0].nodeConfigs
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(imported.partitions[0].racks[0].servers[0].nodeConfigs).toEqual({})
+  })
+})
+
+describe('plans from before node configuration', () => {
+  it('defaults the size and leaves overrides absent', () => {
+    const raw = JSON.parse(exportPlanJson(createEmptyPlan())) as {
+      partitions: { racks: { servers: Record<string, unknown>[] }[] }[]
+    }
+    const group = raw.partitions[0].racks[0].servers[0]
+    delete group.sizeId
+    delete group.compute
+    delete group.nicModelId
+    const imported = importPlanJson(JSON.stringify(raw)).partitions[0].racks[0].servers[0]
+    expect(imported.sizeId).toBe('n1-medium-x86')
+    expect(imported.compute).toBeUndefined()
+    expect(imported.nicModelId).toBeUndefined()
+  })
 })
 
 describe('files with shapes from before the format version', () => {

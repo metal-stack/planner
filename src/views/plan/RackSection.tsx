@@ -1,11 +1,18 @@
 import {
   catalog,
+  cpusForServer,
+  defaultNicId,
+  dimmsForServer,
   gpusForServer,
   itemLabel,
+  nicsForUplink,
   serversForUsage,
   switchesForRole,
 } from '../../model/catalog'
-import type { Partition, Rack, ServerGroup } from '../../model/plan'
+import { useState } from 'react'
+import { chassisPositions, groupConfig, nodeConfig } from '../../model/nodeConfig'
+import type { NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
+import { nodeSizes, resolveNodeCompute } from '../../model/sizes'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
 import { issuesFor, leafPortsAvailable, leafPortsNeeded, type Issue } from '../../derive/validate'
@@ -17,6 +24,36 @@ import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import { optionLabel } from './options'
+
+/** Node selector chip in the Node configuration menu: `custom` marks a node
+ *  carrying its own configuration. */
+function NodeButton({
+  active,
+  custom,
+  onClick,
+  children,
+}: {
+  active: boolean
+  custom?: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+        active
+          ? 'border-ink bg-ink text-white'
+          : custom
+            ? 'border-brand-strong bg-white font-semibold text-brand-strong hover:bg-white/60'
+            : 'border-gray-300 bg-white text-gray-700 hover:bg-white/60'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
 
 function ServerGroupRow({
   partition,
@@ -55,95 +92,308 @@ function ServerGroupRow({
     value: i.id,
     label: optionLabel(i),
   }))
-  const perNode = Math.min(group.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
+
+  const socket = catalog[group.modelId]?.socket
+  const cpuOptions = cpusForServer(group.modelId)
+  const dimmOptions = dimmsForServer(group.modelId)
+
+  // The chassis position whose configuration the fields edit: null = the
+  // group's shared configuration; a position applies to that node in every
+  // chassis and keeps its own complete copy once edited.
+  const positions = chassisPositions(group)
+  const [selectedNode, setSelectedNode] = useState<number | null>(null)
+  const sel = selectedNode !== null && selectedNode < positions ? selectedNode : null
+  const shown: NodeConfig = sel === null ? groupConfig(group) : nodeConfig(group, sel)
+  const customPositions = Object.keys(group.nodeConfigs)
+    .map(Number)
+    .filter((i) => i >= 0 && i < positions)
+
+  const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
+  const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
+  // The preset's own parts, for naming what "Preset default" resolves to.
+  const presetParts = resolveNodeCompute({ modelId: group.modelId, sizeId: shown.sizeId })
+  // The preset stays the baseline; deviating fields mark it "customized".
+  const sizeOptions = nodeSizes.map((size) => {
+    const note =
+      !socket || !size.parts[socket]
+        ? ', not for this model'
+        : size.id === shown.sizeId && resolvedCompute.custom
+          ? ', customized'
+          : ''
+    return {
+      value: size.id,
+      label: `${size.id} (${size.cores} cores, ${size.memoryGiB} GiB${note})`,
+    }
+  })
+  const defaultNic = defaultNicId(group.uplink)
+  const nicOptions = [
+    { value: '', label: `${itemLabel(defaultNic)} (default)` },
+    ...nicsForUplink(group.uplink)
+      .filter((item) => item.id !== defaultNic)
+      .map((item) => ({ value: item.id, label: optionLabel(item) })),
+  ]
+  // The collapsed summary always describes the group's shared configuration.
+  const groupResolved = resolveNodeCompute(group)
+  const nodeSummary = [
+    groupResolved.cpuModelId ? itemLabel(groupResolved.cpuModelId) : undefined,
+    groupResolved.dimmModelId && groupResolved.dimmsPerNode
+      ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
+      : undefined,
+    itemLabel(group.nicModelId ?? defaultNic),
+    group.gpu ? itemLabel(group.gpu.modelId) : undefined,
+    customPositions.length > 0
+      ? `${customPositions.length} chassis position${customPositions.length === 1 ? '' : 's'} customized`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ')
+
+  const patchShown = (change: Partial<NodeConfig>) => {
+    if (sel === null) {
+      patch(change)
+    } else {
+      patch({ nodeConfigs: { ...group.nodeConfigs, [sel]: { ...shown, ...change } } })
+    }
+  }
+  const patchCompute = (change: NonNullable<ServerGroup['compute']>) => {
+    const next = { ...shown.compute, ...change }
+    const compute =
+      next.cpuModelId || next.dimmModelId || next.dimmsPerNode
+        ? {
+            ...(next.cpuModelId && { cpuModelId: next.cpuModelId }),
+            ...(next.dimmModelId && { dimmModelId: next.dimmModelId }),
+            ...(next.dimmsPerNode && { dimmsPerNode: next.dimmsPerNode }),
+          }
+        : undefined
+    patchShown({ compute })
+  }
+  // Board- or uplink-specific parts in per-node configurations reset along
+  // with the group's when the model or uplink changes.
+  const configsWithout = (field: 'compute' | 'nicModelId') =>
+    Object.fromEntries(
+      Object.entries(group.nodeConfigs).map(([node, config]) => [
+        node,
+        { ...config, [field]: undefined },
+      ]),
+    )
+  const configureAll = () => {
+    patch({
+      sizeId: shown.sizeId,
+      compute: shown.compute,
+      nicModelId: shown.nicModelId,
+      gpu: shown.gpu,
+      nodeConfigs: {},
+    })
+    setSelectedNode(null)
+  }
 
   return (
-    <div className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 md:grid-cols-6">
-      <SelectField
-        label="Role"
-        value={group.role}
-        options={[
-          { value: 'worker', label: 'Worker' },
-          { value: 'storage', label: 'Storage' },
-        ]}
-        onChange={(v) => {
-          const role = v as ServerGroup['role']
-          const compatible = serversForUsage(role)
-          patch(
-            compatible.some((i) => i.id === group.modelId)
-              ? { role }
-              : { role, modelId: compatible[0]?.id ?? group.modelId },
-          )
-        }}
-      />
-      <SelectField
-        label="Server model"
-        info={{
-          text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
-          href: DOCS.hardware,
-        }}
-        value={group.modelId}
-        options={modelOptions}
-        onChange={(v) => patch({ modelId: v })}
-      />
-      <NumberField
-        label="Nodes"
-        value={group.count}
-        step={nodesPer}
-        onChange={(n) => patch({ count: n })}
-        action={
-          <HoverHint
-            interactive
-            hint={
-              fillCount === group.count
-                ? `Already filling the rack's leaf capacity (${fillCount} nodes).`
-                : `Fill to leaf capacity: set ${fillCount} nodes, what the rack's remaining leaf ports allow in whole chassis of ${nodesPer}.`
-            }
-          >
-            <button
-              type="button"
-              onClick={() => patch({ count: fillCount })}
-              disabled={fillCount === group.count}
-              aria-label={`Fill to leaf capacity (${fillCount} nodes)`}
-              className="text-gray-400 hover:text-brand-strong disabled:cursor-default disabled:text-gray-300"
-            >
-              <Icon icon={ACTION_ICON.fill} className="h-3.5 w-3.5" />
-            </button>
-          </HoverHint>
-        }
-      />
-      <SelectField
-        label="Uplink"
-        info={{
-          text: 'Every node is dual-attached to the leaf pair. 25G server ports terminate on 100G leaf ports through 4×25G breakout cables; 100G uses one leaf port per server port. This drives the leaf port check and the transceiver and cable counts.',
-          href: DOCS.networking,
-        }}
-        value={group.uplink}
-        options={[
-          { value: '2x25G', label: '2x 25G' },
-          { value: '2x100G', label: '2x 100G' },
-        ]}
-        onChange={(v) => patch({ uplink: v as ServerGroup['uplink'] })}
-      />
-      {gpuOptions.length > 0 && (
+    <div className="mt-3 rounded-md border border-brand-soft bg-brand-tint p-3">
+      <div className="grid grid-cols-2 items-end gap-3 md:grid-cols-6">
         <SelectField
-          label="GPU"
+          label="Role"
+          value={group.role}
+          options={[
+            { value: 'worker', label: 'Worker' },
+            { value: 'storage', label: 'Storage' },
+          ]}
+          onChange={(v) => {
+            const role = v as ServerGroup['role']
+            const compatible = serversForUsage(role)
+            patch(
+              compatible.some((i) => i.id === group.modelId)
+                ? { role }
+                : {
+                    role,
+                    modelId: compatible[0]?.id ?? group.modelId,
+                    compute: undefined,
+                    nodeConfigs: configsWithout('compute'),
+                  },
+            )
+          }}
+        />
+        <SelectField
+          label="Server model"
           info={{
-            text: 'GPUs on the metal-stack hardware compatibility list, offered for server models that accept one. They add to the BOM and to the rack power estimate.',
+            text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
             href: DOCS.hardware,
           }}
-          value={group.gpu?.modelId ?? ''}
-          options={[{ value: '', label: 'None' }, ...gpuOptions]}
-          onChange={(v) => patch({ gpu: v ? { modelId: v, perNode: perNode } : undefined })}
+          value={group.modelId}
+          options={modelOptions}
+          onChange={(v) =>
+            patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
+          }
         />
-      )}
-      <button
-        onClick={() => removeServerGroup(partition.id, rack.id, group.id)}
-        className="btn-secondary justify-self-start"
-      >
-        <Icon icon={ACTION_ICON.remove} />
-        Remove
-      </button>
+        <NumberField
+          label="Nodes"
+          value={group.count}
+          step={nodesPer}
+          onChange={(n) => patch({ count: n })}
+          action={
+            <HoverHint
+              interactive
+              hint={
+                fillCount === group.count
+                  ? `Already filling the rack's leaf capacity (${fillCount} nodes).`
+                  : `Fill to leaf capacity: set ${fillCount} nodes, what the rack's remaining leaf ports allow in whole chassis of ${nodesPer}.`
+              }
+            >
+              <button
+                type="button"
+                onClick={() => patch({ count: fillCount })}
+                disabled={fillCount === group.count}
+                aria-label={`Fill to leaf capacity (${fillCount} nodes)`}
+                className="text-gray-400 hover:text-brand-strong disabled:cursor-default disabled:text-gray-300"
+              >
+                <Icon icon={ACTION_ICON.fill} className="h-3.5 w-3.5" />
+              </button>
+            </HoverHint>
+          }
+        />
+        <SelectField
+          label="Uplink"
+          info={{
+            text: 'Every node is dual-attached to the leaf pair. 25G server ports terminate on 100G leaf ports through 4×25G breakout cables; 100G uses one leaf port per server port. This drives the leaf port check and the transceiver and cable counts.',
+            href: DOCS.networking,
+          }}
+          value={group.uplink}
+          options={[
+            { value: '2x25G', label: '2x 25G' },
+            { value: '2x100G', label: '2x 100G' },
+          ]}
+          onChange={(v) =>
+            patch({
+              uplink: v as ServerGroup['uplink'],
+              nicModelId: undefined,
+              nodeConfigs: configsWithout('nicModelId'),
+            })
+          }
+        />
+        <button
+          onClick={() => removeServerGroup(partition.id, rack.id, group.id)}
+          className="btn-secondary justify-self-start"
+        >
+          <Icon icon={ACTION_ICON.remove} />
+          Remove
+        </button>
+      </div>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+          Node configuration{' '}
+          {nodeSummary && <span className="font-normal text-gray-500">· {nodeSummary}</span>}
+        </summary>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <NodeButton active={sel === null} onClick={() => setSelectedNode(null)}>
+            All nodes
+          </NodeButton>
+          {Array.from({ length: positions }, (_, i) => (
+            <NodeButton
+              key={i}
+              active={sel === i}
+              custom={customPositions.includes(i)}
+              onClick={() => setSelectedNode(i)}
+            >
+              {i + 1}
+            </NodeButton>
+          ))}
+          <button
+            onClick={configureAll}
+            disabled={sel === null && customPositions.length === 0}
+            className="btn-secondary ml-auto"
+          >
+            Configure all nodes
+          </button>
+        </div>
+        {sel !== null && group.nodeConfigs[sel] !== undefined && (
+          <button
+            type="button"
+            onClick={() => {
+              const rest = { ...group.nodeConfigs }
+              delete rest[sel]
+              patch({ nodeConfigs: rest })
+            }}
+            className="mt-2 text-xs text-gray-600 underline hover:text-ink"
+          >
+            Reset chassis position {sel + 1} to the group configuration
+          </button>
+        )}
+        <div className="mt-3 grid grid-cols-2 items-end gap-3 md:grid-cols-6">
+          <SelectField
+            label="Preset"
+            info={{
+              text: 'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset; selecting a number above configures that node position in every chassis of the group.',
+            }}
+            value={shown.sizeId}
+            options={sizeOptions}
+            onChange={(v) => patchShown({ sizeId: v, compute: undefined })}
+          />
+          {cpuOptions.length > 0 && (
+            <>
+              <SelectField
+                label="CPU"
+                value={shown.compute?.cpuModelId ?? ''}
+                options={[
+                  {
+                    value: '',
+                    label: presetParts.cpuModelId
+                      ? `${itemLabel(presetParts.cpuModelId)} (preset)`
+                      : 'Preset default',
+                  },
+                  ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
+                ]}
+                onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
+              />
+              <SelectField
+                label="DIMM model"
+                value={shown.compute?.dimmModelId ?? ''}
+                options={[
+                  {
+                    value: '',
+                    label: presetParts.dimmModelId
+                      ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
+                      : 'Preset default',
+                  },
+                  ...dimmOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
+                ]}
+                onChange={(v) => patchCompute({ dimmModelId: v || undefined })}
+              />
+              <NumberField
+                label="DIMMs per node"
+                value={shown.compute?.dimmsPerNode ?? resolvedCompute.dimmsPerNode ?? 0}
+                onChange={(value) =>
+                  patchCompute({
+                    dimmsPerNode: value && value !== presetParts.dimmsPerNode ? value : undefined,
+                  })
+                }
+              />
+            </>
+          )}
+          <SelectField
+            label="NIC"
+            info={{
+              text: "Dual-port NIC fitted to every node, filtered to the group's uplink speed. All options are on the metal-stack hardware compatibility list; the default is the Intel E810 the reference setups use.",
+              href: DOCS.hardware,
+            }}
+            value={shown.nicModelId ?? ''}
+            options={nicOptions}
+            onChange={(v) => patchShown({ nicModelId: v || undefined })}
+          />
+          {gpuOptions.length > 0 && (
+            <SelectField
+              label="GPU"
+              info={{
+                text: 'GPUs on the metal-stack hardware compatibility list, offered for server models that accept one. They add to the BOM and to the rack power estimate.',
+                href: DOCS.hardware,
+              }}
+              value={shown.gpu?.modelId ?? ''}
+              options={[{ value: '', label: 'None' }, ...gpuOptions]}
+              onChange={(v) =>
+                patchShown({ gpu: v ? { modelId: v, perNode: perNode } : undefined })
+              }
+            />
+          )}
+        </div>
+      </details>
     </div>
   )
 }
