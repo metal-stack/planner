@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { deriveBom } from '../derive/bom'
 import {
   catalog,
+  cpusForServer,
+  defaultNicId,
+  dimmsForServer,
   gpusForServer,
   itemLabel,
   legacyIdMap,
+  nicsForUplink,
   nosLabel,
   nosLicenseId,
   nosOptions,
@@ -146,6 +150,30 @@ describe('category invariants', () => {
       expect(item.nodesPerChassis, `${id}.nodesPerChassis`).toBeGreaterThan(0)
       expect(item.serverUsages?.length, `${id}.serverUsages`).toBeGreaterThan(0)
       expect(item.vendor, `${id}.vendor`).toBeDefined()
+      if (item.socket) expect(item.dimmSlots, `${id}.dimmSlots`).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every CPU its orderable and compatibility facts', () => {
+    const cpus = entries.filter(([, item]) => item.category === 'cpu')
+    expect(cpus.length).toBeGreaterThan(0)
+    for (const [id, item] of cpus) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.socket, `${id}.socket`).toBeDefined()
+      expect(item.cores, `${id}.cores`).toBeGreaterThan(0)
+      expect(item.powerWatts, `${id}.powerWatts`).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every memory module its orderable and capacity facts', () => {
+    const memory = entries.filter(([, item]) => item.category === 'memory')
+    expect(memory.length).toBeGreaterThan(0)
+    for (const [id, item] of memory) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.dimmType, `${id}.dimmType`).toBeDefined()
+      expect(item.dimmGiB, `${id}.dimmGiB`).toBeGreaterThan(0)
     }
   })
 
@@ -186,6 +214,14 @@ describe('reachability', () => {
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
       ...gpusForServer('server-microcloud-x13'),
+      ...nicsForUplink('2x25G'),
+      ...nicsForUplink('2x100G'),
+      ...[
+        'server-microcloud-h13',
+        'server-microcloud-x13',
+        'server-bigtwin-x12',
+        'server-superserver-tn12',
+      ].flatMap((id) => [...cpusForServer(id), ...dimmsForServer(id)]),
     ].map((i) => i.id),
   )
 
@@ -212,6 +248,8 @@ describe('reachability', () => {
       modelId: 'server-bigtwin-x12',
       count: 4,
       uplink: '2x100G',
+      sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     })
     return plan
   }
@@ -299,6 +337,29 @@ describe('helpers', () => {
     expect(gpusForServer('server-microcloud-x13').length).toBeGreaterThan(0)
     expect(gpusForServer('server-bigtwin-x11')).toEqual([])
     expect(gpusForServer('nope')).toEqual([])
+  })
+
+  it('offers NICs by uplink speed and picks the E810 defaults', () => {
+    const twentyFive = nicsForUplink('2x25G').map((item) => item.id)
+    expect(twentyFive).toContain('nic-xxv710-da2')
+    expect(twentyFive).toContain('nic-connectx5')
+    expect(twentyFive).not.toContain('nic-e810-cqda2')
+    expect(nicsForUplink('2x100G').map((item) => item.id)).toEqual(['nic-e810-cqda2'])
+    expect(defaultNicId('2x25G')).toBe('nic-e810-xxvda2')
+    expect(defaultNicId('2x100G')).toBe('nic-e810-cqda2')
+  })
+
+  it('offers CPU and memory parts matching the server socket', () => {
+    expect(cpusForServer('server-microcloud-h13').map((item) => item.socket)).toEqual(['AM5'])
+    expect(cpusForServer('server-microcloud-x11')).toEqual([])
+    expect(dimmsForServer('server-microcloud-h13').map((item) => item.dimmType)).toEqual([
+      'ddr5-ecc-udimm',
+      'ddr5-ecc-udimm',
+    ])
+    expect(dimmsForServer('server-bigtwin-x12').map((item) => item.dimmType)).toEqual([
+      'ddr4-rdimm',
+      'ddr4-rdimm',
+    ])
   })
 
   it('picks the license by NOS and platform tier', () => {

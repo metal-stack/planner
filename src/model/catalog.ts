@@ -7,7 +7,9 @@
 // https://docs.metal-stack.io/ -> Operators -> Hardware Support
 // (docs repo: docs/src/operators/hardware.md). Management servers, routers
 // and mgmt/OOB gear are not provisioned by metal-stack itself, so the list
-// does not apply to them; they carry roles but no support status.
+// does not apply to them; they carry roles but no support status. CPU and
+// DIMM entries are representative public parts verified against ark.intel.com,
+// amd.com and micron.com, not the compatibility list or sample BOMs.
 //
 // That list is authoritative for *compatibility only*, not for spelling: it
 // mixes prefixed and unprefixed Supermicro models in one table
@@ -49,10 +51,19 @@
 // Edgecore's site lists ET4202-RJ45 where the orders show ET4201-RJ45. The
 // sample BOMs outrank both — they are what was actually bought.
 
-import type { Nos } from './plan'
+import type { Nos, UplinkSpeed } from './plan'
 
 export type CatalogCategory =
-  'switch' | 'server' | 'router' | 'nic' | 'gpu' | 'transceiver' | 'cable' | 'license'
+  | 'switch'
+  | 'server'
+  | 'router'
+  | 'nic'
+  | 'gpu'
+  | 'cpu'
+  | 'memory'
+  | 'transceiver'
+  | 'cable'
+  | 'license'
 
 export type SupportStatus = 'stable' | 'alpha'
 
@@ -66,6 +77,17 @@ export type SwitchRole =
 export type ServerUsage = 'worker' | 'management' | 'storage'
 
 export type PortSpeed = '1G' | '10G' | '25G' | '100G'
+
+export type CpuSocket = 'AM5' | 'LGA-1700' | 'LGA-4189' | 'LGA-4677'
+
+export type DimmType = 'ddr5-ecc-udimm' | 'ddr5-rdimm' | 'ddr4-rdimm'
+
+export const dimmTypeForSocket: Record<CpuSocket, DimmType> = {
+  AM5: 'ddr5-ecc-udimm',
+  'LGA-1700': 'ddr5-ecc-udimm',
+  'LGA-4189': 'ddr4-rdimm',
+  'LGA-4677': 'ddr5-rdimm',
+}
 
 /** Platform tier a NOS support license is priced by. The vendors name the
  *  tiers differently — Edgecore sells "40/100G" and "10/25G", Broadcom
@@ -92,6 +114,15 @@ export interface CatalogItem {
    *  estimates. Partial chassis are scaled by their node count. */
   powerWatts?: number
   ports?: { speed: PortSpeed; count: number }[]
+  /** Board socket on servers, compatible socket on CPUs. */
+  socket?: CpuSocket
+  /** Physical cores on CPUs. */
+  cores?: number
+  /** DIMM slots available per server node. */
+  dimmSlots?: number
+  /** Memory module technology and capacity. */
+  dimmType?: DimmType
+  dimmGiB?: number
   /** metal-stack support status; absent = not applicable (mgmt gear, cables…). */
   status?: SupportStatus
   /** Vendor lifecycle; absent = current. */
@@ -212,6 +243,8 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     gpuCapable: 1,
+    socket: 'LGA-1700',
+    dimmSlots: 4,
   },
   'server-microcloud-h13': {
     id: 'server-microcloud-h13',
@@ -226,6 +259,8 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     gpuCapable: 1,
+    socket: 'AM5',
+    dimmSlots: 4,
   },
   'server-bigtwin-x11': {
     id: 'server-bigtwin-x11',
@@ -253,6 +288,8 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 4,
     status: 'stable',
     serverUsages: ['worker'],
+    socket: 'LGA-4189',
+    dimmSlots: 16,
   },
   'server-superserver-tn20': {
     id: 'server-superserver-tn20',
@@ -280,6 +317,8 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 1,
     status: 'stable',
     serverUsages: ['worker', 'storage'],
+    socket: 'LGA-4677',
+    dimmSlots: 16,
   },
   'server-superserver-tr12p': {
     id: 'server-superserver-tr12p',
@@ -364,6 +403,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'E810XXVDA2',
     description: 'Dual-port 2× 25G SFP28',
     status: 'stable',
+    ports: [{ speed: '25G', count: 2 }],
   },
   'nic-e810-cqda2': {
     id: 'nic-e810-cqda2',
@@ -374,6 +414,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'E810CQDA2',
     description: 'Dual-port 2× 100G QSFP28',
     status: 'stable',
+    ports: [{ speed: '100G', count: 2 }],
   },
   'nic-xxv710-da2': {
     id: 'nic-xxv710-da2',
@@ -383,7 +424,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'XXV710DA2',
     description: 'Dual-port 2× 25G SFP28',
     status: 'stable',
-    referenceOnly: 'NIC choice follows ServerGroup.uplink, so only the E810 pair is used',
+    ports: [{ speed: '25G', count: 2 }],
   },
   'nic-connectx5': {
     id: 'nic-connectx5',
@@ -393,7 +434,131 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'MCX512A-ACAT',
     description: 'ConnectX-5, dual-port 2× 25G SFP28',
     status: 'stable',
-    referenceOnly: 'NIC choice follows ServerGroup.uplink, so only the E810 pair is used',
+    ports: [{ speed: '25G', count: 2 }],
+  },
+
+  // --- CPUs (representative public orderable parts) ---
+  'cpu-epyc-4344p': {
+    id: 'cpu-epyc-4344p',
+    category: 'cpu',
+    vendor: 'AMD',
+    model: 'EPYC 4344P',
+    partNumber: '100-000001479',
+    description: '8 cores, 16 threads, 3.8 GHz base',
+    cores: 8,
+    powerWatts: 65,
+    socket: 'AM5',
+  },
+  'cpu-xeon-e2488': {
+    id: 'cpu-xeon-e2488',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon E-2488',
+    partNumber: 'CM8071505024520',
+    description: '8 cores, 16 threads, 3.2 GHz base',
+    cores: 8,
+    powerWatts: 95,
+    socket: 'LGA-1700',
+  },
+  'cpu-xeon-4309y': {
+    id: 'cpu-xeon-4309y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Silver 4309Y',
+    partNumber: 'CD8068904658102',
+    description: '8 cores, 16 threads, 2.8 GHz base',
+    cores: 8,
+    powerWatts: 105,
+    socket: 'LGA-4189',
+  },
+  'cpu-xeon-5318y': {
+    id: 'cpu-xeon-5318y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Gold 5318Y',
+    partNumber: 'CD8068904656703',
+    description: '24 cores, 48 threads, 2.1 GHz base',
+    cores: 24,
+    powerWatts: 165,
+    socket: 'LGA-4189',
+  },
+  'cpu-xeon-4509y': {
+    id: 'cpu-xeon-4509y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Silver 4509Y',
+    partNumber: 'PK8071305554400',
+    description: '8 cores, 16 threads, 2.6 GHz base',
+    cores: 8,
+    powerWatts: 125,
+    socket: 'LGA-4677',
+  },
+  'cpu-xeon-6442y': {
+    id: 'cpu-xeon-6442y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Gold 6442Y',
+    partNumber: 'PK8071305120500',
+    description: '24 cores, 48 threads, 2.6 GHz base',
+    cores: 24,
+    powerWatts: 225,
+    socket: 'LGA-4677',
+  },
+
+  // --- Memory (representative public orderable parts) ---
+  'mem-ddr5u-16g': {
+    id: 'mem-ddr5u-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC10C1084S1EC48BA1',
+    description: '16 GB DDR5-4800 ECC UDIMM',
+    dimmType: 'ddr5-ecc-udimm',
+    dimmGiB: 16,
+  },
+  'mem-ddr5u-32g': {
+    id: 'mem-ddr5u-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC20C2085S1EC48BA1',
+    description: '32 GB DDR5-4800 ECC UDIMM',
+    dimmType: 'ddr5-ecc-udimm',
+    dimmGiB: 32,
+  },
+  'mem-ddr4r-16g': {
+    id: 'mem-ddr4r-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTA18ASF2G72PZ-3G2R',
+    description: '16 GB DDR4-3200 RDIMM',
+    dimmType: 'ddr4-rdimm',
+    dimmGiB: 16,
+  },
+  'mem-ddr4r-32g': {
+    id: 'mem-ddr4r-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTA36ASF4G72PZ-3G2R',
+    description: '32 GB DDR4-3200 RDIMM',
+    dimmType: 'ddr4-rdimm',
+    dimmGiB: 32,
+  },
+  'mem-ddr5r-16g': {
+    id: 'mem-ddr5r-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC10F1084S1RC48BA1',
+    description: '16 GB DDR5-4800 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 16,
+  },
+  'mem-ddr5r-32g': {
+    id: 'mem-ddr5r-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC20F2085S1RC48BA1',
+    description: '32 GB DDR5-4800 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 32,
   },
 
   // --- GPUs (official metal-stack compatibility list) ---
@@ -651,6 +816,38 @@ export function gpusForServer(serverModelId: string): CatalogItem[] {
   if (!catalog[serverModelId]?.gpuCapable) return []
   return Object.values(catalog)
     .filter((i) => i.category === 'gpu')
+    .sort(byAvailability)
+}
+
+export function uplinkPortSpeed(uplink: UplinkSpeed): PortSpeed {
+  return uplink === '2x25G' ? '25G' : '100G'
+}
+
+export function nicsForUplink(uplink: UplinkSpeed): CatalogItem[] {
+  const speed = uplinkPortSpeed(uplink)
+  return Object.values(catalog)
+    .filter((item) => item.category === 'nic' && portCount(item, speed) > 0)
+    .sort(byAvailability)
+}
+
+export function defaultNicId(uplink: UplinkSpeed): string {
+  return uplink === '2x25G' ? 'nic-e810-xxvda2' : 'nic-e810-cqda2'
+}
+
+export function cpusForServer(serverModelId: string): CatalogItem[] {
+  const socket = catalog[serverModelId]?.socket
+  if (!socket) return []
+  return Object.values(catalog)
+    .filter((item) => item.category === 'cpu' && item.socket === socket)
+    .sort(byAvailability)
+}
+
+export function dimmsForServer(serverModelId: string): CatalogItem[] {
+  const socket = catalog[serverModelId]?.socket
+  if (!socket) return []
+  const dimmType = dimmTypeForSocket[socket]
+  return Object.values(catalog)
+    .filter((item) => item.category === 'memory' && item.dimmType === dimmType)
     .sort(byAvailability)
 }
 

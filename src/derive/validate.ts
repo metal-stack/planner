@@ -1,11 +1,22 @@
-import { catalog, itemLabel, portCount, type SwitchRole } from '../model/catalog'
+import {
+  catalog,
+  dimmTypeForSocket,
+  itemLabel,
+  portCount,
+  uplinkPortSpeed,
+  type DimmType,
+  type SwitchRole,
+} from '../model/catalog'
+import { configBuckets, positionListLabel } from '../model/nodeConfig'
 import {
   mgmtDeviceCount,
+  type NodeConfig,
   type Partition,
   type Plan,
   type Rack,
   type ServerGroup,
 } from '../model/plan'
+import { nodeSize, resolveNodeCompute, sizeLabel } from '../model/sizes'
 import {
   formatGbps,
   formatRatio,
@@ -215,18 +226,40 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
         `${itemLabel(group.modelId)}: metal-stack support status is alpha.`,
       )
     }
-    checkGpu(issues, scope, group)
+    // The shared configuration and every per-position deviation are checked
+    // alike; a deviating bucket's messages name its chassis positions.
+    if (!item.socket) {
+      report(
+        issues,
+        scope,
+        'warning',
+        `CPU and memory are not modeled for ${itemLabel(group.modelId)}, so the BOM has no CPU or DIMM lines for this group.`,
+      )
+    }
+    for (const bucket of configBuckets(group)) {
+      const label = positionListLabel(bucket.positions)
+      const prefix = bucket.custom ? `${label[0].toUpperCase()}${label.slice(1)}: ` : ''
+      checkGpu(issues, scope, group, bucket.config, prefix)
+      checkCompute(issues, scope, group, bucket.config, prefix)
+      checkNic(issues, scope, group, bucket.config, prefix)
+    }
   }
 }
 
 /** GPUs must exist, be GPUs, and fit the server model's per-node limit. */
-function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
-  const { gpu } = group
+function checkGpu(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const { gpu } = config
   if (!gpu) return
   const server = catalog[group.modelId]
   const item = catalog[gpu.modelId]
   if (!item || item.category !== 'gpu') {
-    report(issues, scope, 'error', `Unknown GPU model "${gpu.modelId}".`)
+    report(issues, scope, 'error', `${prefix}Unknown GPU model "${gpu.modelId}".`)
     return
   }
   const capacity = server?.gpuCapable ?? 0
@@ -235,7 +268,7 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
       issues,
       scope,
       'error',
-      `${itemLabel(group.modelId)} takes no GPUs, but ${gpu.perNode} per node are configured. ` +
+      `${prefix}${itemLabel(group.modelId)} takes no GPUs, but ${gpu.perNode} per node are configured. ` +
         `Choose a GPU-capable server model or remove the GPUs.`,
     )
     return
@@ -245,8 +278,113 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
       issues,
       scope,
       'error',
-      `${itemLabel(group.modelId)} accepts ${capacity} GPU${capacity === 1 ? '' : 's'} per node, ` +
+      `${prefix}${itemLabel(group.modelId)} accepts ${capacity} GPU${capacity === 1 ? '' : 's'} per node, ` +
         `but ${gpu.perNode} are configured.`,
+    )
+  }
+}
+
+const DIMM_TYPE_LABEL: Record<DimmType, string> = {
+  'ddr5-ecc-udimm': 'DDR5-4800 ECC UDIMM',
+  'ddr5-rdimm': 'DDR5-4800 RDIMM',
+  'ddr4-rdimm': 'DDR4-3200 RDIMM',
+}
+
+/** The selected size and any custom CPU or memory must resolve to parts
+ *  compatible with the server board. */
+function checkCompute(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const size = nodeSize(config.sizeId)
+  if (!size) {
+    report(issues, scope, 'error', `${prefix}Unknown node size "${config.sizeId}".`)
+    return
+  }
+
+  const server = catalog[group.modelId]
+  const socket = server?.socket
+  // Socketless boards get their single group-level warning in validateRack.
+  if (!socket) return
+
+  const compute = resolveNodeCompute({ modelId: group.modelId, ...config })
+  if (!size.parts[socket] && !(compute.cpuModelId && compute.dimmModelId && compute.dimmsPerNode)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${sizeLabel(size)} is not orderable for ${itemLabel(group.modelId)} (${socket}). ` +
+        `Pick another size or server model, or set a custom CPU and memory.`,
+    )
+  }
+
+  if (compute.cpuModelId) {
+    const cpu = catalog[compute.cpuModelId]
+    if (!cpu || cpu.category !== 'cpu') {
+      report(issues, scope, 'error', `${prefix}Unknown CPU model "${compute.cpuModelId}".`)
+    } else if (cpu.socket !== socket) {
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${itemLabel(cpu.id)} (${cpu.socket}) does not fit ${itemLabel(group.modelId)} (${socket}).`,
+      )
+    }
+  }
+
+  if (compute.dimmModelId) {
+    const dimm = catalog[compute.dimmModelId]
+    if (!dimm || dimm.category !== 'memory') {
+      report(issues, scope, 'error', `${prefix}Unknown DIMM model "${compute.dimmModelId}".`)
+    } else {
+      const expected = dimmTypeForSocket[socket]
+      if (dimm.dimmType !== expected) {
+        report(
+          issues,
+          scope,
+          'error',
+          `${prefix}${itemLabel(dimm.id)} is ${DIMM_TYPE_LABEL[dimm.dimmType!]}, but ` +
+            `${itemLabel(group.modelId)} takes ${DIMM_TYPE_LABEL[expected]}.`,
+        )
+      }
+    }
+  }
+
+  if (compute.dimmsPerNode && server.dimmSlots && compute.dimmsPerNode > server.dimmSlots) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
+        `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
+    )
+  }
+}
+
+/** A custom NIC must exist and provide ports at the group's uplink speed. */
+function checkNic(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  if (!config.nicModelId) return
+  const nic = catalog[config.nicModelId]
+  if (!nic || nic.category !== 'nic') {
+    report(issues, scope, 'error', `${prefix}Unknown NIC model "${config.nicModelId}".`)
+    return
+  }
+  if (portCount(nic, uplinkPortSpeed(group.uplink)) === 0) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(nic.id)} has no ${uplinkPortSpeed(group.uplink)} ports, ` +
+        `but the group's uplink is ${group.uplink}.`,
     )
   }
 }

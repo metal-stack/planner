@@ -37,6 +37,27 @@ export const GpuConfigSchema = z.object({
 })
 export type GpuConfig = z.infer<typeof GpuConfigSchema>
 
+/** Custom deviations from the group's node size. Each field overrides one
+ *  part of the size resolution; absent fields keep the size's preset part
+ *  for the server board (see model/sizes.ts). */
+export const ComputeOverrideSchema = z.object({
+  cpuModelId: z.string().optional(),
+  dimmModelId: z.string().optional(),
+  dimmsPerNode: z.number().int().min(1).optional(),
+})
+export type ComputeOverride = z.infer<typeof ComputeOverrideSchema>
+
+/** A complete node configuration, the same fields the group itself carries:
+ *  a node with an entry uses it in place of the group's, with the same
+ *  defaults for absent sub-fields (preset parts, the uplink's NIC, no GPU). */
+export const NodeConfigSchema = z.object({
+  sizeId: z.string(),
+  compute: ComputeOverrideSchema.optional(),
+  nicModelId: z.string().optional(),
+  gpu: GpuConfigSchema.optional(),
+})
+export type NodeConfig = z.infer<typeof NodeConfigSchema>
+
 export const ServerGroupSchema = z.object({
   id: z.string(),
   role: ServerRoleSchema,
@@ -46,6 +67,15 @@ export const ServerGroupSchema = z.object({
   count: z.number().int().min(0),
   uplink: UplinkSpeedSchema,
   gpu: GpuConfigSchema.optional(),
+  sizeId: z.string().default('n1-medium-x86'),
+  compute: ComputeOverrideSchema.optional(),
+  nicModelId: z.string().optional(),
+  /** Per-node deviations, keyed by the node's position within its chassis
+   *  ("0" to nodesPerChassis - 1) and applying to that position in every
+   *  chassis of the group. Positions without an entry use the group's
+   *  configuration; entries at or above the model's nodes per chassis are
+   *  ignored. */
+  nodeConfigs: z.record(z.string(), NodeConfigSchema).default({}),
 })
 export type ServerGroup = z.infer<typeof ServerGroupSchema>
 

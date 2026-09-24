@@ -6,6 +6,7 @@ import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../mod
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
 import { normalizePlan } from '../model/normalize'
+import { DEFAULT_SIZE_ID } from '../model/sizes'
 import {
   PlanSchema,
   type ExternalNetwork,
@@ -200,6 +201,8 @@ export const usePlanStore = create<PlannerState>()(
                   modelId: 'server-microcloud-h13',
                   count: 8,
                   uplink: '2x25G',
+                  sizeId: DEFAULT_SIZE_ID,
+                  nodeConfigs: {},
                 },
               ],
             })),

@@ -1,4 +1,5 @@
 import { catalog, itemLabel } from '../model/catalog'
+import { nodeConfig } from '../model/nodeConfig'
 import {
   mgmtDeviceCount,
   type FabricConfig,
@@ -88,11 +89,18 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
   const chassis: Item[] = rack.servers.flatMap((group) => {
     const count = chassisCount(group)
     const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
-    // GPUs draw on top of the chassis, per node they are fitted to.
-    const gpuWatts =
-      (group.gpu?.perNode ?? 0) * (catalog[group.gpu?.modelId ?? '']?.powerWatts ?? 0)
+    // Server powerWatts covers a typical CPU and memory configuration, so
+    // adding CPU TDP would double-count it. GPUs are genuinely additive
+    // and may differ per chassis position; a chassis holding `nodes` nodes
+    // fills its positions 0 to nodes - 1.
+    const gpuWatts = (position: number) => {
+      const gpu = nodeConfig(group, position).gpu
+      return (gpu?.perNode ?? 0) * (catalog[gpu?.modelId ?? '']?.powerWatts ?? 0)
+    }
     return repeat(count, (i) => {
       const nodes = Math.min(nodesPer, group.count - i * nodesPer)
+      let chassisGpuWatts = 0
+      for (let n = 0; n < nodes; n++) chassisGpuWatts += gpuWatts(n)
       return {
         label: part(group.modelId),
         sublabel: `${nodes} × ${group.role}`,
@@ -101,7 +109,7 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
         // Partial chassis draw proportionally less.
         powerWatts:
           Math.round(((catalog[group.modelId]?.powerWatts ?? 0) * nodes) / nodesPer) +
-          nodes * gpuWatts,
+          chassisGpuWatts,
         groupId: group.id,
         nodes,
       }

@@ -61,6 +61,8 @@ export function defaultRack(
         modelId: 'server-microcloud-h13',
         count: 8,
         uplink: '2x25G',
+        sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
       },
     ],
   }

@@ -1,5 +1,26 @@
 import { currentCatalogId } from './catalog'
-import type { Plan } from './plan'
+import type { NodeConfig, Plan } from './plan'
+
+/** Maps the catalog ids a node-level configuration carries (GPU, NIC, CPU,
+ *  DIMM) — the shape both a server group and its per-node entries share. */
+function normalizeConfig<T extends Partial<NodeConfig>>(config: T): T {
+  return {
+    ...config,
+    ...(config.gpu && { gpu: { ...config.gpu, modelId: currentCatalogId(config.gpu.modelId) } }),
+    ...(config.nicModelId && { nicModelId: currentCatalogId(config.nicModelId) }),
+    ...(config.compute && {
+      compute: {
+        ...config.compute,
+        ...(config.compute.cpuModelId && {
+          cpuModelId: currentCatalogId(config.compute.cpuModelId),
+        }),
+        ...(config.compute.dimmModelId && {
+          dimmModelId: currentCatalogId(config.compute.dimmModelId),
+        }),
+      },
+    }),
+  }
+}
 
 /** Maps legacy catalog ids in a plan (from older exports or localStorage)
  *  to their current replacements. Applied at every import boundary. */
@@ -25,8 +46,14 @@ export function normalizePlan(plan: Plan): Plan {
         ...rack,
         leafModelId: currentCatalogId(rack.leafModelId),
         servers: rack.servers.map((group) => ({
-          ...group,
+          ...normalizeConfig(group),
           modelId: currentCatalogId(group.modelId),
+          nodeConfigs: Object.fromEntries(
+            Object.entries(group.nodeConfigs).map(([node, config]) => [
+              node,
+              normalizeConfig(config),
+            ]),
+          ),
         })),
       })),
     })),
