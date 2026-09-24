@@ -47,6 +47,13 @@ export const ComputeOverrideSchema = z.object({
 })
 export type ComputeOverride = z.infer<typeof ComputeOverrideSchema>
 
+/** A drive model fitted `perNode` times to every node of a configuration. */
+export const DriveConfigSchema = z.object({
+  modelId: z.string(),
+  perNode: z.number().int().min(1),
+})
+export type DriveConfig = z.infer<typeof DriveConfigSchema>
+
 /** A complete node configuration, the same fields the group itself carries:
  *  a node with an entry uses it in place of the group's, with the same
  *  defaults for absent sub-fields (preset parts, the uplink's NIC, no GPU). */
@@ -55,6 +62,9 @@ export const NodeConfigSchema = z.object({
   compute: ComputeOverrideSchema.optional(),
   nicModelId: z.string().optional(),
   gpu: GpuConfigSchema.optional(),
+  /** Drives fitted to every node. Absent = the catalog's default pair
+   *  (one M.2 boot drive, one data drive); an empty list means none. */
+  drives: z.array(DriveConfigSchema).optional(),
 })
 export type NodeConfig = z.infer<typeof NodeConfigSchema>
 
@@ -70,6 +80,9 @@ export const ServerGroupSchema = z.object({
   sizeId: z.string().default('n1-medium-x86'),
   compute: ComputeOverrideSchema.optional(),
   nicModelId: z.string().optional(),
+  /** Drives fitted to every node. Absent = the catalog's default pair
+   *  (one M.2 boot drive, one data drive); an empty list means none. */
+  drives: z.array(DriveConfigSchema).optional(),
   /** Per-node deviations, keyed by the node's position within its chassis
    *  ("0" to nodesPerChassis - 1) and applying to that position in every
    *  chassis of the group. Positions without an entry use the group's

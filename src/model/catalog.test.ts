@@ -5,6 +5,7 @@ import {
   cpusForServer,
   defaultNicId,
   dimmsForServer,
+  driveOptions,
   gpusForServer,
   itemLabel,
   legacyIdMap,
@@ -177,12 +178,29 @@ describe('category invariants', () => {
     }
   })
 
-  it('gives every GPU a power draw and a part number', () => {
+  it('gives every drive its orderable facts', () => {
+    const drives = entries.filter(([, item]) => item.category === 'drive')
+    expect(drives.length).toBeGreaterThan(0)
+    for (const [id, item] of drives) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+    }
+  })
+
+  it('gives every GPU a power draw, a part number and a slot width', () => {
     const gpus = entries.filter(([, i]) => i.category === 'gpu')
     expect(gpus.length).toBeGreaterThan(0)
     for (const [id, item] of gpus) {
       expect(item.powerWatts, `${id}.powerWatts`).toBeGreaterThan(0)
       expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.gpuWidth, `${id}.gpuWidth`).toBeDefined()
+    }
+  })
+
+  it('gives every GPU-capable server a bay width', () => {
+    for (const [id, item] of entries) {
+      if (item.category !== 'server' || !item.gpuCapable) continue
+      expect(item.gpuWidth, `${id}.gpuWidth`).toBeDefined()
     }
   })
 
@@ -213,15 +231,15 @@ describe('reachability', () => {
       ...serversForUsage('worker'),
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
-      ...gpusForServer('server-microcloud-x13'),
+      ...gpusForServer('server-superserver-tn12'),
       ...nicsForUplink('2x25G'),
       ...nicsForUplink('2x100G'),
-      ...[
-        'server-microcloud-h13',
-        'server-microcloud-x13',
-        'server-bigtwin-x12',
-        'server-superserver-tn12',
-      ].flatMap((id) => [...cpusForServer(id), ...dimmsForServer(id)]),
+      ...driveOptions(),
+      // Every board's CPU and DIMM dropdowns, so a part reachable only
+      // through a newly annotated socket counts as offered.
+      ...Object.values(catalog)
+        .filter((item) => item.category === 'server')
+        .flatMap((server) => [...cpusForServer(server.id), ...dimmsForServer(server.id)]),
     ].map((i) => i.id),
   )
 
@@ -333,8 +351,10 @@ describe('helpers', () => {
     }
   })
 
-  it('offers GPUs only for GPU-capable servers', () => {
-    expect(gpusForServer('server-microcloud-x13').length).toBeGreaterThan(0)
+  it('offers GPUs only for GPU-capable servers, filtered by bay width', () => {
+    expect(gpusForServer('server-superserver-tn12').length).toBeGreaterThan(0)
+    // The MicroCloud bays are single-width; no cataloged GPU fits.
+    expect(gpusForServer('server-microcloud-x13')).toEqual([])
     expect(gpusForServer('server-bigtwin-x11')).toEqual([])
     expect(gpusForServer('nope')).toEqual([])
   })
@@ -350,8 +370,16 @@ describe('helpers', () => {
   })
 
   it('offers CPU and memory parts matching the server socket', () => {
-    expect(cpusForServer('server-microcloud-h13').map((item) => item.socket)).toEqual(['AM5'])
+    expect(cpusForServer('server-microcloud-h13').map((item) => item.socket)).toEqual([
+      'AM5',
+      'AM5',
+    ])
+    // The soldered X11 MicroCloud offers memory but no CPUs.
     expect(cpusForServer('server-microcloud-x11')).toEqual([])
+    expect(dimmsForServer('server-microcloud-x11').map((item) => item.dimmType)).toEqual([
+      'ddr4-rdimm',
+      'ddr4-rdimm',
+    ])
     expect(dimmsForServer('server-microcloud-h13').map((item) => item.dimmType)).toEqual([
       'ddr5-ecc-udimm',
       'ddr5-ecc-udimm',

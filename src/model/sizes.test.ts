@@ -6,11 +6,14 @@ describe('node size catalog references', () => {
   it('resolves every size to matching CPU and memory parts', () => {
     for (const size of nodeSizes) {
       for (const [socket, parts] of Object.entries(size.parts)) {
-        const cpu = catalog[parts.cpuModelId]
         const dimm = catalog[parts.dimmModelId]
-        expect(cpu?.category, `${size.id} ${socket} CPU`).toBe('cpu')
-        expect(cpu?.socket, `${size.id} ${socket} CPU socket`).toBe(socket)
-        expect(cpu?.cores, `${size.id} ${socket} CPU cores`).toBe(size.cores)
+        // Soldered platforms (X11 MicroCloud) order memory only.
+        if (parts.cpuModelId) {
+          const cpu = catalog[parts.cpuModelId]
+          expect(cpu?.category, `${size.id} ${socket} CPU`).toBe('cpu')
+          expect(cpu?.socket, `${size.id} ${socket} CPU socket`).toBe(socket)
+          expect(cpu?.cores, `${size.id} ${socket} CPU cores`).toBe(size.cores)
+        }
         expect(dimm?.category, `${size.id} ${socket} DIMM`).toBe('memory')
         expect(dimm?.dimmType, `${size.id} ${socket} DIMM type`).toBe(
           dimmTypeForSocket[socket as CpuSocket],
@@ -20,6 +23,17 @@ describe('node size catalog references', () => {
         )
       }
     }
+  })
+
+  it('orders memory without a CPU on the soldered X11 MicroCloud', () => {
+    expect(
+      resolveNodeCompute({ modelId: 'server-microcloud-x11', sizeId: 'n1-medium-x86' }),
+    ).toMatchObject({
+      cpuModelId: undefined,
+      dimmModelId: 'mem-ddr4r-16g',
+      dimmsPerNode: 2,
+      custom: false,
+    })
   })
 })
 

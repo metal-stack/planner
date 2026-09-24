@@ -8,7 +8,9 @@ import { catalog, type CpuSocket } from './catalog'
 import type { ServerGroup } from './plan'
 
 export interface SizeParts {
-  cpuModelId: string
+  /** Absent on platforms with a soldered CPU (X11 MicroCloud): the size's
+   *  core count comes with the board and only memory is ordered. */
+  cpuModelId?: string
   dimmModelId: string
   dimmsPerNode: number
 }
@@ -46,6 +48,17 @@ export const nodeSizes: NodeSize[] = [
         dimmModelId: 'mem-ddr5r-16g',
         dimmsPerNode: 2,
       },
+      'LGA-3647': {
+        cpuModelId: 'cpu-xeon-4215r',
+        dimmModelId: 'mem-ddr4r-16g',
+        dimmsPerNode: 2,
+      },
+      'LGA-4710': {
+        cpuModelId: 'cpu-xeon-6714p',
+        dimmModelId: 'mem-ddr5r-16g',
+        dimmsPerNode: 2,
+      },
+      'D-2100': { dimmModelId: 'mem-ddr4r-16g', dimmsPerNode: 2 },
     },
   },
   {
@@ -69,6 +82,17 @@ export const nodeSizes: NodeSize[] = [
         dimmModelId: 'mem-ddr5r-32g',
         dimmsPerNode: 4,
       },
+      'LGA-3647': {
+        cpuModelId: 'cpu-xeon-4215r',
+        dimmModelId: 'mem-ddr4r-32g',
+        dimmsPerNode: 4,
+      },
+      'LGA-4710': {
+        cpuModelId: 'cpu-xeon-6714p',
+        dimmModelId: 'mem-ddr5r-32g',
+        dimmsPerNode: 4,
+      },
+      'D-2100': { dimmModelId: 'mem-ddr4r-32g', dimmsPerNode: 4 },
     },
   },
   {
@@ -83,6 +107,16 @@ export const nodeSizes: NodeSize[] = [
       },
       'LGA-4677': {
         cpuModelId: 'cpu-xeon-6442y',
+        dimmModelId: 'mem-ddr5r-32g',
+        dimmsPerNode: 6,
+      },
+      'LGA-3647': {
+        cpuModelId: 'cpu-xeon-6252',
+        dimmModelId: 'mem-ddr4r-32g',
+        dimmsPerNode: 6,
+      },
+      'LGA-4710': {
+        cpuModelId: 'cpu-xeon-6527p',
         dimmModelId: 'mem-ddr5r-32g',
         dimmsPerNode: 6,
       },

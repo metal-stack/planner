@@ -1,5 +1,6 @@
 import {
   catalog,
+  defaultDrives,
   defaultNicId,
   itemLabel,
   nosLabel,
@@ -270,6 +271,16 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     }
 
     bom.add(config.nicModelId ?? defaultNicId(group.uplink), count, `${who} × 1 NIC`)
+
+    // Drives per node: the configuration's list, or the default pair; an
+    // explicitly empty list orders none.
+    for (const drive of config.drives ?? defaultDrives) {
+      bom.add(
+        drive.modelId,
+        count * drive.perNode,
+        `${who} × ${drive.perNode} drive${drive.perNode === 1 ? '' : 's'}`,
+      )
+    }
   }
 
   // Cabling remains keyed on uplink speed, independent of the NIC model.

@@ -17,6 +17,7 @@ export function groupConfig(group: ServerGroup): NodeConfig {
     ...(group.compute && { compute: group.compute }),
     ...(group.nicModelId && { nicModelId: group.nicModelId }),
     ...(group.gpu && { gpu: group.gpu }),
+    ...(group.drives && { drives: group.drives }),
   }
 }
 

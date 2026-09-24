@@ -123,9 +123,9 @@ describe('node compute and NIC configuration', () => {
 
   it('warns when CPU and memory are not modeled for a board', () => {
     const plan = basePlan()
-    group(plan).modelId = 'server-microcloud-x11'
+    group(plan).modelId = 'server-superserver-tn20'
     expect(validatePlan(plan).map((issue) => issue.message)).toContain(
-      'CPU and memory are not modeled for SYS-5039MD8-H8TNR, so the BOM has no CPU or DIMM lines for this group.',
+      'CPU and memory are not modeled for SYS-2029UZ-TN20R25M, so the BOM has no CPU or DIMM lines for this group.',
     )
   })
 
@@ -145,7 +145,7 @@ describe('node compute and NIC configuration', () => {
     const plan = basePlan()
     group(plan).compute = { dimmModelId: 'mem-ddr4r-32g' }
     expect(errors(plan)).toContain(
-      'MTA36ASF4G72PZ-3G2R is DDR4-3200 RDIMM, but AS-3015MR-H8TNR takes DDR5-4800 ECC UDIMM.',
+      'MTA36ASF4G72PZ-3G2R is DDR4 RDIMM, but AS-3015MR-H8TNR takes DDR5 ECC UDIMM.',
     )
   })
 
@@ -155,6 +155,52 @@ describe('node compute and NIC configuration', () => {
     expect(errors(plan)).toContain(
       'AS-3015MR-H8TNR has 4 DIMM slots per node, but 6 DIMMs per node are configured.',
     )
+  })
+
+  it('accepts the integration environment configurations', () => {
+    // Headline configurations from the integration environment proposal:
+    // memory-only X11 MicroCloud, c1-large on 8× 24 GB RDIMMs and the
+    // CloudDC box with two H100s per node.
+    const plan = basePlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.servers = [
+      {
+        id: 'x11',
+        role: 'worker',
+        modelId: 'server-microcloud-x11',
+        count: 8,
+        uplink: '2x25G',
+        sizeId: 'c1-medium-x86',
+        nodeConfigs: {},
+      },
+      {
+        id: 'tn12-24g',
+        role: 'worker',
+        modelId: 'server-superserver-tn12',
+        count: 1,
+        uplink: '2x25G',
+        sizeId: 'c1-large-x86',
+        compute: { dimmModelId: 'mem-ddr5r-24g', dimmsPerNode: 8 },
+        nodeConfigs: {},
+      },
+      {
+        id: 'g1-large',
+        role: 'worker',
+        modelId: 'server-superserver-tn12',
+        count: 1,
+        uplink: '2x25G',
+        sizeId: 'c1-large-x86',
+        gpu: { modelId: 'gpu-h100-pcie', perNode: 2 },
+        nodeConfigs: {},
+      },
+    ]
+    expect(errors(plan)).toEqual([])
+  })
+
+  it('rejects an unknown drive override', () => {
+    const plan = basePlan()
+    group(plan).drives = [{ modelId: 'drive-foo', perNode: 1 }]
+    expect(errors(plan)).toContain('Unknown drive model "drive-foo".')
   })
 
   it('rejects an unknown NIC override', () => {
@@ -355,15 +401,22 @@ describe('validatePlan GPUs and vendor availability', () => {
   }
 
   it('accepts a GPU within the per-node limit', () => {
-    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 1, 'server-microcloud-x13'))
+    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 1, 'server-superserver-tn12'))
     expect(issues.filter((i) => i.message.includes('GPU'))).toEqual([])
   })
 
-  it('rejects more GPUs than a node accepts', () => {
-    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 2, 'server-microcloud-x13'))
-    expect(issues.some((i) => i.severity === 'error' && i.message.includes('1 GPU per node'))).toBe(
-      true,
+  it('rejects a GPU too wide for the node', () => {
+    const issues = validatePlan(planWithGpu('gpu-h100-pcie', 1, 'server-microcloud-x13'))
+    expect(issues.map((i) => i.message)).toContain(
+      'H100 PCIe is a double-width GPU, but SYS-531MC-H8TNR takes single-width cards.',
     )
+  })
+
+  it('rejects more GPUs than a node accepts', () => {
+    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 3, 'server-superserver-tn12'))
+    expect(
+      issues.some((i) => i.severity === 'error' && i.message.includes('2 GPUs per node')),
+    ).toBe(true)
   })
 
   it('rejects GPUs on a server model that takes none', () => {

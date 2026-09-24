@@ -144,6 +144,7 @@ export const CATEGORY_ICON: Record<CatalogCategory | 'spare', LucideIcon> = {
   gpu: Gpu,
   cpu: Cpu,
   memory: MemoryStick,
+  drive: HardDrive,
   transceiver: EthernetPort,
   cable: Cable,
   license: KeyRound,

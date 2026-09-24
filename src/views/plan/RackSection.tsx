@@ -1,8 +1,10 @@
 import {
   catalog,
   cpusForServer,
+  defaultDrives,
   defaultNicId,
   dimmsForServer,
+  driveOptions,
   gpusForServer,
   itemLabel,
   nicsForUplink,
@@ -11,7 +13,7 @@ import {
 } from '../../model/catalog'
 import { useState } from 'react'
 import { chassisPositions, groupConfig, nodeConfig } from '../../model/nodeConfig'
-import type { NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
+import type { DriveConfig, NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
 import { nodeSizes, resolveNodeCompute } from '../../model/sizes'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
@@ -108,6 +110,15 @@ function ServerGroupRow({
     .map(Number)
     .filter((i) => i >= 0 && i < positions)
 
+  // Keep a GPU that no longer fits the model visible so the user can see
+  // and fix it (validation explains the width mismatch).
+  if (shown.gpu && !gpuOptions.some((o) => o.value === shown.gpu?.modelId)) {
+    gpuOptions.push({
+      value: shown.gpu.modelId,
+      label: `${itemLabel(shown.gpu.modelId)} (incompatible)`,
+    })
+  }
+
   const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
   const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
   // The preset's own parts, for naming what "Preset default" resolves to.
@@ -182,13 +193,29 @@ function ServerGroupRow({
       compute: shown.compute,
       nicModelId: shown.nicModelId,
       gpu: shown.gpu,
+      drives: shown.drives,
       nodeConfigs: {},
     })
     setSelectedNode(null)
   }
+  // Drives are a free list per configuration; a list matching the default
+  // pair is stored as "unset" so the configuration keeps following the
+  // default.
+  const shownDrives = shown.drives ?? defaultDrives
+  const patchDrives = (next: DriveConfig[]) => {
+    patchShown({
+      drives: JSON.stringify(next) === JSON.stringify(defaultDrives) ? undefined : next,
+    })
+  }
 
   return (
-    <div className="mt-3 rounded-md border border-brand-soft bg-brand-tint p-3">
+    // Storage groups carry the racks view's storage color (sky), workers
+    // the brand tint.
+    <div
+      className={`mt-3 rounded-md border p-3 ${
+        group.role === 'storage' ? 'border-sky-300 bg-sky-100' : 'border-brand-soft bg-brand-tint'
+      }`}
+    >
       <div className="grid grid-cols-2 items-end gap-3 md:grid-cols-6">
         <SelectField
           label="Role"
@@ -327,22 +354,27 @@ function ServerGroupRow({
             options={sizeOptions}
             onChange={(v) => patchShown({ sizeId: v, compute: undefined })}
           />
-          {cpuOptions.length > 0 && (
+          {/* Boards with a soldered CPU (X11 MicroCloud) configure memory
+              only, so the CPU select needs offerable CPUs but the memory
+              fields just a DIMM type. */}
+          {(cpuOptions.length > 0 || dimmOptions.length > 0) && (
             <>
-              <SelectField
-                label="CPU"
-                value={shown.compute?.cpuModelId ?? ''}
-                options={[
-                  {
-                    value: '',
-                    label: presetParts.cpuModelId
-                      ? `${itemLabel(presetParts.cpuModelId)} (preset)`
-                      : 'Preset default',
-                  },
-                  ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
-                ]}
-                onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
-              />
+              {cpuOptions.length > 0 && (
+                <SelectField
+                  label="CPU"
+                  value={shown.compute?.cpuModelId ?? ''}
+                  options={[
+                    {
+                      value: '',
+                      label: presetParts.cpuModelId
+                        ? `${itemLabel(presetParts.cpuModelId)} (preset)`
+                        : 'Preset default',
+                    },
+                    ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
+                  ]}
+                  onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
+                />
+              )}
               <SelectField
                 label="DIMM model"
                 value={shown.compute?.dimmModelId ?? ''}
@@ -392,6 +424,71 @@ function ServerGroupRow({
               }
             />
           )}
+          {shown.gpu && (catalog[group.modelId]?.gpuCapable ?? 0) > 1 && (
+            <NumberField
+              label="GPUs per node"
+              value={shown.gpu.perNode}
+              min={1}
+              onChange={(v) =>
+                shown.gpu && patchShown({ gpu: { modelId: shown.gpu.modelId, perNode: v || 1 } })
+              }
+            />
+          )}
+        </div>
+        <div className="mt-3">
+          <span className="text-sm font-semibold text-gray-700">
+            Drives <span className="font-normal text-gray-500">· fitted to every node</span>
+          </span>
+          <div className="mt-2 space-y-2">
+            {shownDrives.map((drive, i) => (
+              <div key={i} className="flex items-end gap-1.5">
+                <div className="w-44">
+                  <SelectField
+                    label={`Drive ${i + 1}`}
+                    value={drive.modelId}
+                    options={driveOptions().map((item) => ({
+                      value: item.id,
+                      // Model names collide across capacities (7450 PRO),
+                      // so drives list their spec instead.
+                      label: item.description,
+                    }))}
+                    onChange={(v) =>
+                      patchDrives(shownDrives.map((d, n) => (n === i ? { ...d, modelId: v } : d)))
+                    }
+                  />
+                </div>
+                <div className="w-24">
+                  <NumberField
+                    label="Per node"
+                    value={drive.perNode}
+                    min={1}
+                    onChange={(v) =>
+                      patchDrives(
+                        shownDrives.map((d, n) => (n === i ? { ...d, perNode: v || 1 } : d)),
+                      )
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => patchDrives(shownDrives.filter((_, n) => n !== i))}
+                  aria-label={`Remove drive ${i + 1}`}
+                  className="mb-2 text-gray-400 hover:text-red-700"
+                >
+                  <Icon icon={ACTION_ICON.remove} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              patchDrives([...shownDrives, { modelId: driveOptions()[0]?.id ?? '', perNode: 1 }])
+            }
+            className="btn-secondary mt-2"
+          >
+            Add drive
+          </button>
         </div>
       </details>
     </div>

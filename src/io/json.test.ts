@@ -53,6 +53,7 @@ describe('plan JSON round-trip', () => {
     plan.partitions[0].racks[0].servers[0].nodeConfigs = {
       1: { sizeId: 'c1-medium-x86', nicModelId: 'nic-connectx5' },
       3: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+      5: { sizeId: 'n1-medium-x86', drives: [{ modelId: 'drive-nvme-960', perNode: 2 }] },
     }
     expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
   })
