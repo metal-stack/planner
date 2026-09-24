@@ -115,8 +115,14 @@ describe('deriveBom node size rules', () => {
     expect(line?.reasons[0].detail).toBe('4 worker nodes × 4 DIMMs (n1-medium-x86, customized)')
   })
 
-  it('does not add CPU or DIMM lines for a socketless board', () => {
+  it('adds DIMM but no CPU lines for the soldered X11 MicroCloud', () => {
     const plan = planWithWorkers(8, '2x25G')
+    expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
+    expect(quantity(plan, 'mem-ddr4r-16g')).toBe(16)
+  })
+
+  it('does not add CPU or DIMM lines for a socketless board', () => {
+    const plan = planWithServer('server-superserver-tn20', 2)
     expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
     expect(deriveBom(plan).some((line) => line.category === 'memory')).toBe(false)
   })
@@ -459,6 +465,28 @@ describe('deriveBom per-position node configurations', () => {
         (r) => r.detail === '2 worker nodes at chassis position 3 × 4 DIMMs (c1-medium-x86)',
       ),
     ).toBe(true)
+  })
+
+  it('orders one boot and one data drive per node by default', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    expect(quantity(plan, 'drive-m2-480')).toBe(8)
+    expect(quantity(plan, 'drive-nvme-960')).toBe(8)
+  })
+
+  it('orders the drive list a configuration chooses, counts per node', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    plan.partitions[0].racks[0].servers[0].drives = [
+      { modelId: 'drive-m2-480', perNode: 1 },
+      { modelId: 'drive-nvme-960', perNode: 3 },
+    ]
+    expect(quantity(plan, 'drive-m2-480')).toBe(8)
+    expect(quantity(plan, 'drive-nvme-960')).toBe(24)
+  })
+
+  it('orders no drives for an explicitly empty list', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    plan.partitions[0].racks[0].servers[0].drives = []
+    expect(deriveBom(plan).some((line) => line.category === 'drive')).toBe(false)
   })
 
   it('fits per-position GPUs in every chassis', () => {

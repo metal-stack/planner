@@ -1,6 +1,7 @@
 import {
   catalog,
   dimmTypeForSocket,
+  gpuFits,
   itemLabel,
   portCount,
   uplinkPortSpeed,
@@ -244,6 +245,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
       checkGpu(issues, scope, group, bucket.config, prefix)
       checkCompute(issues, scope, group, bucket.config, prefix)
       checkNic(issues, scope, group, bucket.config, prefix)
+      checkDrives(issues, scope, bucket.config, prefix)
     }
   }
 }
@@ -275,6 +277,15 @@ function checkGpu(
     )
     return
   }
+  if (server && !gpuFits(item, server)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(item.id)} is a ${item.gpuWidth}-width GPU, but ` +
+        `${itemLabel(group.modelId)} takes ${server.gpuWidth}-width cards.`,
+    )
+  }
   if (gpu.perNode > capacity) {
     report(
       issues,
@@ -286,10 +297,12 @@ function checkGpu(
   }
 }
 
+// Speedless on purpose: DIMM speeds within a type interchange, so the type
+// is the compatibility boundary (see dimmTypeForSocket).
 const DIMM_TYPE_LABEL: Record<DimmType, string> = {
-  'ddr5-ecc-udimm': 'DDR5-4800 ECC UDIMM',
-  'ddr5-rdimm': 'DDR5-4800 RDIMM',
-  'ddr4-rdimm': 'DDR4-3200 RDIMM',
+  'ddr5-ecc-udimm': 'DDR5 ECC UDIMM',
+  'ddr5-rdimm': 'DDR5 RDIMM',
+  'ddr4-rdimm': 'DDR4 RDIMM',
 }
 
 /** The selected size and any custom CPU or memory must resolve to parts
@@ -363,6 +376,16 @@ function checkCompute(
       `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
         `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
     )
+  }
+}
+
+/** Every configured drive must exist and be a drive. */
+function checkDrives(issues: Issue[], scope: Scope, config: NodeConfig, prefix: string): void {
+  for (const { modelId } of config.drives ?? []) {
+    const drive = catalog[modelId]
+    if (!drive || drive.category !== 'drive') {
+      report(issues, scope, 'error', `${prefix}Unknown drive model "${modelId}".`)
+    }
   }
 }
 
