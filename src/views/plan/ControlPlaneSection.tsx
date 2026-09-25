@@ -28,7 +28,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
 
   const summary = onPrem
     ? `${cp.nodeCount} × ${itemLabel(cp.nodeModelId)} · ${footprint.units} U, ${formatPower(footprint.watts)}`
-    : cp.name
+    : 'managed Kubernetes'
 
   return (
     <section
@@ -40,7 +40,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <Icon icon={SECTION_ICON.controlPlane} className="h-4 w-4 text-gray-500" />
-          Control plane
+          Control plane for metal-stack.io installation
           <InfoBubble
             label="the control plane"
             info={{
@@ -71,17 +71,6 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
           ]}
           onChange={(v) => patch({ hosting: v as ControlPlane['hosting'] })}
         />
-        {!onPrem && (
-          <label className="block text-sm">
-            <span className="mb-1 block text-gray-600">Cluster name</span>
-            <input
-              type="text"
-              value={cp.name}
-              onChange={(e) => patch({ name: e.target.value })}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5"
-            />
-          </label>
-        )}
         {onPrem && (
           <>
             <SelectField

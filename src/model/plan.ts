@@ -186,8 +186,6 @@ export type ControlPlaneRack = z.infer<typeof ControlPlaneRackSchema>
 
 export const ControlPlaneSchema = z.object({
   hosting: ControlPlaneHostingSchema.default('kaas'),
-  /** What the cluster is called in the plan; labels the KaaS node. */
-  name: z.string().default('Managed Kubernetes'),
   /** Nodes of the Kubernetes cluster (on-prem); three for etcd quorum. */
   nodeCount: z.number().int().min(0).default(3),
   nodeModelId: z.string().default('server-mgmt-121h'),

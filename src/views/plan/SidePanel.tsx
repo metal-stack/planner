@@ -109,7 +109,7 @@ export default function SidePanel({ plan, issues }: { plan: Plan; issues: Issue[
         <p className="mb-2 text-sm text-gray-600">
           Control plane:{' '}
           {plan.controlPlane.hosting === 'kaas'
-            ? plan.controlPlane.name
+            ? 'managed Kubernetes'
             : `${plural(plan.controlPlane.nodeCount, 'node')} on-prem, ${
                 plan.controlPlane.placement === 'own-rack' ? 'own rack' : 'central rack'
               }`}

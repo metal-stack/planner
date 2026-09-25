@@ -126,6 +126,10 @@ export default function PlanView() {
           </div>
         </div>
 
+        {/* The control plane is plan-level: one cluster serves every
+            partition, so it is stated once before the partitions. */}
+        <ControlPlaneSection plan={plan} issues={issues} />
+
         {plan.partitions.map((partition) => (
           <section key={partition.id} className="space-y-4">
             <div className="flex flex-wrap items-end gap-3 border-b border-gray-200 pb-2">
@@ -200,7 +204,6 @@ export default function PlanView() {
           Add partition
         </button>
 
-        <ControlPlaneSection plan={plan} issues={issues} />
         <ExternalNetworksSection plan={plan} />
       </div>
 

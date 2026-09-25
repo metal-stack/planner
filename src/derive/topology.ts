@@ -320,19 +320,21 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
  *  does, because that is the connection the partitions need to it. On-prem
  *  nodes are hardware: in the central rack they attach to the exits, in a
  *  rack of their own they sit behind that rack's leaves. */
+const MANAGED_SUBLABEL = 'managed Kubernetes'
+
 function addControlPlane(plan: Plan, partitions: TopoPartition[], links: TopoLink[]): void {
   const cp = plan.controlPlane
   const label = 'Control plane'
 
   if (cp.hosting === 'kaas') {
     for (const partition of partitions) {
-      // Titled by what it is, like every other node; the cluster's name is
-      // the subtitle, where the on-prem node box carries its hardware.
+      // Titled by what it is, like every other node; the subtitle says how
+      // it is hosted, where the on-prem node box carries its hardware.
       const node: TopoNode = {
         id: `cp/${partition.id}`,
         kind: 'control-plane',
         label,
-        sublabel: cp.name,
+        sublabel: MANAGED_SUBLABEL,
       }
       partition.controlPlane = { node, managed: true }
       const attach =
