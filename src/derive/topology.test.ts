@@ -214,6 +214,9 @@ describe('control plane in the topology', () => {
       const cp = partition.controlPlane!
       expect(cp.managed).toBe(true)
       expect(cp.node.kind).toBe('control-plane')
+      // Titled by what it is; the cluster's name is the subtitle.
+      expect(cp.node.label).toBe('Control plane')
+      expect(cp.node.sublabel).toBe('Managed Kubernetes')
       const targets = graph.links.filter((l) => l.from === cp.node.id).map((l) => l.to)
       expect(targets.sort()).toEqual(partition.central.routers.map((n) => n.id).sort())
     }

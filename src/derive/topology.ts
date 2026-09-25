@@ -326,11 +326,13 @@ function addControlPlane(plan: Plan, partitions: TopoPartition[], links: TopoLin
 
   if (cp.hosting === 'kaas') {
     for (const partition of partitions) {
+      // Titled by what it is, like every other node; the cluster's name is
+      // the subtitle, where the on-prem node box carries its hardware.
       const node: TopoNode = {
         id: `cp/${partition.id}`,
         kind: 'control-plane',
-        label: cp.name,
-        sublabel: 'managed Kubernetes',
+        label,
+        sublabel: cp.name,
       }
       partition.controlPlane = { node, managed: true }
       const attach =
