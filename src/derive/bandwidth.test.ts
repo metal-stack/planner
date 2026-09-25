@@ -48,8 +48,8 @@ describe('rackBandwidth', () => {
     expect(rackBandwidth(partition.racks[0], partition).ratio).toBeNull()
   })
 
-  it('reports the oversubscription of the Redundant template', () => {
-    const plan = templates.find((t) => t.id === 'redundant')!.build()
+  it('reports the oversubscription of the Production template', () => {
+    const plan = templates.find((t) => t.id === 'production')!.build()
     const partition = plan.partitions[0]
     // 112 workers + 3 storage nodes x 50 Gbit/s = 5750 against 400
     const b = rackBandwidth(partition.racks[0], partition)

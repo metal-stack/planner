@@ -142,7 +142,6 @@ export function createEmptyPlan(): Plan {
     name: 'New metal-stack plan',
     createdAt: now,
     updatedAt: now,
-    topology: 'single-zone',
     partitions: [defaultPartition('Partition 1')],
     sparesPerLine: 2,
     ipPlan: defaultIpPlan(),

@@ -19,16 +19,16 @@ describe('templates', () => {
     expect(t.build().partitions[0].id).not.toBe(t.build().partitions[0].id)
   })
 
-  it('starter: one partition, non-redundant mgmt, 8 workers on two leaves', () => {
-    const plan = templates.find((t) => t.id === 'starter')!.build()
+  it('poc: one partition, non-redundant mgmt, 8 workers on two leaves', () => {
+    const plan = templates.find((t) => t.id === 'poc')!.build()
     expect(plan.partitions).toHaveLength(1)
     expect(plan.partitions[0].fabric.mgmt.redundant).toBe(false)
     expect(plan.partitions[0].racks[0].leafCount).toBe(2)
     expect(planNodes(plan)).toEqual({ total: 8, byRole: { worker: 8 } })
   })
 
-  it('redundant: two rack groups with workers and three storage servers', () => {
-    const plan = templates.find((t) => t.id === 'redundant')!.build()
+  it('production: two rack groups with workers and three storage servers', () => {
+    const plan = templates.find((t) => t.id === 'production')!.build()
     const [partition] = plan.partitions
     expect(partition.fabric.mgmt.redundant).toBe(true)
     expect(partition.racks.map((r) => r.kind)).toEqual(['rack-group', 'rack-group'])
@@ -43,9 +43,8 @@ describe('templates', () => {
     expect(planNodes(plan).byRole.storage).toBe(3)
   })
 
-  it('three partitions: multisite with three redundant partitions', () => {
+  it('three partitions: three partitions like the Production template', () => {
     const plan = templates.find((t) => t.id === 'three-partitions')!.build()
-    expect(plan.topology).toBe('multisite')
     expect(plan.partitions).toHaveLength(3)
     expect(plan.partitions.every((p) => p.racks.length === 2)).toBe(true)
     expect(planNodes(plan).byRole.storage).toBe(9)

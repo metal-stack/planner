@@ -83,7 +83,7 @@ consistent — you edit the plan, everything else follows from it.
 
 ## Screenshots
 
-The screenshots show the **Redundant** template: one partition with a redundant management
+The screenshots show the **Production** template: one partition with a redundant management
 network, two rack groups with 112 workers each and three storage servers.
 
 ### Plan editor with live side panel
@@ -150,9 +150,9 @@ default plan. Use **Export JSON** to save a plan file and **Import JSON** to loa
 
 | Template         | Contents                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| Starter          | One partition, non-redundant management network, one rack with 8 workers on a leaf pair.                  |
-| Redundant        | One partition, redundant management network, two rack groups with 112 workers each and 3 storage servers. |
-| Three partitions | Multisite topology with three partitions, each like _Redundant_.                                          |
+| PoC              | One partition, non-redundant management network, one rack with 8 workers on a leaf pair.                  |
+| Production       | One partition, redundant management network, two rack groups with 112 workers each and 3 storage servers. |
+| Three partitions | Three partitions, each like _Production_.                                                                 |
 
 ## How it works
 

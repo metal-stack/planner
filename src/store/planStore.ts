@@ -16,7 +16,6 @@ import {
   type ServerGroup,
   type ControlPlane,
   type ControlPlaneRack,
-  type TopologyVariant,
 } from '../model/plan'
 
 export type View = 'plan' | 'topology' | 'racks' | 'ips' | 'bom'
@@ -26,7 +25,6 @@ interface PlannerState {
   activeView: View
   setActiveView: (view: View) => void
   setPlanName: (name: string) => void
-  setTopology: (topology: TopologyVariant) => void
   setSparesPerLine: (sparesPerLine: number) => void
   patchControlPlane: (patch: Partial<ControlPlane>) => void
   patchControlPlaneRack: (patch: Partial<ControlPlaneRack>) => void
@@ -91,7 +89,6 @@ export const usePlanStore = create<PlannerState>()(
         activeView: 'plan',
         setActiveView: (activeView) => set({ activeView }),
         setPlanName: (name) => set((s) => ({ plan: touched(s.plan, { name }) })),
-        setTopology: (topology) => set((s) => ({ plan: touched(s.plan, { topology }) })),
         setSparesPerLine: (sparesPerLine) =>
           set((s) => ({ plan: touched(s.plan, { sparesPerLine }) })),
         patchIpFamily: (family, patch) =>

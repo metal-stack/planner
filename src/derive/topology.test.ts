@@ -70,7 +70,7 @@ describe('deriveTopology', () => {
     expect(spineSuper).toHaveLength(4) // 2 spines x 2 superspines
   })
 
-  it('attaches external networks at the routers, or the exits without routers', () => {
+  it('attaches the internet network at the routers, or the exits without routers', () => {
     const graph = deriveTopology(createEmptyPlan())
     const partition = graph.partitions[0]
     expect(partition.externalNetworks).toHaveLength(1)
@@ -108,6 +108,43 @@ describe('deriveTopology', () => {
     expect(partition.storageLeaves).toHaveLength(2)
     const links = graph.links.filter((l) => partition.storageLeaves.some((n) => n.id === l.from))
     expect(links).toHaveLength(4) // 2 storage leaves x 2 spines
+  })
+
+  it('attaches a storage network at the storage leaves, or the exits without them', () => {
+    const plan = createEmptyPlan()
+    plan.externalNetworks = [
+      { id: 'storage-net', name: 'Ceph', kind: 'storage', attachedPartitionId: '' },
+    ]
+    const storageTargets = (p: Plan) => {
+      const graph = deriveTopology(p)
+      const partition = graph.partitions[0]
+      const net = partition.externalNetworks[0]
+      return {
+        graph,
+        partition,
+        net,
+        targets: graph.links.filter((l) => l.from === net.id).map((l) => l.to),
+      }
+    }
+
+    // Without storage leaves the storage network lands on the exits, not on
+    // the internet routers.
+    const noLeaves = storageTargets(plan)
+    expect(noLeaves.partition.central.routers).toHaveLength(2)
+    expect(noLeaves.targets.sort()).toEqual(
+      noLeaves.partition.central.exits.map((n) => n.id).sort(),
+    )
+
+    plan.partitions[0].fabric.storageLeafCount = 2
+    const withLeaves = storageTargets(plan)
+    expect(withLeaves.targets.sort()).toEqual(
+      withLeaves.partition.storageLeaves.map((n) => n.id).sort(),
+    )
+
+    // Central mode drops the storage leaves, so the capsule goes with them.
+    const central = filterTopology(withLeaves.graph, 'central')
+    expect(central.partitions[0].externalNetworks).toHaveLength(0)
+    expect(central.links.some((l) => l.from === withLeaves.net.id)).toBe(false)
   })
 
   it('draws a rack group as three physical racks sharing the middle switches', () => {

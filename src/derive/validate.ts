@@ -512,14 +512,6 @@ export function validatePlan(plan: Plan): Issue[] {
     }
   }
 
-  if (plan.topology !== 'single-zone' && plan.partitions.length < 2) {
-    report(
-      issues,
-      { where: 'Plan', target: {} },
-      'warning',
-      `Topology is ${plan.topology} but the plan has only ${plan.partitions.length} partition(s).`,
-    )
-  }
   checkAvailability(issues, plan)
   issues.push(...validateIpPlan(plan))
   return issues

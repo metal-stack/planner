@@ -13,8 +13,9 @@ const kindLabels: Record<ExternalNetwork['kind'], string> = {
 }
 
 /** External attachment points (internet, company networks, storage
- *  backends). They attach at the exit switches of one partition, or of
- *  every partition when none is chosen. */
+ *  backends). They attach in one partition, or in every partition when
+ *  none is chosen: storage networks at its storage leaves (at its exit
+ *  switches when it has none), everything else at its internet routers. */
 export default function ExternalNetworksSection({ plan }: { plan: Plan }) {
   const add = usePlanStore((s) => s.addExternalNetwork)
   const patch = usePlanStore((s) => s.patchExternalNetwork)
@@ -34,11 +35,13 @@ export default function ExternalNetworksSection({ plan }: { plan: Plan }) {
             className="mr-1.5 inline h-4 w-4 align-[-3px] text-gray-500"
           />
           External networks{' '}
-          <span className="font-normal text-gray-500">· attach at the exit switches</span>
+          <span className="font-normal text-gray-500">
+            · attach at the routers, exits or storage leaves
+          </span>
           <InfoBubble
             label="external networks"
             info={{
-              text: 'Networks outside the fabric: the internet uplink, company networks, storage backends. They enter through the internet routers and exit switches of one partition, or of every partition when none is chosen.',
+              text: 'Networks outside the fabric: the internet uplink, company networks, storage backends. They enter one partition, or every partition when none is chosen. Internet and company networks come in through the internet routers (through the exit switches when the partition has no routers); a storage network attaches to the storage leaves, or to the exit switches when the partition has none.',
               href: DOCS.networking,
             }}
           />
