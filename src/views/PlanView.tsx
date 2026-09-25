@@ -6,6 +6,7 @@ import { downloadText } from '../io/download'
 import { TopologyVariantSchema, type TopologyVariant } from '../model/plan'
 import { usePlanStore } from '../store/planStore'
 import { useToastStore } from '../store/toastStore'
+import ControlPlaneSection from './plan/ControlPlaneSection'
 import ExternalNetworksSection from './plan/ExternalNetworksSection'
 import CentralRackSection from './plan/CentralRackSection'
 import RackSection from './plan/RackSection'
@@ -199,6 +200,7 @@ export default function PlanView() {
           Add partition
         </button>
 
+        <ControlPlaneSection plan={plan} issues={issues} />
         <ExternalNetworksSection plan={plan} />
       </div>
 

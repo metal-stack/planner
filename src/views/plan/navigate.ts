@@ -1,3 +1,4 @@
+import { CONTROL_PLANE_RACK_ID } from '../../derive/topology'
 import type { IssueTarget } from '../../derive/validate'
 import { usePlanStore } from '../../store/planStore'
 
@@ -6,6 +7,7 @@ import { usePlanStore } from '../../store/planStore'
 // scroll there and flash it.
 
 export const fabricAnchor = (partitionId: string) => `fabric-${partitionId}`
+export const CONTROL_PLANE_ANCHOR = 'control-plane'
 export const rackAnchor = (rackId: string) => `rack-${rackId}`
 
 /** Anchor of an IPs-tab field ("ipv4.shootPodCidr" → "ip-ipv4-shootPodCidr"). */
@@ -13,6 +15,10 @@ export const ipFieldAnchor = (field: string) => `ip-${field.replace(/\./g, '-')}
 
 export function anchorFor(target: IssueTarget): string | undefined {
   if (target.section === 'ips') return ipFieldAnchor(target.field ?? 'top')
+  if (target.section === 'control-plane') return CONTROL_PLANE_ANCHOR
+  // The control-plane rack is not a plan rack: its box in the diagram
+  // points at the control plane section.
+  if (target.rackId === CONTROL_PLANE_RACK_ID) return CONTROL_PLANE_ANCHOR
   if (target.rackId) return rackAnchor(target.rackId)
   if (target.partitionId) return fabricAnchor(target.partitionId)
   return undefined

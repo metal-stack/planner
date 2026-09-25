@@ -93,6 +93,7 @@ export const SECTION_ICON = {
   mgmtNetwork: Cable,
   rack: Rack,
   rackGroup: RackGroup,
+  controlPlane: Container,
   externalNetworks: Globe,
   internet: Globe,
   projectNetworks: Layers,
@@ -120,6 +121,7 @@ export const NODE_ICON: Record<TopoNodeKind, LucideIcon> = {
   'mgmt-leaf': NetworkSwitch,
   'mgmt-server': ServerCog,
   'server-group': Server,
+  'control-plane': Container,
   'external-network': Globe,
 }
 
@@ -147,6 +149,7 @@ export const SLOT_ICON: Record<SlotKind, LucideIcon> = {
   mgmt: ServerCog,
   server: Server,
   storage: HardDrive,
+  'control-plane': Container,
 }
 
 /** A decorative icon at text size (16 px by default). */

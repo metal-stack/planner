@@ -198,28 +198,33 @@ function layoutPartition(
   // superspines/exits, then spines) and management (mgmt servers over mgmt
   // spines, aligned to the bottom rows).
   const hasRouters = central.routers.length > 0
+  // On-prem control-plane nodes in the central rack share the top row with
+  // the routers; a managed cluster is a capsule above the rack instead.
+  const cpBox = partition.controlPlane?.managed ? undefined : partition.controlPlane?.node
+  const row0 = [...central.routers, ...(cpBox ? [cpBox] : [])]
   const prodRow1W = rowWidth(central.superspines.length) + rowWidth(central.exits.length) + 56
-  const prodW = Math.max(
-    prodRow1W,
-    rowWidth(central.spines.length),
-    rowWidth(central.routers.length),
-  )
+  const prodW = Math.max(prodRow1W, rowWidth(central.spines.length), rowWidth(row0.length))
   const mgmtW = Math.max(rowWidth(central.mgmtServers.length), rowWidth(central.mgmtSpines.length))
   const columnGap = prodW > 0 && mgmtW > 0 ? COLUMN_GAP : 0
   const centralInnerW = prodW + columnGap + mgmtW
   const fabricW = Math.max(racksW + storageW, centralInnerW + 2 * RACK_PAD, 300)
   const cx = fabricW / 2
 
-  // External networks sit above the central rack, centered over the exits.
-  const extH = partition.externalNetworks.length > 0 ? EXT_H + 28 : 0
+  // External networks, and a managed control plane, sit above the central
+  // rack, centered over the exits.
+  const capsules = [
+    ...partition.externalNetworks,
+    ...(partition.controlPlane?.managed ? [partition.controlPlane.node] : []),
+  ]
+  const extH = capsules.length > 0 ? EXT_H + 28 : 0
   const boxTop = y0 + 24 + extH
   const row0Y = boxTop + RACK_HEAD
-  const row1Y = hasRouters ? row0Y + NODE_H + ROW_GAP : row0Y
+  const row1Y = row0.length > 0 ? row0Y + NODE_H + ROW_GAP : row0Y
   const row2Y = row1Y + NODE_H + ROW_GAP
   const innerLeft = cx - centralInnerW / 2
   const prodCx = innerLeft + prodW / 2
   const mgmtCx = innerLeft + prodW + columnGap + mgmtW / 2
-  if (hasRouters) placeRow(rects, central.routers, prodCx, row0Y)
+  if (row0.length > 0) placeRow(rects, row0, prodCx, row0Y)
   placeGroupedRow(rects, central.superspines, central.exits, prodCx, row1Y)
   placeRow(rects, central.spines, prodCx, row2Y)
   placeRow(rects, central.mgmtServers, mgmtCx, row1Y)
@@ -231,16 +236,16 @@ function layoutPartition(
     h: row2Y + NODE_H + RACK_PAD - boxTop,
   }
   layout.boxes.push({ rect: boxRect, name: 'Central rack', target: { partitionId: partition.id } })
-  if (partition.externalNetworks.length > 0) {
+  if (capsules.length > 0) {
     const anchors = hasRouters ? central.routers : central.exits
     const exitRects = anchors.map((e) => rects.get(e.id)).filter((r): r is Rect => !!r)
     const ecx =
       exitRects.length > 0
         ? exitRects.reduce((sum, r) => sum + r.x + r.w / 2, 0) / exitRects.length
         : prodCx
-    const total = partition.externalNetworks.length * (EXT_W + GAP) - GAP
+    const total = capsules.length * (EXT_W + GAP) - GAP
     let ex = ecx - total / 2
-    for (const node of partition.externalNetworks) {
+    for (const node of capsules) {
       rects.set(node.id, { x: ex, y: y0 + 24, w: EXT_W, h: EXT_H })
       ex += EXT_W + GAP
     }
@@ -358,10 +363,12 @@ function linkGeometry(from: Rect, to: Rect): { a: Pt; b: Pt; path: string } {
   return { a, b, path: `M ${a.x} ${a.y} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${b.y}` }
 }
 
-function NodeBox({ node, r }: { node: TopoNode; r: Rect }) {
+/** `capsule` draws the node as a dashed pill: external networks, and a
+ *  managed control plane, which is somewhere else just the same. */
+function NodeBox({ node, r, capsule }: { node: TopoNode; r: Rect; capsule?: boolean }) {
   const isServer =
     node.kind === 'server-group' || node.kind === 'mgmt-server' || node.kind === 'router'
-  const isExternal = node.kind === 'external-network'
+  const isExternal = capsule ?? node.kind === 'external-network'
   const isMgmt =
     node.kind === 'mgmt-spine' || node.kind === 'mgmt-leaf' || node.kind === 'mgmt-server'
 
@@ -458,9 +465,18 @@ export default function Diagram({
       ...p.central.mgmtSpines,
       ...p.central.mgmtServers,
       ...p.storageLeaves,
+      ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),
     ]),
   ]
+
+  // Nodes drawn as dashed pills above the central rack.
+  const capsuleIds = new Set(
+    graph.partitions.flatMap((p) => [
+      ...p.externalNetworks.map((n) => n.id),
+      ...(p.controlPlane?.managed ? [p.controlPlane.node.id] : []),
+    ]),
+  )
 
   const showPartitionLabels = graph.partitions.length > 1
 
@@ -550,7 +566,7 @@ export default function Diagram({
               onMouseEnter={interactive ? () => setHover(node.id) : undefined}
               onMouseLeave={interactive ? () => setHover(null) : undefined}
             >
-              <NodeBox node={node} r={r} />
+              <NodeBox node={node} r={r} capsule={capsuleIds.has(node.id)} />
             </g>
           ) : null
         })}

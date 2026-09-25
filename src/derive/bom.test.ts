@@ -441,3 +441,71 @@ describe('deriveBom scope', () => {
     expect(spares).not.toContain('cable-mtp-trunk#spare')
   })
 })
+
+describe('control plane', () => {
+  /** A plan whose control plane runs on-prem, `patch` applied on top. */
+  function onPrem(patch: Partial<Plan['controlPlane']> = {}): Plan {
+    const plan = createEmptyPlan()
+    plan.controlPlane = { ...plan.controlPlane, hosting: 'on-prem', ...patch }
+    return plan
+  }
+
+  function line(plan: Plan, catalogId: string) {
+    return deriveBom(plan).find((l) => l.catalogId === catalogId)
+  }
+
+  it('orders nothing for a managed control plane', () => {
+    const kaas = createEmptyPlan()
+    expect(kaas.controlPlane.hosting).toBe('kaas')
+    // The default plan has mgmt servers of the same model; on-prem adds to it.
+    const managed = line(kaas, 'server-mgmt-121h')?.quantity ?? 0
+    expect(line(onPrem(), 'server-mgmt-121h')?.quantity).toBe(managed + 3)
+  })
+
+  it('adds nodes, NICs, optics and mgmt copper in the central rack', () => {
+    const plan = onPrem()
+    const nodes = line(plan, 'server-mgmt-121h')!
+    const nodeReason = nodes.reasons.find((r) => r.detail.includes('control plane nodes'))!
+    expect(nodeReason).toMatchObject({ quantity: 3, where: 'Central rack' })
+
+    // 3 nodes × 1 dual-port 25G NIC, 6 server ports, 2 breakout groups.
+    const nics = line(plan, 'nic-e810-xxvda2')!
+    expect(nics.reasons.find((r) => r.detail.includes('control plane'))?.quantity).toBe(3)
+    const optics = line(plan, 'sfp-25g-sr')!
+    expect(optics.reasons.find((r) => r.detail.includes('control plane'))?.quantity).toBe(6)
+    const breakouts = line(plan, 'cable-mtp-breakout')!
+    expect(breakouts.reasons.find((r) => r.detail.includes('control plane'))?.quantity).toBe(2)
+
+    // One mgmt interface per node to the mgmt spines.
+    const copper = line(plan, 'cable-rj45')!
+    expect(
+      copper.reasons.find((r) => r.detail.includes('control plane nodes × 1 mgmt interface')),
+    ).toMatchObject({ quantity: 3, where: 'Central rack' })
+  })
+
+  it('uses 100G point to point for 2x100G nodes', () => {
+    const plan = onPrem({ uplink: '2x100G' })
+    const nics = line(plan, 'nic-e810-cqda2')!
+    expect(nics.reasons.find((r) => r.detail.includes('control plane'))?.quantity).toBe(3)
+    const trunks = line(plan, 'cable-mtp-trunk')!
+    expect(trunks.reasons.find((r) => r.detail.includes('control plane'))?.quantity).toBe(6)
+    // The nodes contribute no breakout; the rack's workers still do.
+    const breakouts = line(plan, 'cable-mtp-breakout')!
+    expect(breakouts.reasons.some((r) => r.detail.includes('control plane'))).toBe(false)
+  })
+
+  it('gives an own rack its leaves, licenses and mgmt leaf', () => {
+    const plan = onPrem({ placement: 'own-rack' })
+    const where = plan.controlPlane.rack.name
+    const leaves = line(plan, 'switch-as7726')!
+    expect(leaves.reasons.find((r) => r.where === where)).toMatchObject({ quantity: 2 })
+    const licenses = line(plan, 'lic-sonic-eb-100g')!
+    expect(licenses.reasons.some((r) => r.where === where)).toBe(true)
+    const mgmtLeaf = line(plan, 'switch-as4630')!
+    expect(mgmtLeaf.reasons.some((r) => r.where === where)).toBe(true)
+
+    // Those leaves uplink to the spines like any other rack's.
+    const central = line(createEmptyPlan(), 'cable-mtp-trunk')?.quantity ?? 0
+    expect(line(plan, 'cable-mtp-trunk')!.quantity).toBeGreaterThan(central)
+  })
+})

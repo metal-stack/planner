@@ -1,4 +1,5 @@
 import { catalog } from '../model/catalog'
+import { controlPlaneHost } from './controlPlane'
 import { physicalRacks, type RackPosition } from './rackLayout'
 import {
   mgmtDeviceCount,
@@ -25,6 +26,7 @@ export type TopoNodeKind =
   | 'mgmt-leaf'
   | 'mgmt-server'
   | 'server-group'
+  | 'control-plane'
   | 'external-network'
 
 export interface TopoNode {
@@ -77,10 +79,22 @@ export interface TopoPartition {
   central: TopoCentralRack
   storageLeaves: TopoNode[]
   racks: TopoRack[]
+  /** The control plane, when this partition carries it: a KaaS cluster
+   *  (`managed`, drawn as a capsule like an external network) or on-prem
+   *  nodes in the central rack. On-prem nodes in a rack of their own are a
+   *  TopoRack in `racks` instead, so they lay out like any other rack. */
+  controlPlane?: TopoControlPlane
   /** External networks attached at this partition's exits. A network that
    *  attaches to every partition appears once per partition, so each is
    *  drawn next to the exits it connects to. */
   externalNetworks: TopoNode[]
+}
+
+/** The control plane as the diagram needs it: the node plus whether it is
+ *  a managed cluster somewhere else (capsule) or hardware in this rack. */
+export interface TopoControlPlane {
+  node: TopoNode
+  managed: boolean
 }
 
 export interface TopologyGraph {
@@ -301,9 +315,106 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
   }
 }
 
+/** The control plane's place in the graph. KaaS hangs off the routers of
+ *  every partition (or their exits), the same way an external network
+ *  does, because that is the connection the partitions need to it. On-prem
+ *  nodes are hardware: in the central rack they attach to the exits, in a
+ *  rack of their own they sit behind that rack's leaves. */
+function addControlPlane(plan: Plan, partitions: TopoPartition[], links: TopoLink[]): void {
+  const cp = plan.controlPlane
+  const label = 'Control plane'
+
+  if (cp.hosting === 'kaas') {
+    for (const partition of partitions) {
+      const node: TopoNode = {
+        id: `cp/${partition.id}`,
+        kind: 'control-plane',
+        label: cp.name,
+        sublabel: 'managed Kubernetes',
+      }
+      partition.controlPlane = { node, managed: true }
+      const attach =
+        partition.central.routers.length > 0 ? partition.central.routers : partition.central.exits
+      for (const device of attach) {
+        links.push({ from: node.id, to: device.id, count: 1, network: 'external' })
+      }
+    }
+    return
+  }
+
+  const hostId = controlPlaneHost(plan)?.id
+  const host = partitions.find((p) => p.id === hostId)
+  if (!host || cp.nodeCount === 0) return
+  // Kept short: the node box is as narrow as a switch box.
+  const sublabel = `${cp.nodeCount} × ${part(cp.nodeModelId)}`
+
+  if (cp.placement === 'central-rack') {
+    const node: TopoNode = { id: `cp/${host.id}`, kind: 'control-plane', label, sublabel }
+    host.controlPlane = { node, managed: false }
+    for (const exit of host.central.exits) {
+      links.push({
+        from: node.id,
+        to: exit.id,
+        count: 2 * cp.nodeCount,
+        speed: cp.uplink === '2x100G' ? '100G' : '25G',
+        network: 'production',
+      })
+    }
+    return
+  }
+
+  // A rack of its own: leaves to every spine, mgmt leaf to every mgmt
+  // spine, and the nodes drawn as one box inside the rack.
+  const partition = controlPlaneHost(plan)!
+  const { mgmt } = partition.fabric
+  const prefix = `cp/${host.id}/`
+  const leaves = tier(`${prefix}leaf`, 'leaf', 'Leaf', cp.rack.leafModelId, cp.rack.leafCount)
+  const mgmtLeaves = tier(
+    `${prefix}mgmtleaf`,
+    'mgmt-leaf',
+    'Mgmt leaf',
+    mgmt.leafModelId,
+    mgmt.leafPerRack,
+  )
+  for (const leaf of leaves) {
+    for (const spine of host.central.spines) {
+      links.push({
+        from: leaf.id,
+        to: spine.id,
+        count: partition.fabric.leafSpineLinks,
+        speed: '100G',
+        network: 'production',
+      })
+    }
+  }
+  for (const mgmtLeaf of mgmtLeaves) {
+    for (const mgmtSpine of host.central.mgmtSpines) {
+      links.push({
+        from: mgmtLeaf.id,
+        to: mgmtSpine.id,
+        count: 1,
+        speed: '1G',
+        network: 'management',
+      })
+    }
+  }
+  host.racks.push({
+    id: CONTROL_PLANE_RACK_ID,
+    name: cp.rack.name,
+    leaves,
+    mgmtLeaves,
+    serverGroups: [{ id: `${prefix}nodes`, kind: 'control-plane', label, sublabel }],
+  })
+}
+
+/** Rack id of the separate control-plane rack in the graph; navigation
+ *  maps it to the control plane section instead of a plan rack. */
+export const CONTROL_PLANE_RACK_ID = 'control-plane'
+
 export function deriveTopology(plan: Plan): TopologyGraph {
   const links: TopoLink[] = []
   const partitions = plan.partitions.map((partition) => derivePartition(partition, links))
+  addControlPlane(plan, partitions, links)
 
   // External networks attach at the exit switches of their partition (or
   // every partition when unset), as one node per partition they attach to.
@@ -347,8 +458,8 @@ function nodeVisible(node: TopoNode, mode: TopologyMode): boolean {
 
 /** The subgraph for a view mode: nodes of the other network are dropped,
  *  compute racks and storage are dropped in central mode, external
- *  networks in management mode, and links are kept only when both ends
- *  remain and belong to the shown network. */
+ *  networks and the control plane in management mode, and links are kept
+ *  only when both ends remain and belong to the shown network. */
 export function filterTopology(graph: TopologyGraph, mode: TopologyMode): TopologyGraph {
   const keep = (nodes: TopoNode[]) => nodes.filter((n) => nodeVisible(n, mode))
   const partitions = graph.partitions.map((p): TopoPartition => ({
@@ -372,6 +483,10 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
             serverGroups: keep(r.serverGroups),
           })),
     externalNetworks: mode === 'management' ? [] : p.externalNetworks,
+    // The control plane is production or external, never management; in
+    // central mode the capsule and the central-rack node both stay,
+    // because what they attach to stays too.
+    controlPlane: mode === 'management' ? undefined : p.controlPlane,
   }))
   const ids = new Set<string>()
   for (const p of partitions) {
@@ -384,6 +499,7 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       ...p.central.mgmtServers,
       ...p.storageLeaves,
       ...p.externalNetworks,
+      ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),
     ]) {
       ids.add(n.id)

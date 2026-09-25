@@ -7,6 +7,7 @@ export const DOCS = {
   networkSegmentation: 'https://docs.metal-stack.io/docs/network-segmentation',
   hardware: 'https://docs.metal-stack.io/docs/hardware',
   metalBmc: 'https://docs.metal-stack.io/docs/references/metal-bmc',
+  deploymentGuide: 'https://docs.metal-stack.io/docs/deployment-guide',
   rackSpreading: 'https://metal-stack.io/community/MEP-12-rack-spreading',
 } as const
 

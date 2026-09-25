@@ -15,6 +15,7 @@ import {
   spineBandwidth,
 } from './bandwidth'
 import { deriveBom, mgmtUplinkSpeed, rackBmcPorts, spinePortsPerSpine } from './bom'
+import { controlPlaneLeafCount, controlPlaneSwitchPorts, inCentralRack } from './controlPlane'
 import { validateIpPlan } from './ip/validateIp'
 import { deriveRackLayout, formatPower } from './rackLayout'
 
@@ -35,8 +36,9 @@ import { deriveRackLayout, formatPower } from './rackLayout'
 export interface IssueTarget {
   partitionId?: string
   rackId?: string
-  /** Issues of another tab: 'ips' for the IP plan. */
-  section?: 'ips'
+  /** Issues outside a partition: 'ips' for the IP plan tab, 'control-plane'
+   *  for the plan's control plane section. */
+  section?: 'ips' | 'control-plane'
   /** Field id within the section (e.g. "ipv4.shootPodCidr"). For a rack or
    *  central rack section, 'advanced' means the fix is in its folded
    *  Advanced section, which navigation then opens. */
@@ -251,7 +253,7 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
   }
 }
 
-function validatePartition(issues: Issue[], partition: Partition): void {
+function validatePartition(issues: Issue[], plan: Plan, partition: Partition): void {
   const scope: Scope = {
     where: partition.name,
     target: { partitionId: partition.id },
@@ -315,9 +317,10 @@ function validatePartition(issues: Issue[], partition: Partition): void {
   // leaf, exit switch and (if present) superspine.
   const spine = catalog[fabric.spineModelId]
   if (spine && fabric.spineCount > 0) {
-    const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0)
+    const cpLeaves = controlPlaneLeafCount(plan, partition)
+    const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0) + cpLeaves
     const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
-    const needed = spinePortsPerSpine(partition)
+    const needed = spinePortsPerSpine(partition, cpLeaves)
     const available = portCount(spine, '100G')
     if (needed > available) {
       report(
@@ -346,18 +349,22 @@ function validatePartition(issues: Issue[], partition: Partition): void {
     )
   }
 
-  // Exit switch port budget: one 100G port per spine plus two per router.
+  // Exit switch port budget: one 100G port per spine, two per router and,
+  // when the control-plane nodes hang off the exits, their ports too (25G
+  // uplinks go through 4x25G breakout, as everywhere else).
   const exit = catalog[fabric.exitModelId]
   if (exit && fabric.exitSwitchCount > 0) {
-    const needed = fabric.spineCount + 2 * fabric.routerCount
+    const cpPorts = inCentralRack(plan, partition) ? controlPlaneSwitchPorts(plan.controlPlane) : 0
+    const needed = fabric.spineCount + 2 * fabric.routerCount + cpPorts
     const available = portCount(exit, '100G')
     if (needed > available) {
+      const cpWhy = cpPorts > 0 ? `, ${cpPorts} for the control plane nodes` : ''
       report(
         issues,
-        scope,
+        cpPorts > 0 ? { where: 'Control plane', target: { section: 'control-plane' } } : scope,
         'error',
         `Exit switch capacity exceeded: each exit needs ${needed} 100G ports ` +
-          `(${fabric.spineCount} spines, 2 × ${fabric.routerCount} routers), ` +
+          `(${fabric.spineCount} spines, 2 × ${fabric.routerCount} routers${cpWhy}), ` +
           `but ${itemLabel(fabric.exitModelId)} has ${available}.`,
       )
     }
@@ -430,9 +437,38 @@ function checkAvailability(issues: Issue[], plan: Plan): void {
   }
 }
 
+/** The control plane's own checks. Where it runs is free (the deployment
+ *  guide is explicit that a managed cluster is fine), so only the on-prem
+ *  node count is checked here; the ports those nodes take are part of the
+ *  exit switch budget in validatePartition. */
+function validateControlPlane(issues: Issue[], plan: Plan): void {
+  const cp = plan.controlPlane
+  if (cp.hosting !== 'on-prem') return
+  const scope = { where: 'Control plane', target: { section: 'control-plane' as const } }
+  if (cp.nodeCount === 0) {
+    report(
+      issues,
+      scope,
+      'error',
+      'The control plane runs on-prem but has no nodes: it needs a Kubernetes cluster to run on.',
+    )
+    return
+  }
+  if (cp.nodeCount < 3) {
+    report(
+      issues,
+      scope,
+      'warning',
+      `Only ${cp.nodeCount} control plane node(s): etcd needs three for quorum, ` +
+        'so the cluster cannot survive the loss of one.',
+    )
+  }
+}
+
 export function validatePlan(plan: Plan): Issue[] {
   const issues: Issue[] = []
-  for (const partition of plan.partitions) validatePartition(issues, partition)
+  for (const partition of plan.partitions) validatePartition(issues, plan, partition)
+  validateControlPlane(issues, plan)
 
   // Physical height: no rack may hold more units than it has.
   for (const layout of deriveRackLayout(plan)) {

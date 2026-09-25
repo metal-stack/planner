@@ -378,3 +378,64 @@ describe('issues fixed in the Advanced section', () => {
     expect(capacity!.target.field).toBeUndefined()
   })
 })
+
+describe('control plane validation', () => {
+  function onPrem(patch: Partial<Plan['controlPlane']> = {}): Plan {
+    const plan = basePlan()
+    plan.controlPlane = { ...plan.controlPlane, hosting: 'on-prem', ...patch }
+    return plan
+  }
+
+  it('says nothing about a managed control plane, even without routers', () => {
+    const plan = basePlan()
+    plan.partitions[0].fabric.routerCount = 0
+    plan.externalNetworks = []
+    const own = validatePlan(plan).filter((i) => i.target.section === 'control-plane')
+    expect(own).toEqual([])
+  })
+
+  it('reports an on-prem control plane without nodes as an error', () => {
+    const issues = validatePlan(onPrem({ nodeCount: 0 })).filter(
+      (i) => i.target.section === 'control-plane',
+    )
+    expect(issues).toHaveLength(1)
+    expect(issues[0].severity).toBe('error')
+    expect(issues[0].message).toContain('no nodes')
+  })
+
+  it('warns below three nodes, and is happy with three', () => {
+    const two = validatePlan(onPrem({ nodeCount: 2 })).filter(
+      (i) => i.target.section === 'control-plane',
+    )
+    expect(two).toHaveLength(1)
+    expect(two[0].severity).toBe('warning')
+    expect(two[0].message).toContain('quorum')
+
+    expect(validatePlan(onPrem()).filter((i) => i.target.section === 'control-plane')).toEqual([])
+  })
+
+  it('counts the nodes against the exit switch ports', () => {
+    // AS7726-32X: 32 ports of 100G. 2 spines + 2 × 2 routers = 6, so the
+    // control plane has to eat the rest for the budget to blow.
+    const plan = onPrem({ uplink: '2x100G', nodeCount: 14 })
+    const exits = validatePlan(plan).find((i) => i.message.includes('Exit switch capacity'))
+    expect(exits).toBeDefined()
+    expect(exits!.message).toContain('for the control plane nodes')
+    expect(exits!.target.section).toBe('control-plane')
+
+    // Same node count at 25G needs a quarter of the ports and fits.
+    const breakout = onPrem({ nodeCount: 14 })
+    expect(validatePlan(breakout).some((i) => i.message.includes('Exit switch capacity'))).toBe(
+      false,
+    )
+  })
+
+  it("counts an own rack's leaves against the spine ports", () => {
+    const plan = onPrem({ placement: 'own-rack' })
+    plan.partitions[0].fabric.leafSpineLinks = 10
+    plan.controlPlane.rack.leafCount = 3
+    // The rack's own two leaves plus the control plane rack's three.
+    const spine = validatePlan(plan).find((i) => i.message.includes('Spine capacity'))
+    expect(spine?.message).toContain('5 leaves × 10')
+  })
+})

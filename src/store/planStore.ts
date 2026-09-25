@@ -14,6 +14,8 @@ import {
   type Rack,
   type RackDefaults,
   type ServerGroup,
+  type ControlPlane,
+  type ControlPlaneRack,
   type TopologyVariant,
 } from '../model/plan'
 
@@ -26,6 +28,8 @@ interface PlannerState {
   setPlanName: (name: string) => void
   setTopology: (topology: TopologyVariant) => void
   setSparesPerLine: (sparesPerLine: number) => void
+  patchControlPlane: (patch: Partial<ControlPlane>) => void
+  patchControlPlaneRack: (patch: Partial<ControlPlaneRack>) => void
   patchIpFamily: (family: IpFamilyKey, patch: Partial<IpFamily>) => void
   patchIpInfra: (patch: Partial<IpInfra>) => void
   setIpv6Enabled: (enabled: boolean) => void
@@ -96,6 +100,19 @@ export const usePlanStore = create<PlannerState>()(
               ipPlan: {
                 ...s.plan.ipPlan,
                 [family]: { ...s.plan.ipPlan[family], ...patch },
+              },
+            }),
+          })),
+        patchControlPlane: (patch) =>
+          set((s) => ({
+            plan: touched(s.plan, { controlPlane: { ...s.plan.controlPlane, ...patch } }),
+          })),
+        patchControlPlaneRack: (patch) =>
+          set((s) => ({
+            plan: touched(s.plan, {
+              controlPlane: {
+                ...s.plan.controlPlane,
+                rack: { ...s.plan.controlPlane.rack, ...patch },
               },
             }),
           })),

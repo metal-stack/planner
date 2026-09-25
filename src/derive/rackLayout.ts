@@ -7,13 +7,14 @@ import {
   type Rack,
 } from '../model/plan'
 import { chassisCount } from './bom'
+import { hasOwnRack, inCentralRack } from './controlPlane'
 
 // Derives physical rack elevations (which device sits in which height
 // units) from the Plan. Like the BOM, the layout is always computed, never
 // stored. Devices fill each rack from the top: network gear first, then
 // server chassis — the classic ToR arrangement.
 
-export type SlotKind = 'network' | 'mgmt' | 'server' | 'storage'
+export type SlotKind = 'network' | 'mgmt' | 'server' | 'storage' | 'control-plane'
 
 export interface RackSlot {
   label: string
@@ -199,6 +200,15 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
       ...device('Storage leaf', fabric.storageLeafModelId, fabric.storageLeafCount, 'storage'),
       ...device('Mgmt spine', fabric.mgmt.spineModelId, mgmtCount, 'mgmt'),
       ...device('Mgmt server', fabric.mgmt.serverModelId, mgmtCount, 'mgmt'),
+      // On-prem control-plane nodes, when they share the central rack.
+      ...(inCentralRack(plan, partition)
+        ? device(
+            'Control plane node',
+            plan.controlPlane.nodeModelId,
+            plan.controlPlane.nodeCount,
+            'control-plane',
+          )
+        : []),
     ]
     const central: RackElevation = {
       id: `${partition.id}/central`,
@@ -222,10 +232,32 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
       })),
     )
 
+    // The control-plane rack, when the nodes get one of their own: its
+    // leaf pair and mgmt leaf on top, the nodes below, like a compute rack.
+    const cp = plan.controlPlane
+    const controlPlaneRacks: RackElevation[] = hasOwnRack(plan, partition)
+      ? [
+          {
+            id: `${partition.id}/control-plane`,
+            name: cp.rack.name,
+            heightUnits: cp.rack.heightUnits,
+            maxPowerWatts: cp.rack.maxPowerWatts,
+            ...place(
+              [
+                ...device('Mgmt leaf', fabric.mgmt.leafModelId, fabric.mgmt.leafPerRack, 'mgmt'),
+                ...device('Leaf', cp.rack.leafModelId, cp.rack.leafCount, 'network'),
+                ...device('Control plane node', cp.nodeModelId, cp.nodeCount, 'control-plane'),
+              ],
+              cp.rack.heightUnits,
+            ),
+          },
+        ]
+      : []
+
     return {
       partitionId: partition.id,
       partitionName: partition.name,
-      racks: [central, ...racks],
+      racks: [central, ...racks, ...controlPlaneRacks],
     }
   })
 }
