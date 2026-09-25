@@ -40,7 +40,7 @@ function rackGroup(name: string, memberNames: [string, string, string], storageS
 
 /** One partition with a redundant management network, two rack groups and
  *  three storage servers. */
-function redundantPartition(name: string): Partition {
+function productionPartition(name: string): Partition {
   const fabric = defaultFabric()
   fabric.mgmt.redundant = true
   return {
@@ -55,14 +55,14 @@ function redundantPartition(name: string): Partition {
   }
 }
 
-function plan(name: string, topology: Plan['topology'], partitions: Partition[]): Plan {
-  return { ...createEmptyPlan(), name, topology, partitions }
+function plan(name: string, partitions: Partition[]): Plan {
+  return { ...createEmptyPlan(), name, partitions }
 }
 
 export const templates: PlanTemplate[] = [
   {
-    id: 'starter',
-    name: 'Starter',
+    id: 'poc',
+    name: 'PoC',
     description:
       'One partition, non-redundant management network, one rack with 8 workers on a leaf pair.',
     build: () => {
@@ -71,7 +71,7 @@ export const templates: PlanTemplate[] = [
       const rack = defaultRack('Rack 1')
       rack.leafCount = 2
       rack.servers = [group('worker', 'server-microcloud-h13', 8)]
-      return plan('Starter', 'single-zone', [
+      return plan('PoC', [
         {
           id: id(),
           name: 'Partition 1',
@@ -83,21 +83,21 @@ export const templates: PlanTemplate[] = [
     },
   },
   {
-    id: 'redundant',
-    name: 'Redundant',
+    id: 'production',
+    name: 'Production',
     description:
       'One partition, redundant management network, two rack groups with 224 workers and 3 storage servers.',
-    build: () => plan('Redundant', 'single-zone', [redundantPartition('Partition 1')]),
+    build: () => plan('Production', [productionPartition('Partition 1')]),
   },
   {
     id: 'three-partitions',
     name: 'Three partitions',
-    description: 'Multisite: three separate partitions, each like the Redundant template.',
+    description: 'Three separate partitions, each like the Production template.',
     build: () =>
-      plan('Three partitions', 'multisite', [
-        redundantPartition('Partition 1'),
-        redundantPartition('Partition 2'),
-        redundantPartition('Partition 3'),
+      plan('Three partitions', [
+        productionPartition('Partition 1'),
+        productionPartition('Partition 2'),
+        productionPartition('Partition 3'),
       ]),
   },
 ]
