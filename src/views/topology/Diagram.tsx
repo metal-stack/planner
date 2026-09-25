@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { EXTERNAL_NETWORK_ICON, NODE_ICON } from '../icons'
 import { COLOR } from '../colors'
-import type {
-  TopoLink,
-  TopoNode,
-  TopologyGraph,
-  TopoPartition,
-  TopoRack,
+import {
+  attachesAtStorageLeaves,
+  type TopoLink,
+  type TopoNode,
+  type TopologyGraph,
+  type TopoPartition,
+  type TopoRack,
 } from '../../derive/topology'
 
 // Renders the derived TopologyGraph as a fabric elevation. Each partition
@@ -103,6 +104,15 @@ function placeRow(rects: Map<string, Rect>, nodes: TopoNode[], cx: number, y: nu
   }
 }
 
+/** A centered row of external network capsules. */
+function placeCapsules(rects: Map<string, Rect>, nodes: TopoNode[], cx: number, y: number) {
+  let x = cx - (nodes.length * (EXT_W + GAP) - GAP) / 2
+  for (const node of nodes) {
+    rects.set(node.id, { x, y, w: EXT_W, h: EXT_H })
+    x += EXT_W + GAP
+  }
+}
+
 /** Two node groups sharing one centered row with a gap between them. */
 function placeGroupedRow(
   rects: Map<string, Rect>,
@@ -192,7 +202,19 @@ function layoutPartition(
   const { central } = partition
 
   const racksW = racksRowWidth(partition.racks)
-  const storageW = partition.storageLeaves.length > 0 ? NODE_W + 2 * RACK_PAD + 24 : 0
+  // Storage networks hang off the storage leaves when the partition has
+  // them (attachesAtStorageLeaves), so they are drawn over the storage box
+  // instead of over the central rack, keeping their links short.
+  const storageNets = partition.externalNetworks.filter((n) =>
+    attachesAtStorageLeaves(partition, n),
+  )
+  const centralNets = partition.externalNetworks.filter(
+    (n) => !attachesAtStorageLeaves(partition, n),
+  )
+  const storageW =
+    partition.storageLeaves.length > 0
+      ? Math.max(NODE_W + 2 * RACK_PAD + 24, storageNets.length * (EXT_W + GAP) - GAP)
+      : 0
 
   // Central rack, two columns: production (optional routers, then
   // superspines/exits, then spines) and management (mgmt servers over mgmt
@@ -211,7 +233,7 @@ function layoutPartition(
   const cx = fabricW / 2
 
   // External networks sit above the central rack, centered over the exits.
-  const extH = partition.externalNetworks.length > 0 ? EXT_H + 28 : 0
+  const extH = centralNets.length > 0 ? EXT_H + 28 : 0
   const boxTop = y0 + 24 + extH
   const row0Y = boxTop + RACK_HEAD
   const row1Y = hasRouters ? row0Y + NODE_H + ROW_GAP : row0Y
@@ -231,19 +253,14 @@ function layoutPartition(
     h: row2Y + NODE_H + RACK_PAD - boxTop,
   }
   layout.boxes.push({ rect: boxRect, name: 'Central rack', target: { partitionId: partition.id } })
-  if (partition.externalNetworks.length > 0) {
+  if (centralNets.length > 0) {
     const anchors = hasRouters ? central.routers : central.exits
     const exitRects = anchors.map((e) => rects.get(e.id)).filter((r): r is Rect => !!r)
     const ecx =
       exitRects.length > 0
         ? exitRects.reduce((sum, r) => sum + r.x + r.w / 2, 0) / exitRects.length
         : prodCx
-    const total = partition.externalNetworks.length * (EXT_W + GAP) - GAP
-    let ex = ecx - total / 2
-    for (const node of partition.externalNetworks) {
-      rects.set(node.id, { x: ex, y: y0 + 24, w: EXT_W, h: EXT_H })
-      ex += EXT_W + GAP
-    }
+    placeCapsules(rects, centralNets, ecx, y0 + 24)
   }
 
   // Compute racks and the storage box below. The physical racks of a
@@ -303,6 +320,9 @@ function layoutPartition(
         h: NODE_H,
       })
     })
+    // The storage networks go in the gap above the box, over the leaves
+    // they attach to.
+    placeCapsules(rects, storageNets, box.x + box.w / 2, rackY - EXT_H - 12)
     maxRackH = Math.max(maxRackH, box.h)
   }
 

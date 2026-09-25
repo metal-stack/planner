@@ -6,9 +6,6 @@ import { SCHEMA_VERSION } from './migrate'
 // schemas are the source of truth — all TypeScript types are inferred from
 // them, and every JSON import must pass PlanSchema before entering the store.
 
-export const TopologyVariantSchema = z.enum(['single-zone', 'metro', 'multisite'])
-export type TopologyVariant = z.infer<typeof TopologyVariantSchema>
-
 export const UplinkSpeedSchema = z.enum(['2x25G', '2x100G'])
 export type UplinkSpeed = z.infer<typeof UplinkSpeedSchema>
 
@@ -158,7 +155,6 @@ export const PlanSchema = z.object({
   name: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  topology: TopologyVariantSchema,
   partitions: z.array(PartitionSchema),
   externalNetworks: z.array(ExternalNetworkSchema),
   /** Fixed number of spares added per transceiver and cable BOM line. */

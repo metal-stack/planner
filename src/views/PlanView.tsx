@@ -3,7 +3,6 @@ import { physicalRackCount } from '../derive/rackLayout'
 import { validatePlan } from '../derive/validate'
 import { exportPlanJson, importPlanJson } from '../io/json'
 import { downloadText } from '../io/download'
-import { TopologyVariantSchema, type TopologyVariant } from '../model/plan'
 import { usePlanStore } from '../store/planStore'
 import { useToastStore } from '../store/toastStore'
 import ExternalNetworksSection from './plan/ExternalNetworksSection'
@@ -16,12 +15,6 @@ import SidePanel from './plan/SidePanel'
 import TemplateMenu from './plan/TemplateMenu'
 import { ACTION_ICON, Icon, SECTION_ICON } from './icons'
 
-const topologyLabels: Record<TopologyVariant, string> = {
-  'single-zone': 'Single zone',
-  metro: 'Metro',
-  multisite: 'Multisite',
-}
-
 const undoAction = {
   label: 'Undo',
   onClick: () => usePlanStore.temporal.getState().undo(),
@@ -30,7 +23,6 @@ const undoAction = {
 export default function PlanView() {
   const plan = usePlanStore((s) => s.plan)
   const setPlanName = usePlanStore((s) => s.setPlanName)
-  const setTopology = usePlanStore((s) => s.setTopology)
   const addRack = usePlanStore((s) => s.addRack)
   const addPartition = usePlanStore((s) => s.addPartition)
   const removePartition = usePlanStore((s) => s.removePartition)
@@ -106,22 +98,6 @@ export default function PlanView() {
                 className="w-72 rounded-md border border-gray-300 bg-white px-3 py-2"
               />
             </label>
-            <div>
-              <span className="mb-1 block text-sm font-medium">Topology</span>
-              <div className="flex gap-4 py-2">
-                {TopologyVariantSchema.options.map((variant) => (
-                  <label key={variant} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="topology"
-                      checked={plan.topology === variant}
-                      onChange={() => setTopology(variant)}
-                    />
-                    {topologyLabels[variant]}
-                  </label>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 

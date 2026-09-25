@@ -62,7 +62,8 @@ export interface TopoRack {
 /** Spines, exits, superspines, mgmt spines and mgmt servers all live in the
  *  partition's central rack. */
 export interface TopoCentralRack {
-  /** Internet routers; external networks attach here when present. */
+  /** Internet routers; internet and company networks attach here when
+   *  present. */
   routers: TopoNode[]
   superspines: TopoNode[]
   spines: TopoNode[]
@@ -77,9 +78,10 @@ export interface TopoPartition {
   central: TopoCentralRack
   storageLeaves: TopoNode[]
   racks: TopoRack[]
-  /** External networks attached at this partition's exits. A network that
+  /** External networks attached to this partition, at the routers, the
+   *  exits or the storage leaves (see deriveTopology). A network that
    *  attaches to every partition appears once per partition, so each is
-   *  drawn next to the exits it connects to. */
+   *  drawn next to the devices it connects to. */
   externalNetworks: TopoNode[]
 }
 
@@ -301,12 +303,19 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
   }
 }
 
+/** Whether an external network node hangs off the partition's storage
+ *  leaves rather than off its routers or exits. The single source of that
+ *  rule: the derivation links it there, the diagram draws it there. */
+export function attachesAtStorageLeaves(partition: TopoPartition, node: TopoNode): boolean {
+  return node.networkKind === 'storage' && partition.storageLeaves.length > 0
+}
+
 export function deriveTopology(plan: Plan): TopologyGraph {
   const links: TopoLink[] = []
   const partitions = plan.partitions.map((partition) => derivePartition(partition, links))
 
-  // External networks attach at the exit switches of their partition (or
-  // every partition when unset), as one node per partition they attach to.
+  // External networks attach in their partition (or in every partition when
+  // unset), as one node per partition they attach to.
   for (const net of plan.externalNetworks) {
     const targets = partitions.filter(
       (p) => !net.attachedPartitionId || p.id === net.attachedPartitionId,
@@ -320,9 +329,18 @@ export function deriveTopology(plan: Plan): TopologyGraph {
         networkKind: net.kind,
       }
       partition.externalNetworks.push(node)
-      // Attach at the routers, or directly at the exits when there are none.
+      // Storage backends land on the dedicated storage leaves, or on the
+      // exit switches when the partition has none: they never enter through
+      // the internet routers. Every other network attaches at the routers,
+      // or directly at the exits when there are none.
       const attach =
-        partition.central.routers.length > 0 ? partition.central.routers : partition.central.exits
+        net.kind === 'storage'
+          ? attachesAtStorageLeaves(partition, node)
+            ? partition.storageLeaves
+            : partition.central.exits
+          : partition.central.routers.length > 0
+            ? partition.central.routers
+            : partition.central.exits
       for (const device of attach) {
         links.push({ from: node.id, to: device.id, count: 1, network: 'external' })
       }
@@ -348,7 +366,9 @@ function nodeVisible(node: TopoNode, mode: TopologyMode): boolean {
 /** The subgraph for a view mode: nodes of the other network are dropped,
  *  compute racks and storage are dropped in central mode, external
  *  networks in management mode, and links are kept only when both ends
- *  remain and belong to the shown network. */
+ *  remain and belong to the shown network. An external network whose
+ *  attachment points all fell away (a storage network on storage leaves,
+ *  in central mode) goes with them instead of floating unconnected. */
 export function filterTopology(graph: TopologyGraph, mode: TopologyMode): TopologyGraph {
   const keep = (nodes: TopoNode[]) => nodes.filter((n) => nodeVisible(n, mode))
   const partitions = graph.partitions.map((p): TopoPartition => ({
@@ -383,11 +403,19 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       ...p.central.mgmtSpines,
       ...p.central.mgmtServers,
       ...p.storageLeaves,
-      ...p.externalNetworks,
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),
     ]) {
       ids.add(n.id)
     }
+  }
+  // External networks only survive with a device left to attach to.
+  for (const p of partitions) {
+    p.externalNetworks = p.externalNetworks.filter((n) =>
+      graph.links.some(
+        (l) => (l.from === n.id && ids.has(l.to)) || (l.to === n.id && ids.has(l.from)),
+      ),
+    )
+    for (const n of p.externalNetworks) ids.add(n.id)
   }
   const links = graph.links.filter((l) => {
     if (!ids.has(l.from) || !ids.has(l.to)) return false

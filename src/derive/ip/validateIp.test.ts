@@ -62,7 +62,7 @@ describe('validateIpPlan', () => {
   })
 
   it('warns when a partition plans more workers than one cluster can hold', () => {
-    const plan = templates.find((t) => t.id === 'redundant')!.build()
+    const plan = templates.find((t) => t.id === 'production')!.build()
     // compact preset: 16 workers per shoot cluster, the template plans 224
     const w = messages(plan, 'warning').find((m) => m.includes('at most 16 workers'))
     expect(w).toContain('Partition 1 plans 224')

@@ -165,8 +165,8 @@ describe('infrastructure ranges', () => {
     ])
   })
 
-  it('sizes the Redundant template per rack group and overflows a small block', () => {
-    const plan = templates.find((t) => t.id === 'redundant')!.build()
+  it('sizes the Production template per rack group and overflows a small block', () => {
+    const plan = templates.find((t) => t.id === 'production')!.build()
     const p = deriveIpPlan(plan).infra.partitions[0]
     const pxe = p.subnets.find((s) => s.purpose === 'PXE (vlan4000)')!
     expect(pxe).toMatchObject({ needed: 229, prefix: 23 })
