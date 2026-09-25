@@ -48,7 +48,7 @@ import type { TopoNodeKind } from '../../derive/topology'
 import type { CatalogCategory } from '../../model/catalog'
 import type { ExternalNetwork } from '../../model/plan'
 import type { View } from '../../store/planStore'
-import { NetworkSwitch, Rack, RackGroup } from './custom'
+import { MetalStack, NetworkSwitch, Rack, RackGroup } from './custom'
 
 // The single place icons come from (Lucide plus the custom switch and rack
 // glyphs). Views import from here, never from lucide-react directly — an
@@ -93,6 +93,7 @@ export const SECTION_ICON = {
   mgmtNetwork: Cable,
   rack: Rack,
   rackGroup: RackGroup,
+  controlPlane: MetalStack,
   externalNetworks: Globe,
   internet: Globe,
   projectNetworks: Layers,
@@ -120,6 +121,7 @@ export const NODE_ICON: Record<TopoNodeKind, LucideIcon> = {
   'mgmt-leaf': NetworkSwitch,
   'mgmt-server': ServerCog,
   'server-group': Server,
+  'control-plane': MetalStack,
   'external-network': Globe,
 }
 
@@ -147,6 +149,7 @@ export const SLOT_ICON: Record<SlotKind, LucideIcon> = {
   mgmt: ServerCog,
   server: Server,
   storage: HardDrive,
+  'control-plane': MetalStack,
 }
 
 /** A decorative icon at text size (16 px by default). */

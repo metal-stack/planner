@@ -5,6 +5,7 @@ import { exportPlanJson, importPlanJson } from '../io/json'
 import { downloadText } from '../io/download'
 import { usePlanStore } from '../store/planStore'
 import { useToastStore } from '../store/toastStore'
+import ControlPlaneSection from './plan/ControlPlaneSection'
 import ExternalNetworksSection from './plan/ExternalNetworksSection'
 import CentralRackSection from './plan/CentralRackSection'
 import RackSection from './plan/RackSection'
@@ -175,6 +176,9 @@ export default function PlanView() {
           Add partition
         </button>
 
+        {/* Plan-level, like the external networks, and rarely touched: it
+            sits with them at the end rather than above the hardware. */}
+        <ControlPlaneSection plan={plan} issues={issues} />
         <ExternalNetworksSection plan={plan} />
       </div>
 

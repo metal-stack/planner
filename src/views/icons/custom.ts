@@ -22,6 +22,17 @@ export const Rack = createLucideIcon('rack', [
   ['path', { d: 'M8 18.75h.01', key: 'u3' }],
 ])
 
+/** The metal-stack picture mark (src/assets/metal-stack-logo.svg) as a
+ *  stroke glyph: the peaked top layer over the two zigzag layers, at the
+ *  proportions of the original (corners at 0.29 of the height, the lower
+ *  layers' peaks at 0.52 and 0.74). Drawn rather than embedded so it takes
+ *  the text color and the 2 px grid like every other icon here. */
+export const MetalStack = createLucideIcon('metal-stack', [
+  ['path', { d: 'M2 7.9 12 2l10 5.9', key: 'top' }],
+  ['path', { d: 'M2 12.3 7 15.3l5-3 5 3 5-3', key: 'mid' }],
+  ['path', { d: 'M2 16.8 7 19.8l5-3 5 3 5-3', key: 'bottom' }],
+])
+
 /** A rack group: three physical racks side by side. */
 export const RackGroup = createLucideIcon('rack-group', [
   ['rect', { x: '1.5', y: '4', width: '6', height: '16', rx: '1', key: 'l' }],

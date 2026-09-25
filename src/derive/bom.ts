@@ -6,7 +6,9 @@ import {
   type Plan,
   type Rack,
   type ServerGroup,
+  type UplinkSpeed,
 } from '../model/plan'
+import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane'
 
 // The BOM is always derived from the Plan, never stored. Every quantity rule
 // lives here and gets a unit test in bom.test.ts. Every rule also records a
@@ -235,35 +237,48 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     bom.add(group.gpu.modelId, gpus, `${group.count} ${role} nodes × ${group.gpu.perNode} GPU`)
   }
 
+  addNodeUplinks(bom, group.count, group.uplink, role)
+}
+
+/** NIC, transceivers and cables for dual-attached nodes, whatever they are:
+ *  server groups on their rack's leaves and the control-plane nodes on the
+ *  switch they hang off. `what` names them in the reasons ("worker",
+ *  "control plane"). */
+function addNodeUplinks(bom: BomBuilder, nodes: number, uplink: UplinkSpeed, what: string): void {
   // Every node carries one dual-port NIC matching its uplink speed.
-  const uplinkPorts = 2 * group.count
-  if (group.uplink === '2x25G') {
-    bom.add('nic-e810-xxvda2', group.count, `${group.count} ${role} nodes × 1 NIC`)
-    // 25G server ports terminate on 100G leaf ports via 4x25G breakout:
-    // server side gets a 25G-SR transceiver per port, the leaf side one
+  const uplinkPorts = 2 * nodes
+  if (uplink === '2x25G') {
+    bom.add('nic-e810-xxvda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
+    // 25G server ports terminate on 100G switch ports via 4x25G breakout:
+    // server side gets a 25G-SR transceiver per port, the switch side one
     // 100G-SR4 per started group of four, joined by an MTP breakout cable.
-    bom.add('sfp-25g-sr', uplinkPorts, `${group.count} ${role} nodes × 2 server ports`)
-    const leafPorts = Math.ceil(uplinkPorts / 4)
+    bom.add('sfp-25g-sr', uplinkPorts, `${nodes} ${what} nodes × 2 server ports`)
+    const switchPorts = Math.ceil(uplinkPorts / 4)
     bom.add(
       'sfp-100g-sr4',
-      leafPorts,
-      `${uplinkPorts} × 25G ${role} ports / 4 per breakout, leaf side`,
+      switchPorts,
+      `${uplinkPorts} × 25G ${what} ports / 4 per breakout, switch side`,
     )
-    bom.add('cable-mtp-breakout', leafPorts, `${uplinkPorts} × 25G ${role} ports / 4 per breakout`)
+    bom.add(
+      'cable-mtp-breakout',
+      switchPorts,
+      `${uplinkPorts} × 25G ${what} ports / 4 per breakout`,
+    )
   } else {
-    bom.add('nic-e810-cqda2', group.count, `${group.count} ${role} nodes × 1 NIC`)
+    bom.add('nic-e810-cqda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
     // 100G point-to-point: a 100G-SR4 transceiver on each end plus an MTP
     // trunk cable per link.
-    bom.add('sfp-100g-sr4', 2 * uplinkPorts, `${uplinkPorts} × 100G ${role} links × 2 ends`)
-    bom.add('cable-mtp-trunk', uplinkPorts, `${uplinkPorts} × 100G ${role} links`)
+    bom.add('sfp-100g-sr4', 2 * uplinkPorts, `${uplinkPorts} × 100G ${what} links × 2 ends`)
+    bom.add('cable-mtp-trunk', uplinkPorts, `${uplinkPorts} × 100G ${what} links`)
   }
 }
 
 /** Links each spine terminates: `leafSpineLinks` per leaf, one per exit,
- *  superspine and storage leaf. */
-export function spinePortsPerSpine(partition: Partition): number {
+ *  superspine and storage leaf. `controlPlaneLeaves` are the leaves of a
+ *  separate control-plane rack, which uplink like any other leaves. */
+export function spinePortsPerSpine(partition: Partition, controlPlaneLeaves = 0): number {
   const { fabric } = partition
-  const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0)
+  const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0) + controlPlaneLeaves
   const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
   return (
     leaves * fabric.leafSpineLinks + fabric.exitSwitchCount + superspines + fabric.storageLeafCount
@@ -275,8 +290,8 @@ export function routerLinks(partition: Partition): number {
   return 2 * partition.fabric.routerCount * partition.fabric.exitSwitchCount
 }
 
-function addFabricLinks(bom: BomBuilder, partition: Partition): void {
-  const perSpine = spinePortsPerSpine(partition)
+function addFabricLinks(bom: BomBuilder, plan: Plan, partition: Partition): void {
+  const perSpine = spinePortsPerSpine(partition, controlPlaneLeafCount(plan, partition))
   const links = perSpine * partition.fabric.spineCount
   const why = `${perSpine} links per spine × ${partition.fabric.spineCount} spines`
   bom.add('sfp-100g-sr4', 2 * links, `${links} fabric links × 2 ends (${why})`)
@@ -340,7 +355,76 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
 /** Section the central-rack rules are reported under. */
 const CENTRAL_RACK = 'Central rack'
 
-function addPartition(bom: BomBuilder, partition: Partition): void {
+/** The on-prem control-plane cluster: its nodes, their uplinks and, for a
+ *  control-plane rack of its own, the leaf pair and mgmt leaf that serve
+ *  them. A KaaS control plane orders nothing. Emitted inside the host
+ *  partition's central-rack block so the section order stays physical. */
+function addControlPlane(
+  bom: BomBuilder,
+  plan: Plan,
+  partition: Partition,
+  prodCentral: BomBuilder,
+  mgmtCentral: BomBuilder,
+): void {
+  const cp = plan.controlPlane
+  const central = inCentralRack(plan, partition)
+  const ownRack = hasOwnRack(plan, partition)
+  if (!central && !ownRack) return
+
+  const { fabric } = partition
+  const nodes = cp.nodeCount
+  const where = central ? CENTRAL_RACK : cp.rack.name
+  const prod = central ? prodCentral : bom.on('production').at(where)
+  const mgmt = central ? mgmtCentral : bom.on('management').at(where)
+
+  prod.add(cp.nodeModelId, nodes, `${nodes} control plane nodes`)
+  addNodeUplinks(prod, nodes, cp.uplink, 'control plane')
+
+  if (ownRack) {
+    // A rack of its own: leaves uplinked to the spines like a compute
+    // rack's, plus a mgmt leaf for the nodes' BMC ports.
+    addSwitch(
+      prod,
+      fabric.nos,
+      cp.rack.leafModelId,
+      cp.rack.leafCount,
+      `${cp.rack.leafCount} leaves`,
+    )
+    addSwitch(
+      mgmt,
+      fabric.nos,
+      fabric.mgmt.leafModelId,
+      fabric.mgmt.leafPerRack,
+      `${fabric.mgmt.leafPerRack} mgmt leaves`,
+    )
+    mgmt.add('cable-rj45', nodes, `${nodes} control plane nodes × 1 BMC port to the mgmt leaf`)
+    mgmt.add(
+      'cable-rj45',
+      cp.rack.leafCount,
+      `${cp.rack.leafCount} leaves × 1 mgmt interface to the mgmt leaf`,
+    )
+    const mgmtCount = mgmtDeviceCount(fabric.mgmt)
+    const speed = mgmtUplinkSpeed(fabric.mgmt.leafModelId, fabric.mgmt.spineModelId)
+    const links = fabric.mgmt.leafPerRack * mgmtCount
+    const why = `${fabric.mgmt.leafPerRack} mgmt leaves × ${mgmtCount} mgmt spines`
+    mgmt.add(
+      speed === '25G' ? 'sfp-25g-sr' : 'sfp-10g-sr',
+      2 * links,
+      `${links} mgmt uplinks × 2 ends (${why})`,
+    )
+    mgmt.add('cable-lc-duplex', links, `${links} mgmt uplinks (${why})`)
+  } else {
+    // In the central rack the nodes reach the management network the same
+    // way every device there does: one interface to the mgmt spines.
+    mgmt.add(
+      'cable-rj45',
+      nodes,
+      `${nodes} control plane nodes × 1 mgmt interface to the mgmt spines`,
+    )
+  }
+}
+
+function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
   const { fabric } = partition
   // Network and location are tagged once here, so every rule below inherits
   // the network it belongs to and the section it is reported under.
@@ -395,7 +479,8 @@ function addPartition(bom: BomBuilder, partition: Partition): void {
   // compute rack does, and the racks follow in plan order. That makes the
   // reason sections come out in physical order for free: for any line, the
   // central rack is the first section, then Rack 1, Rack 2 and so on.
-  addFabricLinks(prodCentral, partition)
+  addControlPlane(bom, plan, partition, prodCentral, mgmtCentral)
+  addFabricLinks(prodCentral, plan, partition)
   addMgmtLinks(bom.on('management'), partition, mgmtCentral)
 
   for (const rack of partition.racks) {
@@ -446,7 +531,7 @@ export function deriveBom(plan: Plan, scope: BomScope = 'all'): BomLine[] {
   const multi = plan.partitions.length > 1
   const bom = new BomBuilder(scope)
   for (const partition of plan.partitions) {
-    addPartition(multi ? bom.inPartition(partition.name) : bom, partition)
+    addPartition(multi ? bom.inPartition(partition.name) : bom, plan, partition)
   }
   const lines = bom.build()
   return [...lines, ...spareLines(lines, plan.sparesPerLine)]
@@ -459,7 +544,7 @@ export function deriveBomByPartition(
 ): { partition: Partition; lines: BomLine[] }[] {
   return plan.partitions.map((partition) => {
     const bom = new BomBuilder(scope)
-    addPartition(bom, partition)
+    addPartition(bom, plan, partition)
     return { partition, lines: bom.build() }
   })
 }

@@ -159,14 +159,15 @@ default plan. Use **Export JSON** to save a plan file and **Import JSON** to loa
 The whole app operates on a single `Plan` document, described by Zod schemas in
 `src/model/plan.ts`. Everything else is derived from it and never stored:
 
-| Module                     | Derives                                                 |
-| -------------------------- | ------------------------------------------------------- |
-| `src/derive/bom.ts`        | BOM lines and quantities                                |
-| `src/derive/topology.ts`   | the topology graph (nodes and links)                    |
-| `src/derive/rackLayout.ts` | rack elevations and the rack-group spread               |
-| `src/derive/validate.ts`   | validation issues                                       |
-| `src/derive/nodes.ts`      | node tallies per rack, partition and plan               |
-| `src/derive/ip/`           | CIDR arithmetic, the IP address plan and its validation |
+| Module                       | Derives                                                 |
+| ---------------------------- | ------------------------------------------------------- |
+| `src/derive/bom.ts`          | BOM lines and quantities                                |
+| `src/derive/topology.ts`     | the topology graph (nodes and links)                    |
+| `src/derive/controlPlane.ts` | where the control plane's hardware lands                |
+| `src/derive/rackLayout.ts`   | rack elevations and the rack-group spread               |
+| `src/derive/validate.ts`     | validation issues                                       |
+| `src/derive/nodes.ts`        | node tallies per rack, partition and plan               |
+| `src/derive/ip/`             | CIDR arithmetic, the IP address plan and its validation |
 
 Hardware facts — part numbers, port counts, height units, nodes per chassis, and metal-stack
 compatibility — live in `src/model/catalog.ts`. The compatibility data mirrors the official

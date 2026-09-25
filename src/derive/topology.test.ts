@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPlan, withRackKind } from '../model/defaults'
+import { createEmptyPlan, defaultPartition, withRackKind } from '../model/defaults'
 import type { Plan } from '../model/plan'
-import { deriveTopology, filterTopology } from './topology'
+import { CONTROL_PLANE_RACK_ID, deriveTopology, filterTopology } from './topology'
 
 describe('deriveTopology', () => {
   it('derives the central rack and compute racks for the default plan', () => {
@@ -233,5 +233,65 @@ describe('filterTopology', () => {
     expect(g.links.some((l) => l.network === 'production')).toBe(true)
     // no dangling links to removed racks
     expect(g.links.every((l) => !l.to.includes('leaf') && !l.from.includes('leaf'))).toBe(true)
+  })
+})
+
+describe('control plane in the topology', () => {
+  function onPrem(patch: Partial<Plan['controlPlane']> = {}) {
+    const plan = createEmptyPlan()
+    plan.controlPlane = { ...plan.controlPlane, hosting: 'on-prem', ...patch }
+    return plan
+  }
+
+  it('hangs a managed control plane off the routers of every partition', () => {
+    const plan = createEmptyPlan()
+    plan.partitions.push(defaultPartition('Partition 2'))
+    const graph = deriveTopology(plan)
+    for (const partition of graph.partitions) {
+      const cp = partition.controlPlane!
+      expect(cp.managed).toBe(true)
+      expect(cp.node.kind).toBe('control-plane')
+      // Titled by what it is; the subtitle says how it is hosted.
+      expect(cp.node.label).toBe('Control plane')
+      expect(cp.node.sublabel).toBe('managed Kubernetes')
+      const targets = graph.links.filter((l) => l.from === cp.node.id).map((l) => l.to)
+      expect(targets.sort()).toEqual(partition.central.routers.map((n) => n.id).sort())
+    }
+    // Two partitions, two separate capsules.
+    expect(graph.partitions[0].controlPlane!.node.id).not.toBe(
+      graph.partitions[1].controlPlane!.node.id,
+    )
+  })
+
+  it('links on-prem nodes in the central rack to the exits', () => {
+    const graph = deriveTopology(onPrem())
+    const partition = graph.partitions[0]
+    const cp = partition.controlPlane!
+    expect(cp.managed).toBe(false)
+    expect(cp.node.sublabel).toBe('3 × SYS-121H-TNR')
+    const links = graph.links.filter((l) => l.from === cp.node.id)
+    expect(links.map((l) => l.to).sort()).toEqual(partition.central.exits.map((n) => n.id).sort())
+    expect(links.every((l) => l.network === 'production' && l.speed === '25G')).toBe(true)
+  })
+
+  it('draws an own rack with leaves uplinked to the spines', () => {
+    const graph = deriveTopology(onPrem({ placement: 'own-rack' }))
+    const partition = graph.partitions[0]
+    expect(partition.controlPlane).toBeUndefined()
+    const rack = partition.racks.find((r) => r.id === CONTROL_PLANE_RACK_ID)!
+    expect(rack.name).toBe('Control plane rack')
+    expect(rack.leaves).toHaveLength(2)
+    expect(rack.serverGroups[0].kind).toBe('control-plane')
+    const uplinks = graph.links.filter((l) => rack.leaves.some((n) => n.id === l.from))
+    expect(uplinks).toHaveLength(4) // 2 leaves × 2 spines
+    const mgmt = graph.links.filter((l) => rack.mgmtLeaves.some((n) => n.id === l.from))
+    expect(mgmt).toHaveLength(2) // 1 mgmt leaf × 2 mgmt spines
+  })
+
+  it('drops the control plane in management mode, keeps it in central mode', () => {
+    const graph = deriveTopology(onPrem())
+    expect(filterTopology(graph, 'management').partitions[0].controlPlane).toBeUndefined()
+    expect(filterTopology(graph, 'central').partitions[0].controlPlane).toBeDefined()
+    expect(filterTopology(graph, 'production').partitions[0].controlPlane).toBeDefined()
   })
 })

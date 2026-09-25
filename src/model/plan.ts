@@ -149,6 +149,61 @@ export const ExternalNetworkSchema = z.object({
 })
 export type ExternalNetwork = z.infer<typeof ExternalNetworkSchema>
 
+// Where the metal-stack control plane runs. It is a Kubernetes cluster
+// carrying metal-api, masterdata-api, go-ipam, NSQ, RethinkDB, their
+// backup-restore sidecars and an ingress controller. The deployment guide
+// leaves the location open ("it does not matter where your control plane
+// Kubernetes cluster is located, you can of course use a cluster managed
+// by a hyperscaler") and asks only that the partitions can reach it, so a
+// plan says which of the two it is: 'kaas', a managed service that orders
+// no hardware, or 'on-prem', dedicated nodes this plan has to buy. One
+// control plane serves the whole installation, so it is plan-level rather
+// than part of a Partition. Its nodes run the Kubernetes cluster and are
+// never metal-stack-managed machines: they stay out of the machine pool
+// (planNodes) and the hardware compatibility list does not apply to them.
+export const ControlPlaneHostingSchema = z.enum(['kaas', 'on-prem'])
+export type ControlPlaneHosting = z.infer<typeof ControlPlaneHostingSchema>
+
+/** 'central-rack': the nodes join the host partition's central rack and
+ *  attach to its exit switches. 'own-rack': a dedicated rack with its own
+ *  leaf pair, uplinked to the spines like a compute rack. */
+export const ControlPlanePlacementSchema = z.enum(['central-rack', 'own-rack'])
+export type ControlPlanePlacement = z.infer<typeof ControlPlanePlacementSchema>
+
+/** Geometry of the control-plane rack, mirroring what a compute rack keeps
+ *  in its Advanced section. */
+export const ControlPlaneRackSchema = z.object({
+  name: z.string().default('Control plane rack'),
+  heightUnits: z.number().int().positive().default(42),
+  maxPowerWatts: z.number().int().positive().default(12000),
+  leafModelId: z.string().default('switch-as7726'),
+  leafCount: z.number().int().min(0).default(2),
+})
+export type ControlPlaneRack = z.infer<typeof ControlPlaneRackSchema>
+
+export const ControlPlaneSchema = z.object({
+  hosting: ControlPlaneHostingSchema.default('kaas'),
+  /** Nodes of the Kubernetes cluster (on-prem); three for etcd quorum. */
+  nodeCount: z.number().int().min(0).default(3),
+  nodeModelId: z.string().default('server-mgmt-121h'),
+  uplink: UplinkSpeedSchema.default('2x25G'),
+  /** Partition whose site hosts the nodes; empty means the first one. */
+  partitionId: z.string().default(''),
+  placement: ControlPlanePlacementSchema.default('central-rack'),
+  rack: ControlPlaneRackSchema.default({
+    name: 'Control plane rack',
+    heightUnits: 42,
+    maxPowerWatts: 12000,
+    leafModelId: 'switch-as7726',
+    leafCount: 2,
+  }),
+})
+export type ControlPlane = z.infer<typeof ControlPlaneSchema>
+
+export function defaultControlPlane(): ControlPlane {
+  return ControlPlaneSchema.parse({})
+}
+
 export const PlanSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   id: z.string(),
@@ -161,5 +216,7 @@ export const PlanSchema = z.object({
   sparesPerLine: z.number().int().min(0).default(2),
   /** IPv4/IPv6 address plan (IPs tab). */
   ipPlan: IpPlanSchema.default(defaultIpPlan),
+  /** Where the metal-stack control plane runs (one per installation). */
+  controlPlane: ControlPlaneSchema.default(defaultControlPlane),
 })
 export type Plan = z.infer<typeof PlanSchema>

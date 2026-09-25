@@ -86,8 +86,14 @@ export const templates: PlanTemplate[] = [
     id: 'production',
     name: 'Production',
     description:
-      'One partition, redundant management network, two rack groups with 224 workers and 3 storage servers.',
-    build: () => plan('Production', [productionPartition('Partition 1')]),
+      'One partition, redundant management network, two rack groups with 224 workers and 3 storage servers, control plane on three on-prem nodes.',
+    build: () => {
+      const p = plan('Production', [productionPartition('Partition 1')])
+      // A production install that owns its control plane: three nodes in
+      // the partition's central rack.
+      p.controlPlane = { ...p.controlPlane, hosting: 'on-prem', nodeCount: 3 }
+      return p
+    },
   },
   {
     id: 'three-partitions',

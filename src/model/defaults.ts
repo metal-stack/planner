@@ -1,5 +1,6 @@
 import { defaultIpPlan } from './ipPlan'
 import { SCHEMA_VERSION } from './migrate'
+import { defaultControlPlane } from './plan'
 import type { FabricConfig, Partition, Plan, Rack, RackDefaults } from './plan'
 
 function id(): string {
@@ -144,6 +145,7 @@ export function createEmptyPlan(): Plan {
     partitions: [defaultPartition('Partition 1')],
     sparesPerLine: 2,
     ipPlan: defaultIpPlan(),
+    controlPlane: defaultControlPlane(),
     externalNetworks: [
       {
         id: id(),

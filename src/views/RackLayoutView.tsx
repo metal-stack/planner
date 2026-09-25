@@ -25,6 +25,11 @@ const SLOT_STYLE: Record<SlotKind, { fill: string; stroke: string; text: string 
   mgmt: { fill: COLOR.brandTint, stroke: COLOR.brand, text: COLOR.ink },
   server: { fill: COLOR.page, stroke: COLOR.gray300, text: COLOR.ink },
   storage: { fill: COLOR.storageTint, stroke: COLOR.storageLine, text: COLOR.storageText },
+  'control-plane': {
+    fill: COLOR.controlPlaneTint,
+    stroke: COLOR.controlPlaneLine,
+    text: COLOR.controlPlaneText,
+  },
 }
 
 /** A labeled usage bar in the rack header; red once the budget is exceeded. */

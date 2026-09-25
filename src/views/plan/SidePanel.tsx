@@ -1,7 +1,7 @@
 import { formatBandwidth, formatRatio, rackBandwidth } from '../../derive/bandwidth'
 import { deriveBom } from '../../derive/bom'
 import { formatTally, planNodes } from '../../derive/nodes'
-import { deriveRackLayout, formatPower, physicalRackCount } from '../../derive/rackLayout'
+import { deriveRackLayout, formatPower } from '../../derive/rackLayout'
 import { deriveTopology, filterTopology } from '../../derive/topology'
 import type { Issue } from '../../derive/validate'
 import type { Plan } from '../../model/plan'
@@ -54,6 +54,8 @@ function planTotals(plan: Plan) {
     }
   }
   return {
+    // Every physical rack the layout knows, the control-plane rack included.
+    rackCount: racks.length,
     usedU: racks.reduce((u, r) => u + r.usedU, 0),
     totalU: racks.reduce((u, r) => u + r.heightUnits, 0),
     powerWatts: racks.reduce((w, r) => w + r.powerWatts, 0),
@@ -87,7 +89,7 @@ export default function SidePanel({ plan, issues }: { plan: Plan; issues: Issue[
     : 0
   const complete = bom.every((l) => lineTotal({ currency, prices }, l) !== undefined)
   // Physical racks, central racks included (a rack group counts as three).
-  const racks = plan.partitions.reduce((n, p) => n + physicalRackCount(p), 0)
+  const racks = totals.rackCount
   const graph = filterTopology(deriveTopology(plan), 'production')
   const hasTopology = graph.partitions.some(
     (p) => p.racks.length > 0 || p.central.spines.length > 0,
@@ -103,6 +105,14 @@ export default function SidePanel({ plan, issues }: { plan: Plan; issues: Issue[
         <p className="mb-2 text-sm text-gray-600">
           {plural(partitions, 'partition')}, {plural(racks, 'rack')},{' '}
           {plural(sumCategory(plan, 'server'), 'server chassis', 'server chassis')}
+        </p>
+        <p className="mb-2 text-sm text-gray-600">
+          Control plane:{' '}
+          {plan.controlPlane.hosting === 'kaas'
+            ? 'managed Kubernetes'
+            : `${plural(plan.controlPlane.nodeCount, 'node')} on-prem, ${
+                plan.controlPlane.placement === 'own-rack' ? 'own rack' : 'central rack'
+              }`}
         </p>
         <div className="grid grid-cols-2 gap-2">
           <Stat
