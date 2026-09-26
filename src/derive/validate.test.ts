@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyPlan, defaultRack, withRackKind } from '../model/defaults'
+import { podPlan } from './podPlan.fixture'
 import type { Plan } from '../model/plan'
 import {
   countIssues,
@@ -226,10 +227,11 @@ describe('non-blocking fabric', () => {
     const partition = plan.partitions[0]
     partition.fabric.nonBlocking = true
     partition.fabric.fabricType = 'leaf-spine-superspine'
-    partition.fabric.superspineCount = 1 // 2 leaves x 100 down, 100 up
-    const issue = validatePlan(plan).find((i) => i.message.includes('Spine tier is oversubscribed'))
-    expect(issue?.message).toContain('needs 2 superspines (now 1)')
+    // 2 superspines on 2 spines: 1 per plane, so 2 leaves x 100 down, 100 up
     partition.fabric.superspineCount = 2
+    const issue = validatePlan(plan).find((i) => i.message.includes('Spine tier is oversubscribed'))
+    expect(issue?.message).toContain('needs 4 superspines (now 2)')
+    partition.fabric.superspineCount = 4
     expect(errors(plan).some((m) => m.includes('Spine tier'))).toBe(false)
   })
 })
@@ -435,8 +437,40 @@ describe('control plane validation', () => {
     const plan = onPrem({ placement: 'own-rack' })
     plan.partitions[0].fabric.leafSpineLinks = 10
     plan.controlPlane.rack.leafCount = 3
-    // The rack's own two leaves plus the control plane rack's three.
+    // The rack's own two leaves plus the control plane rack's three, x 10,
+    // plus 2 exits: 52 ports.
     const spine = validatePlan(plan).find((i) => i.message.includes('Spine capacity'))
-    expect(spine?.message).toContain('5 leaves × 10')
+    expect(spine?.message).toContain('needs 52 100G ports')
+    expect(spine?.message).toContain('3 control plane leaves × 10')
+  })
+})
+
+describe('leaf-spine-superspine validation', () => {
+  const messages = (plan: ReturnType<typeof podPlan>) => validatePlan(plan).map((i) => i.message)
+
+  it('accepts the pod plan apart from the design note', () => {
+    const errors = validatePlan(podPlan()).filter((i) => i.severity === 'error')
+    expect(errors).toEqual([])
+    expect(messages(podPlan()).some((m) => m.includes('RFC 7938'))).toBe(true)
+  })
+
+  it('needs superspines that split evenly into one plane per spine', () => {
+    const plan = podPlan()
+    plan.partitions[0].fabric.superspineCount = 5
+    expect(messages(plan).some((m) => m.includes('one plane per spine'))).toBe(true)
+  })
+
+  it('checks each superspine has a port for every pod', () => {
+    const plan = podPlan()
+    const p = plan.partitions[0]
+    p.pods = Array.from({ length: 32 }, (_, i) => ({ id: `p${i}`, name: `Pod ${i + 1}` }))
+    // 32 compute pods + the border pod = 33 ports per superspine > 32
+    expect(messages(plan).some((m) => m.startsWith('Superspine capacity exceeded'))).toBe(true)
+  })
+
+  it('warns about a pod without racks', () => {
+    const plan = podPlan()
+    plan.partitions[0].pods.push({ id: 'pc', name: 'Pod C' })
+    expect(messages(plan).some((m) => m.includes('Pod C has no racks'))).toBe(true)
   })
 })

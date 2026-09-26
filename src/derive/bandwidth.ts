@@ -1,4 +1,5 @@
 import { type Partition, type Rack, type UplinkSpeed } from '../model/plan'
+import { hasSuperspineTier, podsOf, superspinesPerPlane } from './pods'
 
 // Oversubscription of the fabric: how much machine bandwidth sits behind
 // the uplinks of a tier. A fabric is non-blocking at 1:1 or better.
@@ -34,15 +35,21 @@ export function rackBandwidth(rack: Rack, partition: Partition): Oversubscriptio
   return oversubscription(servers, rack.leafCount * spineCount * leafSpineLinks * FABRIC_LINK_GBPS)
 }
 
-/** Leaf → spine bandwidth of a partition against spine → superspine, per
- *  spine. Null unless the fabric has a superspine tier. */
+/** Leaves of the pod with the most, which sets the spine tier's worst
+ *  ratio: every spine of a pod takes all of its leaves. */
+function busiestPodLeaves(partition: Partition): number {
+  return Math.max(0, ...podsOf(partition).map((p) => p.racks.reduce((n, r) => n + r.leafCount, 0)))
+}
+
+/** Leaf → spine bandwidth of the busiest pod against its spine → superspine
+ *  bandwidth, per spine: a pod spine takes leafSpineLinks per leaf of its
+ *  pod and has one link to each superspine of its plane. Null unless the
+ *  fabric has a superspine tier. */
 export function spineBandwidth(partition: Partition): Oversubscription | null {
-  const { fabricType, superspineCount, leafSpineLinks } = partition.fabric
-  if (fabricType !== 'leaf-spine-superspine') return null
-  const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0)
+  if (!hasSuperspineTier(partition)) return null
   return oversubscription(
-    leaves * leafSpineLinks * FABRIC_LINK_GBPS,
-    superspineCount * FABRIC_LINK_GBPS,
+    busiestPodLeaves(partition) * partition.fabric.leafSpineLinks * FABRIC_LINK_GBPS,
+    superspinesPerPlane(partition) * FABRIC_LINK_GBPS,
   )
 }
 
@@ -53,10 +60,10 @@ export function requiredLeafSpineLinks(rack: Rack, partition: Partition): number
   return Math.ceil(rackBandwidth(rack, partition).downGbps / perLink)
 }
 
-/** Superspines a non-blocking spine tier would need. */
+/** Superspines a non-blocking spine tier would need: a plane per spine,
+ *  each as wide as the busiest pod's leaf links. */
 export function requiredSuperspines(partition: Partition): number {
-  const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0)
-  return leaves * partition.fabric.leafSpineLinks
+  return partition.fabric.spineCount * busiestPodLeaves(partition) * partition.fabric.leafSpineLinks
 }
 
 /** "1.0 : 1", "14.4 : 1", or "—" when there is nothing to compare. */

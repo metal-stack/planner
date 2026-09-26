@@ -1,6 +1,7 @@
 import type { IpFamily, IpFamilyKey, IpInfra } from '../../model/ipPlan'
 import { mgmtDeviceCount, type Partition, type Plan } from '../../model/plan'
 import { partitionNodes, rackNodes } from '../nodes'
+import { spinesTotal } from '../pods'
 import {
   contains,
   fitPrefix,
@@ -452,14 +453,14 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
   const nodes = partitionNodes(partition).total
   const out: (InfraSubnet | null)[] = []
 
-  const speakers =
-    leaves + fabric.spineCount + fabric.exitSwitchCount + superspines + fabric.storageLeafCount
+  const spines = spinesTotal(partition)
+  const speakers = leaves + spines + fabric.exitSwitchCount + superspines + fabric.storageLeafCount
   out.push(
     hostSubnet(
       'Underlay loopbacks',
       'Partition',
       speakers + infra.firewallsPerPartition,
-      `${leaves} leaves + ${fabric.spineCount} spines + ${fabric.exitSwitchCount} exits` +
+      `${leaves} leaves + ${spines} spines + ${fabric.exitSwitchCount} exits` +
         (superspines ? ` + ${superspines} superspines` : '') +
         (fabric.storageLeafCount ? ` + ${fabric.storageLeafCount} storage leaves` : '') +
         ` + ${infra.firewallsPerPartition} firewalls`,
@@ -488,7 +489,7 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
   )
 
   const centralSwitches =
-    fabric.spineCount + fabric.exitSwitchCount + superspines + fabric.storageLeafCount + mgmtCount
+    spines + fabric.exitSwitchCount + superspines + fabric.storageLeafCount + mgmtCount
   const centralServers = 2 * mgmtCount + fabric.routerCount
   const centralDetail =
     `${centralSwitches} central switch mgmt interfaces + ${mgmtCount} mgmt servers × 2 (BMC, interface)` +

@@ -5,6 +5,7 @@ import type { Plan } from '../../model/plan'
 import { templates } from '../../model/templates'
 import { formatCidr, formatIp } from './cidr'
 import { deriveIpPlan, largestCluster, type FamilyResult, type MetricId } from './ipPlan'
+import { podPlan } from '../podPlan.fixture'
 
 // The expectations below are the numbers of the address-planning
 // spreadsheet (ip_calc.ods) for the three layouts the presets mirror.
@@ -132,6 +133,15 @@ describe('invalid input', () => {
 })
 
 describe('infrastructure ranges', () => {
+  it('gives the spines of every pod a loopback and a mgmt address', () => {
+    const subnets = deriveIpPlan(podPlan()).infra.partitions[0].subnets
+    const loopbacks = subnets.find((s) => s.purpose === 'Underlay loopbacks')!
+    // 4 leaves + 6 spines + 2 exits + 4 superspines + 4 firewalls
+    expect(loopbacks.needed).toBe(4 + 6 + 2 + 4 + 4)
+    const central = subnets.find((s) => s.purpose === 'Management' && s.scope === 'Central rack')!
+    expect(central.detail).toContain('14 central switch mgmt interfaces')
+  })
+
   it('gives every mgmt spine and mgmt leaf a loopback', () => {
     const plan = createEmptyPlan()
     const loopbacks = deriveIpPlan(plan).infra.partitions[0].subnets.find(

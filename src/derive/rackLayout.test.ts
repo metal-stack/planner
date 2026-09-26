@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyPlan, withRackKind } from '../model/defaults'
+import { podPlan } from './podPlan.fixture'
 import { deriveRackLayout, physicalRackCount } from './rackLayout'
 import { validatePlan } from './validate'
 
@@ -130,5 +131,14 @@ describe('rack group', () => {
 
     plan.partitions[0].racks[0].servers[0].count = 4 // half a MicroCloud
     expect(deriveRackLayout(plan)[0].racks[1].powerWatts).toBe(690 + 1000)
+  })
+})
+
+describe('central rack with pods', () => {
+  it('holds the spines of every pod, not only the central ones', () => {
+    const central = deriveRackLayout(podPlan())[0].racks[0]
+    // 2 central spines + 2 per pod x 2 pods
+    expect(central.slots.filter((s) => s.label.startsWith('Spine'))).toHaveLength(6)
+    expect(central.slots.filter((s) => s.label.startsWith('Superspine'))).toHaveLength(4)
   })
 })

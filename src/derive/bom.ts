@@ -9,6 +9,7 @@ import {
   type UplinkSpeed,
 } from '../model/plan'
 import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane'
+import { hasSuperspineTier, podsOf, spinesTotal, superspinesPerPlane } from './pods'
 
 // The BOM is always derived from the Plan, never stored. Every quantity rule
 // lives here and gets a unit test in bom.test.ts. Every rule also records a
@@ -291,16 +292,58 @@ function addNodeUplinks(
   }
 }
 
-/** Links each spine terminates: `leafSpineLinks` per leaf, one per exit,
- *  superspine and storage leaf. `controlPlaneLeaves` are the leaves of a
+/** One group of spines that terminate the same links: the central rack's
+ *  spines, and with superspines each pod's. */
+export interface SpineGroup {
+  /** "Spines", "Central rack spines" or the pod's name. */
+  name: string
+  /** 100G links each spine of the group terminates. */
+  perSpine: number
+  /** What those links are, for reasons and issue messages. */
+  detail: string
+}
+
+/** Links each spine terminates, per group of spines (derive/pods.ts). A
+ *  leaf-spine partition has one group: `leafSpineLinks` per leaf, one per
+ *  exit and storage leaf. With superspines the central rack's spines are
+ *  the border pod (exits, storage leaves, control-plane rack leaves) and
+ *  every pod's spines take their pod's leaves; each spine adds one link per
+ *  superspine of its plane. `controlPlaneLeaves` are the leaves of a
  *  separate control-plane rack, which uplink like any other leaves. */
-export function spinePortsPerSpine(partition: Partition, controlPlaneLeaves = 0): number {
+export function spinePorts(partition: Partition, controlPlaneLeaves = 0): SpineGroup[] {
   const { fabric } = partition
-  const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0) + controlPlaneLeaves
-  const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
-  return (
-    leaves * fabric.leafSpineLinks + fabric.exitSwitchCount + superspines + fabric.storageLeafCount
-  )
+  const links = fabric.leafSpineLinks
+  const leavesOf = (racks: Rack[]) => racks.reduce((n, r) => n + r.leafCount, 0)
+  const border = fabric.exitSwitchCount + fabric.storageLeafCount + controlPlaneLeaves * links
+  const borderDetail =
+    `${fabric.exitSwitchCount} exits, ${fabric.storageLeafCount} storage leaves` +
+    (controlPlaneLeaves ? `, ${controlPlaneLeaves} control plane leaves × ${links}` : '')
+  if (!hasSuperspineTier(partition)) {
+    const leaves = leavesOf(partition.racks)
+    return [
+      {
+        name: 'Spines',
+        perSpine: leaves * links + border,
+        detail: `${leaves} leaves × ${links}, ${borderDetail}`,
+      },
+    ]
+  }
+  const up = superspinesPerPlane(partition)
+  return [
+    {
+      name: 'Central rack spines',
+      perSpine: border + up,
+      detail: `${borderDetail}, ${up} superspines of its plane`,
+    },
+    ...podsOf(partition).map((pod) => {
+      const leaves = leavesOf(pod.racks)
+      return {
+        name: pod.name,
+        perSpine: leaves * links + up,
+        detail: `${leaves} leaves × ${links}, ${up} superspines of its plane`,
+      }
+    }),
+  ]
 }
 
 /** 100G links between the internet routers and the exit switches. */
@@ -309,11 +352,14 @@ export function routerLinks(partition: Partition): number {
 }
 
 function addFabricLinks(bom: BomBuilder, plan: Plan, partition: Partition): void {
-  const perSpine = spinePortsPerSpine(partition, controlPlaneLeafCount(plan, partition))
-  const links = perSpine * partition.fabric.spineCount
-  const why = `${perSpine} links per spine × ${partition.fabric.spineCount} spines`
-  bom.add('sfp-100g-sr4', 2 * links, `${links} fabric links × 2 ends (${why})`)
-  bom.add('cable-mtp-trunk', links, `${links} fabric links (${why})`)
+  const { spineCount } = partition.fabric
+  for (const group of spinePorts(partition, controlPlaneLeafCount(plan, partition))) {
+    const links = group.perSpine * spineCount
+    if (links === 0) continue
+    const why = `${group.name}: ${group.perSpine} links per spine × ${spineCount} spines`
+    bom.add('sfp-100g-sr4', 2 * links, `${links} fabric links × 2 ends (${why})`)
+    bom.add('cable-mtp-trunk', links, `${links} fabric links (${why})`)
+  }
 
   const { routerCount, exitSwitchCount } = partition.fabric
   const rlinks = routerLinks(partition)
@@ -337,7 +383,7 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
   // mgmt server to its own mgmt spine, and each mgmt firewall to its mgmt
   // server, that server's BMC and its mgmt spine.
   const centralDevices =
-    fabric.spineCount +
+    spinesTotal(partition) +
     fabric.exitSwitchCount +
     superspines +
     fabric.storageLeafCount +
@@ -457,12 +503,15 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
   const prodCentral = bom.on('production').at(CENTRAL_RACK)
   const mgmtCentral = bom.on('management').at(CENTRAL_RACK)
 
+  const pods = podsOf(partition).length
   addSwitch(
     prodCentral,
     fabric.nos,
     fabric.spineModelId,
-    fabric.spineCount,
-    `${fabric.spineCount} spines`,
+    spinesTotal(partition),
+    pods > 0
+      ? `${spinesTotal(partition)} spines (${fabric.spineCount} per pod × ${pods} pods + ${fabric.spineCount} central)`
+      : `${fabric.spineCount} spines`,
   )
   if (fabric.fabricType === 'leaf-spine-superspine') {
     addSwitch(

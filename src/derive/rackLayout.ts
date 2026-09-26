@@ -8,6 +8,7 @@ import {
 } from '../model/plan'
 import { chassisCount } from './bom'
 import { hasOwnRack, inCentralRack } from './controlPlane'
+import { spinesTotal } from './pods'
 
 // Derives physical rack elevations (which device sits in which height
 // units) from the Plan. Like the BOM, the layout is always computed, never
@@ -196,7 +197,8 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
       ...(fabric.fabricType === 'leaf-spine-superspine'
         ? device('Superspine', fabric.superspineModelId, fabric.superspineCount, 'network')
         : []),
-      ...device('Spine', fabric.spineModelId, fabric.spineCount, 'network'),
+      // Every pod's spines sit in the central rack too (derive/pods.ts).
+      ...device('Spine', fabric.spineModelId, spinesTotal(partition), 'network'),
       ...device('Storage leaf', fabric.storageLeafModelId, fabric.storageLeafCount, 'storage'),
       ...device('Mgmt spine', fabric.mgmt.spineModelId, mgmtCount, 'mgmt'),
       ...device('Mgmt server', fabric.mgmt.serverModelId, mgmtCount, 'mgmt'),

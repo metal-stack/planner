@@ -8,14 +8,9 @@ import {
   requiredSuperspines,
   spineBandwidth,
 } from './bandwidth'
-import {
-  deriveBom,
-  mgmtUplinkSpeed,
-  nodeSwitchPorts,
-  rackBmcPorts,
-  spinePortsPerSpine,
-} from './bom'
+import { deriveBom, mgmtUplinkSpeed, nodeSwitchPorts, rackBmcPorts, spinePorts } from './bom'
 import { controlPlaneLeafCount, controlPlaneSwitchPorts, inCentralRack } from './controlPlane'
+import { podsOf, spinesTotal } from './pods'
 import { validateIpPlan } from './ip/validateIp'
 import { deriveRackLayout, formatPower } from './rackLayout'
 
@@ -286,12 +281,47 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
 
   if (fabric.fabricType === 'leaf-spine-superspine') {
     checkSwitchRole(issues, inAdvanced, fabric.superspineModelId, 'superspine', 'Superspine')
+    report(
+      issues,
+      scope,
+      'warning',
+      'Leaf-spine-superspine is a planning design after RFC 7938 (pods and planes), not a ' +
+        'metal-stack reference architecture: validate it in a lab before ordering.',
+    )
     if (fabric.superspineCount === 0) {
       report(
         issues,
         scope,
         'error',
         'Fabric type is leaf-spine-superspine but the superspine count is 0.',
+      )
+    } else if (fabric.spineCount > 0 && fabric.superspineCount % fabric.spineCount !== 0) {
+      const perPlane = Math.max(1, Math.round(fabric.superspineCount / fabric.spineCount))
+      report(
+        issues,
+        inAdvanced,
+        'error',
+        `Superspines must split evenly into one plane per spine: ${fabric.superspineCount} ` +
+          `superspines on ${fabric.spineCount} spines per pod leave ` +
+          `${fabric.superspineCount % fabric.spineCount} unconnected. Use a multiple of ` +
+          `${fabric.spineCount}, e.g. ${perPlane * fabric.spineCount}.`,
+      )
+    }
+    for (const pod of podsOf(partition)) {
+      if (pod.racks.length === 0) {
+        report(issues, scope, 'warning', `${pod.name} has no racks; its spines carry nothing.`)
+      }
+    }
+    const superspine = catalog[fabric.superspineModelId]
+    const podPorts = 1 + podsOf(partition).length
+    if (superspine && podPorts > portCount(superspine, '100G')) {
+      report(
+        issues,
+        inAdvanced,
+        'error',
+        `Superspine capacity exceeded: each superspine needs one 100G port per pod ` +
+          `(${podPorts} with the central rack), but ${itemLabel(fabric.superspineModelId)} ` +
+          `has ${portCount(superspine, '100G')}.`,
       )
     }
   } else if (fabric.superspineCount > 0) {
@@ -310,25 +340,21 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
     report(issues, scope, 'error', 'Partition has racks but no spines.')
   }
 
-  // Spine port budget: leafSpineLinks 100G ports per leaf, one per storage
-  // leaf, exit switch and (if present) superspine.
+  // Spine port budget, per group of spines (spinePorts in bom.ts): the
+  // central rack's, and with superspines each pod's.
   const spine = catalog[fabric.spineModelId]
   if (spine && fabric.spineCount > 0) {
-    const cpLeaves = controlPlaneLeafCount(plan, partition)
-    const leaves = partition.racks.reduce((n, r) => n + r.leafCount, 0) + cpLeaves
-    const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
-    const needed = spinePortsPerSpine(partition, cpLeaves)
     const available = portCount(spine, '100G')
-    if (needed > available) {
-      report(
-        issues,
-        scope,
-        'error',
-        `Spine capacity exceeded: each spine needs ${needed} 100G ports ` +
-          `(${leaves} leaves × ${fabric.leafSpineLinks}, ${fabric.storageLeafCount} storage leaves, ` +
-          `${fabric.exitSwitchCount} exits, ${superspines} superspines), ` +
-          `but ${itemLabel(fabric.spineModelId)} has ${available}.`,
-      )
+    for (const group of spinePorts(partition, controlPlaneLeafCount(plan, partition))) {
+      if (group.perSpine > available) {
+        report(
+          issues,
+          scope,
+          'error',
+          `Spine capacity exceeded (${group.name}): each spine needs ${group.perSpine} 100G ports ` +
+            `(${group.detail}), but ${itemLabel(fabric.spineModelId)} has ${available}.`,
+        )
+      }
     }
   }
 
@@ -377,7 +403,7 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
     const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
     const copperNeeded =
       1 +
-      fabric.spineCount +
+      spinesTotal(partition) +
       fabric.exitSwitchCount +
       superspines +
       fabric.storageLeafCount +

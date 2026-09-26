@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyPlan } from '../model/defaults'
+import { podPlan } from './podPlan.fixture'
 import { templates } from '../model/templates'
 import {
   formatBandwidth,
@@ -70,13 +71,15 @@ describe('spineBandwidth', () => {
     const partition = plan.partitions[0]
     partition.fabric.fabricType = 'leaf-spine-superspine'
     partition.fabric.superspineCount = 2
-    // 2 leaves x 1 link x 100 down, 2 superspines x 100 up
-    expect(spineBandwidth(partition)).toEqual({ downGbps: 200, upGbps: 200, ratio: 1 })
-    expect(requiredSuperspines(partition)).toBe(2)
+    // One pod: 2 leaves x 1 link x 100 down per spine; 2 superspines on 2
+    // spines is 1 per plane, so 1 x 100 up
+    expect(spineBandwidth(partition)).toEqual({ downGbps: 200, upGbps: 100, ratio: 2 })
+    // 1:1 needs planes as wide as the pod's leaf links: 2 spines x 2
+    expect(requiredSuperspines(partition)).toBe(4)
 
     partition.fabric.leafSpineLinks = 2
-    expect(spineBandwidth(partition)!.ratio).toBe(2)
-    expect(requiredSuperspines(partition)).toBe(4)
+    expect(spineBandwidth(partition)!.ratio).toBe(4)
+    expect(requiredSuperspines(partition)).toBe(8)
   })
 })
 
@@ -84,5 +87,18 @@ describe('formatBandwidth', () => {
   it('switches to Tbit/s above 1000 Gbit/s', () => {
     expect(formatBandwidth(400)).toBe('400 Gbit/s')
     expect(formatBandwidth(11_500)).toBe('11.5 Tbit/s')
+  })
+})
+
+describe('spine tier with pods', () => {
+  it('compares a pod spine against its plane, not the whole partition', () => {
+    // Per pod spine: 2 leaves x 1 link x 100 down, 2 superspines x 100 up
+    expect(spineBandwidth(podPlan().partitions[0])).toMatchObject({
+      downGbps: 200,
+      upGbps: 200,
+      ratio: 1,
+    })
+    // 1:1 needs 2 superspines per plane, 4 in all
+    expect(requiredSuperspines(podPlan().partitions[0])).toBe(4)
   })
 })

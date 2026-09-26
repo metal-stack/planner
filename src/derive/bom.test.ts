@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyPlan, defaultPartition, defaultRack } from '../model/defaults'
+import { podPlan } from './podPlan.fixture'
 import type { Plan, ServerGroup } from '../model/plan'
 import {
   chassisCount,
@@ -113,8 +114,9 @@ describe('deriveBom fabric extensions', () => {
     // default plan already has 6x AS7726 (2 spines + 2 exits + 2 leaves)
     expect(quantity(plan, 'switch-as7726')).toBe(8)
 
+    // + 4 superspines + the implicit Pod 1's own 2 spines
     fabric.fabricType = 'leaf-spine-superspine'
-    expect(quantity(plan, 'switch-as7726')).toBe(12)
+    expect(quantity(plan, 'switch-as7726')).toBe(14)
   })
 })
 
@@ -516,5 +518,19 @@ describe('control plane', () => {
     // Those leaves uplink to the spines like any other rack's.
     const central = line(createEmptyPlan(), 'cable-mtp-trunk')?.quantity ?? 0
     expect(line(plan, 'cable-mtp-trunk')!.quantity).toBeGreaterThan(central)
+  })
+})
+
+describe('deriveBom leaf-spine-superspine (pods and planes)', () => {
+  it('orders spineCount spines per pod plus the border pod', () => {
+    // 6 spines (2 border + 2 per pod x 2 pods) + 2 exits + 4 leaves + 4 superspines
+    expect(quantity(podPlan(), 'switch-as7726')).toBe(6 + 2 + 4 + 4)
+  })
+
+  it('counts fabric links per pod and plane', () => {
+    // Border spines: 2 exits + 2 superspines of their plane = 4 links each, x 2
+    // Pod spines: 2 leaves + 2 superspines = 4 links each, x 2 spines x 2 pods
+    // Routers: 2 routers x 2 exits x 2 links
+    expect(quantity(podPlan(), 'cable-mtp-trunk')).toBe(8 + 16 + 8)
   })
 })
