@@ -10,6 +10,7 @@ import {
   nosOptions,
   portCount,
   serversForUsage,
+  sonicPortNames,
   switchesForRole,
   type CatalogItem,
 } from './catalog'
@@ -136,6 +137,25 @@ describe('category invariants', () => {
       expect(item.licenseClass, `${id}.licenseClass`).toBeDefined()
       expect(item.vendor, `${id}.vendor`).toBeDefined()
     }
+  })
+
+  it('maps SONiC port names onto exactly the ports it lists, without duplicates', () => {
+    for (const [id, item] of entries) {
+      if (!item.sonicPorts) continue
+      for (const { speed, count } of item.ports ?? []) {
+        const names = sonicPortNames(id, speed)
+        expect(names, `${id} ${speed}`).toHaveLength(count)
+        expect(new Set(names).size, `${id} ${speed} unique`).toBe(count)
+      }
+      const mapped = item.sonicPorts.reduce((n, g) => n + g.count, 0)
+      const listed = (item.ports ?? []).reduce((n, g) => n + g.count, 0)
+      expect(mapped, `${id} mapped ports`).toBe(listed)
+    }
+    expect(sonicPortNames('switch-as7726', '100G').slice(-2)).toEqual([
+      'Ethernet120',
+      'Ethernet124',
+    ])
+    expect(sonicPortNames('switch-as4630', '100G')).toEqual(['Ethernet52', 'Ethernet56'])
   })
 
   it('gives every server height, power, nodes and usages', () => {

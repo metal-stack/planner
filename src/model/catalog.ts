@@ -105,6 +105,11 @@ export interface CatalogItem {
   serverUsages?: ServerUsage[]
   /** Max GPUs a single server node of this model accepts; absent = none. */
   gpuCapable?: number
+  /** SONiC interface names of the front-panel ports, per port group in the
+   *  order of `ports`: port i of a group is `Ethernet${first + i * step}`.
+   *  Absent where no upstream port map exists, which the Ansible export
+   *  reports instead of guessing. */
+  sonicPorts?: { speed: PortSpeed; first: number; step: number; count: number }[]
   /** No plan can select this item, so it never reaches a BOM: it is kept
    *  because the official compatibility list names it. Say why. Every
    *  otherwise-unreachable entry must set this (catalog.test.ts), so that
@@ -127,6 +132,8 @@ export const catalog: Record<string, CatalogItem> = {
     heightUnits: 1,
     powerWatts: 300,
     ports: [{ speed: '100G', count: 32 }],
+    // sonic-buildimage device/accton/x86_64-accton_as7726_32x-r0/Accton-AS7726-32X/port_config.ini
+    sonicPorts: [{ speed: '100G', first: 0, step: 4, count: 32 }],
     status: 'stable',
     switchRoles: ['leaf', 'spine', 'superspine', 'exit', 'storage-leaf'],
     licenseClass: '100g',
@@ -160,6 +167,12 @@ export const catalog: Record<string, CatalogItem> = {
       { speed: '1G', count: 48 },
       { speed: '25G', count: 4 },
       { speed: '100G', count: 2 },
+    ],
+    // sonic-buildimage device/accton/x86_64-accton_as4630_54te-r0/Accton-AS4630-54TE/port_config.ini
+    sonicPorts: [
+      { speed: '1G', first: 0, step: 1, count: 48 },
+      { speed: '25G', first: 48, step: 1, count: 4 },
+      { speed: '100G', first: 52, step: 4, count: 2 },
     ],
     status: 'stable',
     switchRoles: ['mgmt-spine', 'mgmt-leaf'],
@@ -669,6 +682,14 @@ export function gpusForServer(serverModelId: string): CatalogItem[] {
 
 /** How a BOM line names its item: the model people say, else the ordering
  *  code, else the raw id. */
+/** SONiC names of a switch model's ports of one speed, in front-panel
+ *  order; empty when the catalog has no port map for the model. */
+export function sonicPortNames(modelId: string, speed: PortSpeed): string[] {
+  return (catalog[modelId]?.sonicPorts ?? [])
+    .filter((g) => g.speed === speed)
+    .flatMap((g) => Array.from({ length: g.count }, (_, i) => `Ethernet${g.first + i * g.step}`))
+}
+
 export function itemLabel(id: string): string {
   const item = catalog[id]
   return item?.model ?? item?.partNumber ?? id
