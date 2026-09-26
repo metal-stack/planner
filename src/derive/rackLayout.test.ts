@@ -10,12 +10,13 @@ describe('deriveRackLayout', () => {
 
     expect(central.name).toBe('Central rack')
     expect(central.maxPowerWatts).toBe(12000)
-    // 2 routers + 2 exits + 2 spines + 2 mgmt spines + 2 mgmt servers, all 1U
-    expect(central.slots).toHaveLength(10)
-    expect(central.usedU).toBe(10)
+    // 2 routers + 2 exits + 2 spines + 2 mgmt spines + 2 mgmt servers
+    // + 2 mgmt firewalls, all 1U
+    expect(central.slots).toHaveLength(12)
+    expect(central.usedU).toBe(12)
     expect(central.slots[0]).toMatchObject({ label: 'Router 1', topU: 42, units: 1 })
     expect(central.slots[2]).toMatchObject({ label: 'Exit 1', topU: 40, units: 1 })
-    expect(central.slots[9].topU).toBe(33)
+    expect(central.slots[11]).toMatchObject({ label: 'Mgmt firewall 2', topU: 31 })
   })
 
   it('lays out a compute rack: mgmt leaf on top, leaves, then server chassis', () => {
@@ -124,7 +125,8 @@ describe('rack group', () => {
     // 2x AS7726 (300 W) + AS4630 (90 W) + one full MicroCloud (2000 W)
     expect(layout.racks[1].powerWatts).toBe(2690)
     // 2 routers (400 W) + 2 exits + 2 spines (300 W) + 2 mgmt spines (90 W) + 2 mgmt servers (500 W)
-    expect(layout.racks[0].powerWatts).toBe(3180)
+    // + 2 mgmt firewalls (100 W)
+    expect(layout.racks[0].powerWatts).toBe(3380)
 
     plan.partitions[0].racks[0].servers[0].count = 4 // half a MicroCloud
     expect(deriveRackLayout(plan)[0].racks[1].powerWatts).toBe(690 + 1000)

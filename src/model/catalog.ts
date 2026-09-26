@@ -353,6 +353,19 @@ export const catalog: Record<string, CatalogItem> = {
     ports: [{ speed: '100G', count: 4 }],
     powerWatts: 400,
   },
+  'firewall-mgmt': {
+    id: 'firewall-mgmt',
+    category: 'router',
+    // Vendor-neutral like the internet router: the deployment guide asks
+    // for firewall rules, destination and hairpin NAT, DHCP with ZTP
+    // options and BGP, which pfSense or Debian with FRR provide alike. The
+    // RUTXR1 of earlier setups is end-of-life at Teltonika (last order
+    // 2027-02-03). The power figure is an estimate for a small 1U server.
+    description: 'Management firewall, 6× 1G RJ45 (e.g. pfSense, or Debian with FRR)',
+    heightUnits: 1,
+    ports: [{ speed: '1G', count: 6 }],
+    powerWatts: 100,
+  },
 
   // --- NICs (official metal-stack compatibility list) ---
   // Intel's ordering codes drop the hyphen of the marketing model name.

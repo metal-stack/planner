@@ -26,6 +26,7 @@ export function defaultFabric(): FabricConfig {
       leafModelId: 'switch-as4630',
       leafPerRack: 1,
       serverModelId: 'server-mgmt-121h',
+      firewallModelId: 'firewall-mgmt',
     },
     leafSpineLinks: 1,
     nonBlocking: false,

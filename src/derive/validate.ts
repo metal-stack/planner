@@ -1,11 +1,5 @@
 import { catalog, itemLabel, portCount, type SwitchRole } from '../model/catalog'
-import {
-  mgmtDeviceCount,
-  type Partition,
-  type Plan,
-  type Rack,
-  type ServerGroup,
-} from '../model/plan'
+import { type Partition, type Plan, type Rack, type ServerGroup } from '../model/plan'
 import {
   formatGbps,
   formatRatio,
@@ -371,14 +365,15 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
   }
 
   // Mgmt spine port budgets, matching the cabling model in bom.ts: copper
-  // 1G ports for the mgmt servers and the management interface of every
-  // central-rack switch and router; fiber ports (25G, or 10G on switches
-  // without 25G) for the uplink of every mgmt leaf.
+  // 1G ports for its own mgmt server and the management interface of every
+  // central-rack switch and router (the mgmt firewall lands on the spine's
+  // own mgmt port, not a front-panel one); fiber ports (25G, or 10G on
+  // switches without 25G) for the uplink of every mgmt leaf.
   const mgmtSpine = catalog[fabric.mgmt.spineModelId]
   if (mgmtSpine && partition.racks.length > 0) {
     const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
     const copperNeeded =
-      mgmtDeviceCount(fabric.mgmt) +
+      1 +
       fabric.spineCount +
       fabric.exitSwitchCount +
       superspines +

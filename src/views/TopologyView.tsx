@@ -13,6 +13,7 @@ const LEGEND_DEVICES: [LucideIcon, string][] = [
   [NODE_ICON.router, 'Router'],
   [NODE_ICON['server-group'], 'Servers'],
   [NODE_ICON['mgmt-server'], 'Mgmt server'],
+  [NODE_ICON['mgmt-firewall'], 'Mgmt firewall'],
   [EXTERNAL_NETWORK_ICON.internet, 'Internet'],
 ]
 
@@ -37,7 +38,11 @@ function LegendLine(props: { color: string; width: number; dashed?: boolean; lab
 
 const modes: { mode: TopologyMode; label: string; hint: string }[] = [
   { mode: 'production', label: 'Production', hint: 'Routers, exits, spines, leaves and servers' },
-  { mode: 'management', label: 'Management', hint: 'Mgmt spines, mgmt servers, mgmt leaves' },
+  {
+    mode: 'management',
+    label: 'Management',
+    hint: 'Mgmt spines, mgmt servers, mgmt firewalls, mgmt leaves',
+  },
   { mode: 'central', label: 'Central rack', hint: 'Only the central rack, both networks' },
 ]
 

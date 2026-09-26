@@ -77,7 +77,8 @@ export const RackSchema = z.object({
 export type Rack = z.infer<typeof RackSchema>
 
 /** The management network has its own topology: a flat L2 network or an L3
- *  (routed) fabric, redundant (2 mgmt spines / 2 mgmt servers) or not. */
+ *  (routed) fabric, redundant (2 mgmt spines / 2 mgmt servers / 2 mgmt
+ *  firewalls) or not. */
 export const MgmtNetworkSchema = z.object({
   layer: MgmtLayerSchema.default('l3'),
   redundant: z.boolean().default(true),
@@ -85,10 +86,12 @@ export const MgmtNetworkSchema = z.object({
   leafModelId: z.string().default('switch-as4630'),
   leafPerRack: z.number().int().min(0).default(1),
   serverModelId: z.string().default('server-mgmt-121h'),
+  firewallModelId: z.string().default('firewall-mgmt'),
 })
 export type MgmtNetwork = z.infer<typeof MgmtNetworkSchema>
 
-/** Redundancy drives the count of mgmt spines and mgmt servers. */
+/** Redundancy drives the count of mgmt spines, mgmt servers and mgmt
+ *  firewalls. */
 export function mgmtDeviceCount(mgmt: MgmtNetwork): number {
   return mgmt.redundant ? 2 : 1
 }
@@ -115,6 +118,7 @@ export const FabricConfigSchema = z.object({
     leafModelId: 'switch-as4630',
     leafPerRack: 1,
     serverModelId: 'server-mgmt-121h',
+    firewallModelId: 'firewall-mgmt',
   }),
   /** 100G links from every leaf to every spine (uplink bundle size). Every
    *  switch's single management interface connects to the management

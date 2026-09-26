@@ -28,8 +28,10 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   one BMC/OOB port per server chassis to the rack's mgmt leaf (the sample
 //   BOMs count per chassis, not per node), the single management interface
 //   of every leaf to the rack's mgmt leaf, the single management interface
-//   of every central-rack switch and router to the mgmt spines, and every
-//   mgmt server to every mgmt spine.
+//   of every central-rack switch and router to the mgmt spines, each mgmt
+//   server to its own mgmt spine, and each mgmt firewall three times: to its
+//   mgmt server, to that server's BMC and to its mgmt spine's mgmt port
+//   (deployment guide, routed out-of-band network).
 // - Management network, fiber: every mgmt leaf uplinks once to every mgmt
 //   spine over an LC duplex cable with an SR transceiver on both ends — 25G
 //   when both switch models have 25G ports, 10G otherwise.
@@ -315,8 +317,9 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
   const speed = mgmtUplinkSpeed(mgmt.leafModelId, mgmt.spineModelId)
   const uplinkOptic = speed === '25G' ? 'sfp-25g-sr' : 'sfp-10g-sr'
 
-  // Central rack: the mgmt interface of every switch and router there, plus
-  // every mgmt server to every mgmt spine.
+  // Central rack: the mgmt interface of every switch and router there, each
+  // mgmt server to its own mgmt spine, and each mgmt firewall to its mgmt
+  // server, that server's BMC and its mgmt spine.
   const centralDevices =
     fabric.spineCount +
     fabric.exitSwitchCount +
@@ -328,10 +331,11 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
     centralDevices,
     `${centralDevices} switches and routers × 1 mgmt interface to the mgmt spines`,
   )
+  central.add('cable-rj45', mgmtCount, `${mgmtCount} mgmt servers × 1 link to their mgmt spine`)
   central.add(
     'cable-rj45',
-    mgmtCount * mgmtCount,
-    `${mgmtCount} mgmt servers × ${mgmtCount} mgmt spines`,
+    3 * mgmtCount,
+    `${mgmtCount} mgmt firewalls × 3 (mgmt server, its BMC, mgmt spine mgmt port)`,
   )
 
   // Per rack: BMC copper, the leaves' mgmt interfaces, and the mgmt leaf
@@ -462,8 +466,8 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
     fabric.storageLeafCount,
     `${fabric.storageLeafCount} storage leaves`,
   )
-  // Management network: spines and servers in the central rack (count
-  // driven by redundancy), one mgmt leaf per compute rack.
+  // Management network: spines, servers and firewalls in the central rack
+  // (count driven by redundancy), one mgmt leaf per compute rack.
   const mgmtCount = mgmtDeviceCount(fabric.mgmt)
   const redundancy = fabric.mgmt.redundant ? 'redundant' : 'non-redundant'
   addSwitch(
@@ -474,6 +478,11 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
     `${mgmtCount} mgmt spines (${redundancy})`,
   )
   mgmtCentral.add(fabric.mgmt.serverModelId, mgmtCount, `${mgmtCount} mgmt servers (${redundancy})`)
+  mgmtCentral.add(
+    fabric.mgmt.firewallModelId,
+    mgmtCount,
+    `${mgmtCount} mgmt firewalls (${redundancy})`,
+  )
 
   // Everything the central rack contributes is emitted before anything a
   // compute rack does, and the racks follow in plan order. That makes the

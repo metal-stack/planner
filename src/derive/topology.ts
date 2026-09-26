@@ -25,6 +25,7 @@ export type TopoNodeKind =
   | 'mgmt-spine'
   | 'mgmt-leaf'
   | 'mgmt-server'
+  | 'mgmt-firewall'
   | 'server-group'
   | 'control-plane'
   | 'external-network'
@@ -61,8 +62,8 @@ export interface TopoRack {
   serverGroups: TopoNode[]
 }
 
-/** Spines, exits, superspines, mgmt spines and mgmt servers all live in the
- *  partition's central rack. */
+/** Spines, exits, superspines, mgmt spines, mgmt servers and mgmt
+ *  firewalls all live in the partition's central rack. */
 export interface TopoCentralRack {
   /** Internet routers; internet and company networks attach here when
    *  present. */
@@ -72,6 +73,9 @@ export interface TopoCentralRack {
   exits: TopoNode[]
   mgmtSpines: TopoNode[]
   mgmtServers: TopoNode[]
+  /** The bastions of the management network: firewall i guards mgmt
+   *  server i and bootstraps mgmt spine i. */
+  mgmtFirewalls: TopoNode[]
 }
 
 export interface TopoPartition {
@@ -139,7 +143,13 @@ function deriveRack(partition: Partition, rack: Rack, links: TopoLink[]): TopoRa
   // Production leaves cross-connect into the management fabric.
   for (const leaf of leaves) {
     for (const mgmtLeaf of mgmtLeaves) {
-      links.push({ from: leaf.id, to: mgmtLeaf.id, count: 1, speed: '1G', network: 'management' })
+      links.push({
+        from: leaf.id,
+        to: mgmtLeaf.id,
+        count: 1,
+        speed: '1G',
+        network: 'management',
+      })
     }
   }
 
@@ -225,6 +235,13 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
       mgmt.serverModelId,
       mgmtCount,
     ),
+    mgmtFirewalls: tier(
+      `${p}mgmtfirewall`,
+      'mgmt-firewall',
+      'Mgmt firewall',
+      mgmt.firewallModelId,
+      mgmtCount,
+    ),
   }
 
   const storageLeaves = tier(
@@ -268,8 +285,14 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
       links.push({ from: spine.id, to: mgmtSpine.id, count: 1, speed: '1G', network: 'management' })
     }
   }
-  for (const mgmtServer of central.mgmtServers) {
-    for (const mgmtSpine of central.mgmtSpines) {
+  // Each side of the management network is a chain (deployment guide,
+  // routed out-of-band network): firewall i links to mgmt server i twice
+  // (its interface and its BMC) and to mgmt spine i's own mgmt port, and
+  // mgmt server i uplinks to mgmt spine i only.
+  const mgmtSpines = central.mgmtSpines
+  central.mgmtServers.forEach((mgmtServer, i) => {
+    const mgmtSpine = mgmtSpines[i]
+    if (mgmtSpine) {
       links.push({
         from: mgmtServer.id,
         to: mgmtSpine.id,
@@ -278,7 +301,29 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
         network: 'management',
       })
     }
-  }
+  })
+  central.mgmtFirewalls.forEach((firewall, i) => {
+    const mgmtServer = central.mgmtServers[i]
+    const mgmtSpine = mgmtSpines[i]
+    if (mgmtServer) {
+      links.push({
+        from: firewall.id,
+        to: mgmtServer.id,
+        count: 2,
+        speed: '1G',
+        network: 'management',
+      })
+    }
+    if (mgmtSpine) {
+      links.push({
+        from: firewall.id,
+        to: mgmtSpine.id,
+        count: 1,
+        speed: '1G',
+        network: 'management',
+      })
+    }
+  })
 
   const racks = partition.racks.flatMap((rack) => deriveRack(partition, rack, links))
 
@@ -469,7 +514,12 @@ export function deriveTopology(plan: Plan): TopologyGraph {
  *  management network, or the central rack alone with both networks. */
 export type TopologyMode = 'production' | 'management' | 'central'
 
-const MGMT_KINDS = new Set<TopoNodeKind>(['mgmt-spine', 'mgmt-leaf', 'mgmt-server'])
+const MGMT_KINDS = new Set<TopoNodeKind>([
+  'mgmt-spine',
+  'mgmt-leaf',
+  'mgmt-server',
+  'mgmt-firewall',
+])
 
 function nodeVisible(node: TopoNode, mode: TopologyMode): boolean {
   if (mode === 'central') return true
@@ -496,6 +546,7 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       exits: keep(p.central.exits),
       mgmtSpines: keep(p.central.mgmtSpines),
       mgmtServers: keep(p.central.mgmtServers),
+      mgmtFirewalls: keep(p.central.mgmtFirewalls),
     },
     storageLeaves: mode === 'central' ? [] : keep(p.storageLeaves),
     racks:
@@ -522,6 +573,7 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       ...p.central.exits,
       ...p.central.mgmtSpines,
       ...p.central.mgmtServers,
+      ...p.central.mgmtFirewalls,
       ...p.storageLeaves,
       ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),

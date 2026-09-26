@@ -200,6 +200,7 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
       ...device('Storage leaf', fabric.storageLeafModelId, fabric.storageLeafCount, 'storage'),
       ...device('Mgmt spine', fabric.mgmt.spineModelId, mgmtCount, 'mgmt'),
       ...device('Mgmt server', fabric.mgmt.serverModelId, mgmtCount, 'mgmt'),
+      ...device('Mgmt firewall', fabric.mgmt.firewallModelId, mgmtCount, 'mgmt'),
       // On-prem control-plane nodes, when they share the central rack.
       ...(inCentralRack(plan, partition)
         ? device(

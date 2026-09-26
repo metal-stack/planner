@@ -95,6 +95,8 @@ describe('deriveBom switches', () => {
     expect(quantity(plan, 'switch-as4630')).toBe(3)
     // 2 mgmt servers (redundant) in the central rack
     expect(quantity(plan, 'server-mgmt-121h')).toBe(2)
+    // one mgmt firewall per mgmt server
+    expect(quantity(plan, 'firewall-mgmt')).toBe(2)
   })
 })
 
@@ -140,18 +142,20 @@ describe('deriveBom management cabling', () => {
     const plan = createEmptyPlan()
     // 1 chassis (8 nodes) BMC + 2 leaves × 1 mgmt interface
     // + (2 spines + 2 exits + 2 routers) × 1 mgmt interface
-    // + 2 mgmt servers x 2 mgmt spines
-    expect(quantity(plan, 'cable-rj45')).toBe(1 + 2 + 6 + 4)
+    // + 2 mgmt servers × 1 link to their own mgmt spine
+    // + 2 mgmt firewalls × 3 (mgmt server, its BMC, mgmt spine eth0)
+    expect(quantity(plan, 'cable-rj45')).toBe(1 + 2 + 6 + 2 + 6)
     // 9 nodes -> 2 chassis
     plan.partitions[0].racks[0].servers[0].count = 9
-    expect(quantity(plan, 'cable-rj45')).toBe(2 + 2 + 6 + 4)
+    expect(quantity(plan, 'cable-rj45')).toBe(2 + 2 + 6 + 2 + 6)
   })
 
-  it('halves the mgmt server links for a non-redundant management network', () => {
+  it('halves the mgmt server and firewall links for a non-redundant management network', () => {
     const plan = createEmptyPlan()
     plan.partitions[0].fabric.mgmt.redundant = false
-    // 1 + 2 + 6 + 1 x 1
-    expect(quantity(plan, 'cable-rj45')).toBe(10)
+    // 1 + 2 + 6 + 1 mgmt server link + 1 firewall × 3
+    expect(quantity(plan, 'cable-rj45')).toBe(13)
+    expect(quantity(plan, 'firewall-mgmt')).toBe(1)
   })
 
   it('uplinks every mgmt leaf to every mgmt spine over 25G fiber', () => {
@@ -222,7 +226,7 @@ describe('deriveBom reasons, spares and partition scope', () => {
   it('records one reason per contributing rule', () => {
     const plan = createEmptyPlan()
     const rj45 = deriveBom(plan).find((l) => l.catalogId === 'cable-rj45')!
-    expect(rj45.reasons).toHaveLength(4)
+    expect(rj45.reasons).toHaveLength(5)
     expect(rj45.reasons[0]).toEqual({
       quantity: 6,
       detail: '6 switches and routers × 1 mgmt interface to the mgmt spines',
@@ -239,6 +243,7 @@ describe('deriveBom reasons, spares and partition scope', () => {
     const plan = createEmptyPlan()
     const rj45 = deriveBom(plan).find((l) => l.catalogId === 'cable-rj45')!
     expect(rj45.reasons.map((r) => r.where)).toEqual([
+      'Central rack',
       'Central rack',
       'Central rack',
       'Rack 1',

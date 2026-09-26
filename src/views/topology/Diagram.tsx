@@ -13,7 +13,9 @@ import {
 // Renders the derived TopologyGraph as a fabric elevation. Each partition
 // draws its central rack as one physical unit with two columns: production
 // gear on the left (exits/superspines above the spines) and management gear
-// on the right (mgmt servers above the mgmt spines). Keeping both tiers
+// on the right (mgmt servers above the mgmt spines, each with its mgmt
+// firewall on the outer side, so the chain firewall - server - mgmt spine
+// of either side never crosses the other). Keeping both tiers
 // that connect downwards — spines and mgmt spines — in the bottom row means
 // the uplinks from the compute racks (ToR leaves to spines, mgmt leaf to
 // mgmt spines) never have to cross another row of devices. Compute racks
@@ -102,6 +104,18 @@ function placeRow(rects: Map<string, Rect>, nodes: TopoNode[], cx: number, y: nu
     rects.set(node.id, { x, y, w: NODE_W, h })
     x += NODE_W + GAP
   }
+}
+
+/** The mgmt servers with their firewalls on the outer side:
+ *  [firewall 1, server 1, server 2, firewall 2]. Each server then sits over
+ *  its own mgmt spine, and each firewall reaches both of its peers without
+ *  crossing a link of the other side. */
+function mgmtServerRow(central: TopoPartition['central']): TopoNode[] {
+  return central.mgmtServers.flatMap((server, i) => {
+    const firewall = central.mgmtFirewalls[i]
+    if (!firewall) return [server]
+    return i % 2 === 0 ? [firewall, server] : [server, firewall]
+  })
 }
 
 /** A centered row of external network capsules. */
@@ -217,8 +231,8 @@ function layoutPartition(
       : 0
 
   // Central rack, two columns: production (optional routers, then
-  // superspines/exits, then spines) and management (mgmt servers over mgmt
-  // spines, aligned to the bottom rows).
+  // superspines/exits, then spines) and management (mgmt servers and
+  // firewalls over mgmt spines, aligned to the bottom rows).
   const hasRouters = central.routers.length > 0
   // On-prem control-plane nodes in the central rack share the top row with
   // the routers; a managed cluster is a capsule above the rack instead.
@@ -226,7 +240,8 @@ function layoutPartition(
   const row0 = [...central.routers, ...(cpBox ? [cpBox] : [])]
   const prodRow1W = rowWidth(central.superspines.length) + rowWidth(central.exits.length) + 56
   const prodW = Math.max(prodRow1W, rowWidth(central.spines.length), rowWidth(row0.length))
-  const mgmtW = Math.max(rowWidth(central.mgmtServers.length), rowWidth(central.mgmtSpines.length))
+  const mgmtRow = mgmtServerRow(central)
+  const mgmtW = Math.max(rowWidth(mgmtRow.length), rowWidth(central.mgmtSpines.length))
   const columnGap = prodW > 0 && mgmtW > 0 ? COLUMN_GAP : 0
   const centralInnerW = prodW + columnGap + mgmtW
   const fabricW = Math.max(racksW + storageW, centralInnerW + 2 * RACK_PAD, 300)
@@ -249,7 +264,7 @@ function layoutPartition(
   if (row0.length > 0) placeRow(rects, row0, prodCx, row0Y)
   placeGroupedRow(rects, central.superspines, central.exits, prodCx, row1Y)
   placeRow(rects, central.spines, prodCx, row2Y)
-  placeRow(rects, central.mgmtServers, mgmtCx, row1Y)
+  placeRow(rects, mgmtRow, mgmtCx, row1Y)
   placeRow(rects, central.mgmtSpines, mgmtCx, row2Y)
   const boxRect: Rect = {
     x: innerLeft - RACK_PAD,
@@ -390,7 +405,10 @@ function NodeBox({ node, r, capsule }: { node: TopoNode; r: Rect; capsule?: bool
     node.kind === 'server-group' || node.kind === 'mgmt-server' || node.kind === 'router'
   const isExternal = capsule ?? node.kind === 'external-network'
   const isMgmt =
-    node.kind === 'mgmt-spine' || node.kind === 'mgmt-leaf' || node.kind === 'mgmt-server'
+    node.kind === 'mgmt-spine' ||
+    node.kind === 'mgmt-leaf' ||
+    node.kind === 'mgmt-server' ||
+    node.kind === 'mgmt-firewall'
 
   const labelY = r.y + 18
   const subY = labelY + 12
@@ -484,6 +502,7 @@ export default function Diagram({
       ...p.central.exits,
       ...p.central.mgmtSpines,
       ...p.central.mgmtServers,
+      ...p.central.mgmtFirewalls,
       ...p.storageLeaves,
       ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),

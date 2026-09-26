@@ -28,6 +28,31 @@ describe('deriveTopology', () => {
     const graph = deriveTopology(plan)
     expect(graph.partitions[0].central.mgmtSpines).toHaveLength(1)
     expect(graph.partitions[0].central.mgmtServers).toHaveLength(1)
+    expect(graph.partitions[0].central.mgmtFirewalls).toHaveLength(1)
+  })
+
+  it('chains each mgmt firewall, mgmt server and mgmt spine one to one', () => {
+    const graph = deriveTopology(createEmptyPlan())
+    const { mgmtFirewalls, mgmtServers, mgmtSpines } = graph.partitions[0].central
+    expect(mgmtFirewalls).toHaveLength(2)
+    const linksOf = (id: string) => graph.links.filter((l) => l.from === id || l.to === id)
+    const ends = (id: string) => linksOf(id).map((l) => (l.from === id ? l.to : l.from))
+
+    mgmtServers.forEach((server, i) => {
+      expect(ends(server.id).sort()).toEqual([mgmtFirewalls[i].id, mgmtSpines[i].id].sort())
+    })
+    mgmtFirewalls.forEach((firewall, i) => {
+      expect(ends(firewall.id).sort()).toEqual([mgmtServers[i].id, mgmtSpines[i].id].sort())
+      const toServer = linksOf(firewall.id).find((l) => l.to === mgmtServers[i].id)
+      expect(toServer).toMatchObject({ count: 2, speed: '1G', network: 'management' })
+    })
+  })
+
+  it('keeps the mgmt firewalls in management and central mode only', () => {
+    const graph = deriveTopology(createEmptyPlan())
+    expect(filterTopology(graph, 'management').partitions[0].central.mgmtFirewalls).toHaveLength(2)
+    expect(filterTopology(graph, 'central').partitions[0].central.mgmtFirewalls).toHaveLength(2)
+    expect(filterTopology(graph, 'production').partitions[0].central.mgmtFirewalls).toHaveLength(0)
   })
 
   it('labels the mgmt spine with the management network layer', () => {
