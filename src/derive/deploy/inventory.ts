@@ -2,6 +2,7 @@ import type { Partition, Plan } from '../../model/plan'
 import type { YamlMap } from '../../io/yaml'
 import { formatIp, subnet, type Cidr } from '../ip/cidr'
 import { rackNodes } from '../nodes'
+import { podsOf } from '../pods'
 import { deriveIpPlan, type InfraPartition } from '../ip/ipPlan'
 import {
   deriveCabling,
@@ -46,7 +47,9 @@ import {
 // network; in the production network the spines share 4210000000 and the
 // exits 4210000001, storage leaves take 4210000100 + i and leaves
 // 4210001000 + i (this planner's convention, one ASN per leaf as in the
-// production inventory).
+// production inventory). With pods, RFC 7938 section 5.2.1: the superspines
+// share 4210000002, the spines of pod k share 4210000010 + k, and the
+// central rack's spines keep 4210000000.
 //
 // What the plan cannot know is left undefined, never filled with a
 // placeholder, so the roles' own "is defined" checks still stop a run; the
@@ -123,6 +126,8 @@ const ASN = {
   mgmtLeaf: 4200000021,
   spines: 4210000000,
   exits: 4210000001,
+  superspines: 4210000002,
+  podSpines: 4210000010,
   storageLeaf: 4210000100,
   leaf: 4210001000,
 } as const
@@ -190,6 +195,8 @@ function partitionInventory(
 
   const byRole = (role: SwitchHost['role']) => c.switches.filter((s) => s.role === role)
   const spines = byRole('spine')
+  const superspines = byRole('superspine')
+  const podIndex = new Map(podsOf(partition).map((pod, k) => [pod.id, k]))
   const exits = byRole('exit')
   const storageLeaves = byRole('storage-leaf')
   const leaves = byRole('leaf')
@@ -222,7 +229,7 @@ function partitionInventory(
   // Loopbacks.
   const loopbacks = new Map<string, string>()
   const underlay = range('Underlay loopbacks')
-  ;[...spines, ...exits, ...storageLeaves, ...leaves].forEach((sw, i) => {
+  ;[...spines, ...superspines, ...exits, ...storageLeaves, ...leaves].forEach((sw, i) => {
     if (underlay) loopbacks.set(sw.name, ip(underlay, i))
   })
   const mgmtLoop = range('Mgmt loopbacks')
@@ -367,7 +374,13 @@ function partitionInventory(
   const children: YamlMap = {
     [g('spines')]: {
       vars: { sonic_config_asn: ASN.spines, sonic_config_frr_l2vpn_evpn: true },
-      hosts: hosts(spines, () => ({})),
+      hosts: hosts(spines, (sw) =>
+        sw.podId ? { sonic_config_asn: ASN.podSpines + (podIndex.get(sw.podId) ?? 0) } : {},
+      ),
+    },
+    [g('superspines')]: {
+      vars: { sonic_config_asn: ASN.superspines, sonic_config_frr_l2vpn_evpn: true },
+      hosts: hosts(superspines, () => ({})),
     },
     [g('exits')]: {
       vars: {
@@ -503,6 +516,7 @@ function partitionInventory(
     },
     roleGroups: Object.fromEntries(
       [
+        'superspines',
         'spines',
         'exits',
         'storageleaves',

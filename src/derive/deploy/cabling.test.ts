@@ -5,6 +5,7 @@ import type { Plan } from '../../model/plan'
 import { templates } from '../../model/templates'
 import { deriveBom } from '../bom'
 import { leafPortsNeeded } from '../validate'
+import { podPlan } from '../podPlan.fixture'
 import { deriveCabling, hostLabel, hostnameProblems, type CableKind } from './cabling'
 
 const BOM_ID: Record<CableKind, string> = {
@@ -38,6 +39,7 @@ const plans: [string, () => Plan][] = [
   ['the default plan', createEmptyPlan],
   ...templates.map((t): [string, () => Plan] => [`template ${t.name}`, t.build]),
   ['a plan with every cabled feature', everythingPlan],
+  ['a leaf-spine-superspine plan with two pods', podPlan],
 ]
 
 describe.each(plans)('cabling of %s', (_, build) => {
@@ -126,12 +128,24 @@ describe('deriveCabling', () => {
 
   it('refuses what it cannot cable yet instead of cabling part of it', () => {
     const plan = createEmptyPlan()
-    plan.partitions[0].fabric.fabricType = 'leaf-spine-superspine'
-    plan.partitions[0].fabric.superspineCount = 2
     plan.partitions[0].fabric.mgmt.spineModelId = 'switch-as4625'
     const problems = deriveCabling(plan, plan.partitions[0]).problems
-    expect(problems).toContain('Superspine fabrics are not cabled yet.')
     expect(problems.some((p) => p.startsWith('No SONiC port map for AS4625-54T'))).toBe(true)
+  })
+
+  it('cables a pod leaf only to its pod spines, and spine j only to plane j', () => {
+    const plan = podPlan()
+    const c = deriveCabling(plan, plan.partitions[0])
+    const peers = (host: string) =>
+      c.cables
+        .filter((x) => x.kind === 'mtp-trunk' && (x.a.host === host || x.b.host === host))
+        .map((x) => (x.a.host === host ? x.b.host : x.a.host))
+        .sort()
+    const prefix = c.prefix
+    expect(peers(`${prefix}-r02leaf01`)).toEqual([`${prefix}-p02spine01`, `${prefix}-p02spine02`])
+    const up = (spine: string) => peers(spine).filter((h) => h.includes('superspine'))
+    expect(up(`${prefix}-p01spine01`)).toEqual([`${prefix}-superspine01`, `${prefix}-superspine02`])
+    expect(up(`${prefix}-spine02`)).toEqual([`${prefix}-superspine03`, `${prefix}-superspine04`])
   })
 
   it('reports partitions whose names collide as hostnames', () => {

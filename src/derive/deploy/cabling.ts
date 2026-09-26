@@ -2,6 +2,7 @@ import { catalog, sonicPortNames, type PortSpeed } from '../../model/catalog'
 import { mgmtDeviceCount, type Partition, type Plan, type UplinkSpeed } from '../../model/plan'
 import { chassisCount, mgmtUplinkSpeed } from '../bom'
 import { hasOwnRack, inCentralRack } from '../controlPlane'
+import { hasSuperspineTier, podsOf, superspinesPerPlane } from '../pods'
 
 // The physical cable plan of a partition: every cable with both ends named
 // (host and port), the hostnames of the devices, and the ports each switch
@@ -20,6 +21,12 @@ import { hasOwnRack, inCentralRack } from '../controlPlane'
 //   uplinks from their top ports; exits take router links from Ethernet0,
 //   then on-prem control plane nodes in the central rack, which attach to
 //   the exits the way servers attach to their leaves.
+// - Pods (leaf-spine-superspine): a pod's racks uplink to that pod's
+//   spines (<partition>-p01spine01 …) instead; spine j of the central rack
+//   and of every pod uplinks to plane j of the superspines from its top
+//   ports, and a superspine takes one port per pod from Ethernet0, the
+//   central rack's spines first. Pod spines and superspines sit in the
+//   central rack and hand their eth0 to the mgmt spines like the others.
 // - Every switch's eth0: leaves to their rack's mgmt leaf; central-rack
 //   switches and routers round-robin to the mgmt spines, from Ethernet0.
 // - Mgmt spine i: mgmt server i on its last copper port (the guide's swp48),
@@ -46,7 +53,8 @@ export interface Cable {
   lanes?: { server: CableEnd; switchPort: string }[]
 }
 
-export type SwitchRole = 'spine' | 'exit' | 'storage-leaf' | 'leaf' | 'mgmt-spine' | 'mgmt-leaf'
+export type SwitchRole =
+  'superspine' | 'spine' | 'exit' | 'storage-leaf' | 'leaf' | 'mgmt-spine' | 'mgmt-leaf'
 
 export interface SwitchHost {
   name: string
@@ -54,6 +62,8 @@ export interface SwitchHost {
   modelId: string
   /** Plan rack a leaf or mgmt leaf belongs to (a rack group once). */
   rackId?: string
+  /** Pod a spine belongs to; absent for the central rack's spines. */
+  podId?: string
   /** Fabric-facing ports that run BGP: towards the spines, or from a spine
    *  towards everything below it; mgmt switches towards each other. */
   bgpPorts: string[]
@@ -126,9 +136,6 @@ export function deriveCabling(plan: Plan, partition: Partition): PartitionCablin
   const pools = new Map<string, PortPool>()
 
   if (!prefix) problems.push(`Partition "${partition.name}" gives no usable hostname prefix.`)
-  if (fabric.fabricType === 'leaf-spine-superspine') {
-    problems.push('Superspine fabrics are not cabled yet.')
-  }
   if (mgmt.layer === 'l2') problems.push('An L2 management network is not cabled yet.')
   if (hasOwnRack(plan, partition)) {
     problems.push('A control plane rack of its own is not cabled yet.')
@@ -177,6 +184,27 @@ export function deriveCabling(plan: Plan, partition: Partition): PartitionCablin
   const mgmtFirewalls = Array.from({ length: mgmtCount }, (_, i) => `${prefix}-mgmtfw${pad(i + 1)}`)
 
   // Leaves per rack, with their mgmt leaves.
+  // Pods (derive/pods.ts): each pod's own spines, and the superspines by
+  // plane. Pod spines are named after their pod's position (p01spine01).
+  const pods = podsOf(partition).map((pod, k) => ({
+    ...pod,
+    spines: Array.from({ length: fabric.spineCount }, (_, i) => {
+      const sw = addSwitch(
+        `${prefix}-p${pad(k + 1)}spine${pad(i + 1)}`,
+        'spine',
+        fabric.spineModelId,
+      )
+      sw.podId = pod.id
+      return sw
+    }),
+  }))
+  const superspines = hasSuperspineTier(partition)
+    ? Array.from({ length: fabric.superspineCount }, (_, i) =>
+        addSwitch(`${prefix}-superspine${pad(i + 1)}`, 'superspine', fabric.superspineModelId),
+      )
+    : []
+  const podSpinesOf = new Map(pods.flatMap((pod) => pod.racks.map((r) => [r.id, pod.spines])))
+
   const racks = partition.racks.map((rack, r) => {
     const rp = rackPrefix(prefix, r)
     const leaves = Array.from({ length: rack.leafCount }, (_, i) =>
@@ -185,17 +213,17 @@ export function deriveCabling(plan: Plan, partition: Partition): PartitionCablin
     const mgmtLeaves = Array.from({ length: mgmt.leafPerRack }, (_, i) =>
       addSwitch(`${rp}mgmtleaf${pad(i + 1)}`, 'mgmt-leaf', mgmt.leafModelId, rack.id),
     )
-    return { rack, rp, leaves, mgmtLeaves }
+    return { rack, rp, leaves, mgmtLeaves, uplinkSpines: podSpinesOf.get(rack.id) ?? spines }
   })
 
   // Leaf uplinks: the top ports of each leaf, spine by spine.
   const links = fabric.leafSpineLinks
-  for (const { leaves } of racks) {
+  for (const { leaves, uplinkSpines } of racks) {
     for (const leaf of leaves) {
-      const uplinks = Array.from({ length: spines.length * links }, () =>
+      const uplinks = Array.from({ length: uplinkSpines.length * links }, () =>
         pool(leaf).take('100G', true),
       ).reverse()
-      spines.forEach((spine, s) => {
+      uplinkSpines.forEach((spine, s) => {
         for (let l = 0; l < links; l++) {
           const leafPort = uplinks[s * links + l]
           const spinePort = pool(spine).take('100G')
@@ -222,6 +250,25 @@ export function deriveCabling(plan: Plan, partition: Partition): PartitionCablin
         { host: spine.name, port: spinePort },
         'mtp-trunk',
       )
+    })
+  }
+  // Spine j of the central rack and of every pod to plane j of the
+  // superspines, from the spines' top ports; a superspine takes one port
+  // per pod, the central rack's spines first.
+  const perPlane = superspinesPerPlane(partition)
+  for (const group of [spines, ...pods.map((pod) => pod.spines)]) {
+    group.forEach((spine, j) => {
+      for (const superspine of superspines.slice(j * perPlane, (j + 1) * perPlane)) {
+        const spinePort = pool(spine).take('100G', true)
+        const superPort = pool(superspine).take('100G')
+        spine.bgpPorts.push(spinePort)
+        superspine.bgpPorts.push(superPort)
+        cable(
+          { host: spine.name, port: spinePort },
+          { host: superspine.name, port: superPort },
+          'mtp-trunk',
+        )
+      }
     })
   }
   // Routers: two links to every exit, from the exits' bottom ports.
@@ -300,7 +347,13 @@ export function deriveCabling(plan: Plan, partition: Partition): PartitionCablin
   }
 
   // Management: each switch's eth0.
-  const centralMgmt = [...spines, ...exits, ...storageLeaves]
+  const centralMgmt = [
+    ...spines,
+    ...exits,
+    ...storageLeaves,
+    ...pods.flatMap((pod) => pod.spines),
+    ...superspines,
+  ]
   centralMgmt.forEach((sw, i) => {
     const mgmtSpine = mgmtSpines[i % mgmtSpines.length]
     if (!mgmtSpine) return

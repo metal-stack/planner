@@ -4,7 +4,9 @@ import type { Plan } from '../../model/plan'
 import { templates } from '../../model/templates'
 import { exportAnsibleInventory } from '../../io/ansible'
 import type { YamlMap } from '../../io/yaml'
+import { deriveCabling } from './cabling'
 import { deriveInventory } from './inventory'
+import { podPlan } from '../podPlan.fixture'
 
 type Host = { name: string; group: string; vars: YamlMap; groupVars: YamlMap }
 
@@ -30,6 +32,7 @@ function hostsOf(doc: YamlMap): Host[] {
 const plans: [string, () => Plan][] = [
   ['the default plan', createEmptyPlan],
   ...templates.map((t): [string, () => Plan] => [`template ${t.name}`, t.build]),
+  ['a leaf-spine-superspine plan with two pods', podPlan],
 ]
 
 describe.each(plans)('inventory of %s', (_, build) => {
@@ -42,6 +45,15 @@ describe.each(plans)('inventory of %s', (_, build) => {
 
   it('has no problems', () => {
     expect(problems).toEqual([])
+  })
+
+  it('lists every switch of the cable plan as a host', () => {
+    const names = new Set(hosts.map((h) => h.name))
+    const cabled = plan.partitions.flatMap((p) =>
+      deriveCabling(plan, p).switches.map((s) => s.name),
+    )
+    expect(cabled.length).toBeGreaterThan(0)
+    expect(cabled.filter((n) => !names.has(n))).toEqual([])
   })
 
   it('gives every switch the variables sonic-config asserts, and an address', () => {
@@ -148,12 +160,23 @@ describe.each(plans)('inventory of %s', (_, build) => {
 })
 
 describe('deriveInventory', () => {
+  it('gives superspines one ASN and the spines of each pod their own (RFC 7938 5.2.1)', () => {
+    const hosts = hostsOf(deriveInventory(podPlan()).doc)
+    const asn = (h: Host) => h.vars.sonic_config_asn ?? h.groupVars.sonic_config_asn
+    const of = (re: RegExp) => [...new Set(hosts.filter((h) => re.test(h.name)).map(asn))]
+    expect(of(/-superspine\d+$/)).toHaveLength(1)
+    const central = of(/-spine\d+$/)
+    const podA = of(/-p01spine\d+$/)
+    const podB = of(/-p02spine\d+$/)
+    expect([central, podA, podB].map((a) => a.length)).toEqual([1, 1, 1])
+    expect(new Set([central[0], podA[0], podB[0], of(/-superspine\d+$/)[0]]).size).toBe(4)
+  })
+
   it('refuses a plan it cannot generate in full', () => {
     const plan = createEmptyPlan()
-    plan.partitions[0].fabric.fabricType = 'leaf-spine-superspine'
-    plan.partitions[0].fabric.superspineCount = 2
+    plan.partitions[0].fabric.mgmt.layer = 'l2'
     expect(deriveInventory(plan).problems).toContain(
-      `${plan.partitions[0].name}: Superspine fabrics are not cabled yet.`,
+      `${plan.partitions[0].name}: An L2 management network is not cabled yet.`,
     )
   })
 
