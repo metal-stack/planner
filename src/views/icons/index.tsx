@@ -49,6 +49,7 @@ import type { TopoNodeKind } from '../../derive/topology'
 import type { CatalogCategory } from '../../model/catalog'
 import type { ExternalNetwork } from '../../model/plan'
 import type { View } from '../../store/planStore'
+import type { PaletteItemId } from '../topology/build'
 import { MetalStack, NetworkSwitch, Rack, RackGroup } from './custom'
 
 // The single place icons come from (Lucide plus the custom switch and rack
@@ -124,6 +125,18 @@ export const NODE_ICON: Record<TopoNodeKind, LucideIcon> = {
   'mgmt-firewall': BrickWallFire,
   'server-group': Server,
   'control-plane': MetalStack,
+  'external-network': Globe,
+}
+
+/** The topology builder's palette. */
+export const PALETTE_ICON: Record<PaletteItemId, LucideIcon> = {
+  partition: Layers,
+  rack: Rack,
+  'rack-group': RackGroup,
+  'server-group': Server,
+  spine: NetworkSwitch,
+  exit: NetworkSwitch,
+  router: Router,
   'external-network': Globe,
 }
 

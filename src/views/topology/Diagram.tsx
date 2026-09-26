@@ -9,6 +9,7 @@ import {
   type TopoPartition,
   type TopoRack,
 } from '../../derive/topology'
+import { nodeSelections, type Selection } from './build'
 
 // Renders the derived TopologyGraph as a fabric elevation. Each partition
 // draws its central rack as one physical unit with two columns: production
@@ -81,11 +82,8 @@ function rowWidth(n: number): number {
   return n > 0 ? n * NODE_W + (n - 1) * GAP : 0
 }
 
-/** Editor section a diagram element belongs to (see views/plan/navigate). */
-export interface DiagramTarget {
-  partitionId: string
-  rackId?: string
-}
+/** What a click on a diagram element selects (see ./build). */
+export type DiagramTarget = Selection
 
 interface BoxLayout {
   rect: Rect
@@ -475,15 +473,26 @@ function NodeBox({ node, r, capsule }: { node: TopoNode; r: Rect; capsule?: bool
 export default function Diagram({
   graph,
   fit = false,
-  onNavigate,
+  onSelect,
+  selected,
 }: {
   graph: TopologyGraph
   fit?: boolean
-  /** Click on a rack, rack group or central rack box → jump to its editor section. */
-  onNavigate?: (target: DiagramTarget) => void
+  /** Click on a box (central rack, rack, rack group) or a node selects
+   *  what it belongs to. */
+  onSelect?: (target: DiagramTarget) => void
+  /** Boxes belonging to this selection are outlined. */
+  selected?: Selection
 }) {
   const layout = computeLayout(graph)
   const { rects } = layout
+  const selectionOf = nodeSelections(graph)
+  const isSelected = (target: DiagramTarget | undefined) =>
+    !!selected &&
+    !!target &&
+    !selected.section &&
+    target.partitionId === selected.partitionId &&
+    target.rackId === selected.rackId
   const [hover, setHover] = useState<string | null>(null)
   const interactive = !fit
 
@@ -539,11 +548,11 @@ export default function Diagram({
           <g
             key={i}
             onClick={
-              interactive && box.target && onNavigate ? () => onNavigate(box.target!) : undefined
+              interactive && box.target && onSelect ? () => onSelect(box.target!) : undefined
             }
-            style={interactive && box.target && onNavigate ? { cursor: 'pointer' } : undefined}
+            style={interactive && box.target && onSelect ? { cursor: 'pointer' } : undefined}
           >
-            {interactive && box.target && onNavigate && <title>Edit {box.name} in the plan</title>}
+            {interactive && box.target && onSelect && <title>Select {box.name}</title>}
             <rect
               x={box.rect.x}
               y={box.rect.y}
@@ -551,7 +560,10 @@ export default function Diagram({
               height={box.rect.h}
               rx={8}
               fill={box.entity ? COLOR.gray100 : COLOR.gray50}
-              stroke={box.entity ? COLOR.gray300 : COLOR.gray200}
+              stroke={
+                isSelected(box.target) ? COLOR.brand : box.entity ? COLOR.gray300 : COLOR.gray200
+              }
+              strokeWidth={isSelected(box.target) ? 2 : 1}
               strokeDasharray={box.entity ? '5 4' : undefined}
             />
             <text
@@ -610,6 +622,15 @@ export default function Diagram({
               opacity={nodeOpacity(node.id)}
               onMouseEnter={interactive ? () => setHover(node.id) : undefined}
               onMouseLeave={interactive ? () => setHover(null) : undefined}
+              onClick={
+                interactive && onSelect && selectionOf.has(node.id)
+                  ? (e) => {
+                      e.stopPropagation()
+                      onSelect(selectionOf.get(node.id)!)
+                    }
+                  : undefined
+              }
+              style={interactive && onSelect ? { cursor: 'pointer' } : undefined}
             >
               <NodeBox node={node} r={r} capsule={capsuleIds.has(node.id)} />
             </g>
