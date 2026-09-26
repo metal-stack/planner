@@ -281,15 +281,24 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
         network: 'production',
       })
     }
-    for (const mgmtSpine of central.mgmtSpines) {
-      links.push({ from: spine.id, to: mgmtSpine.id, count: 1, speed: '1G', network: 'management' })
-    }
   }
-  // Each side of the management network is a chain (deployment guide,
-  // routed out-of-band network): firewall i links to mgmt server i twice
-  // (its interface and its BMC) and to mgmt spine i's own mgmt port, and
-  // mgmt server i uplinks to mgmt spine i only.
+  // Every switch has a single mgmt interface: the spines take turns on the
+  // mgmt spines. Each side of the management network is a chain (deployment
+  // guide, routed out-of-band network): firewall i links to mgmt server i
+  // twice (its interface and its BMC) and to mgmt spine i's own mgmt port,
+  // and mgmt server i uplinks to mgmt spine i only.
   const mgmtSpines = central.mgmtSpines
+  central.spines.forEach((spine, i) => {
+    if (mgmtSpines.length === 0) return
+    const mgmtSpine = mgmtSpines[i % mgmtSpines.length]
+    links.push({
+      from: spine.id,
+      to: mgmtSpine.id,
+      count: 1,
+      speed: '1G',
+      network: 'management',
+    })
+  })
   central.mgmtServers.forEach((mgmtServer, i) => {
     const mgmtSpine = mgmtSpines[i]
     if (mgmtSpine) {

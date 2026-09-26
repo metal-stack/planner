@@ -48,6 +48,17 @@ describe('deriveTopology', () => {
     })
   })
 
+  it('gives every spine one mgmt interface, spread over the mgmt spines', () => {
+    const graph = deriveTopology(createEmptyPlan())
+    const { spines, mgmtSpines } = graph.partitions[0].central
+    const mgmtSpineIds = new Set(mgmtSpines.map((n) => n.id))
+    const toMgmt = graph.links.filter((l) => mgmtSpineIds.has(l.to))
+    spines.forEach((spine, i) => {
+      const own = toMgmt.filter((l) => l.from === spine.id)
+      expect(own.map((l) => l.to)).toEqual([mgmtSpines[i % mgmtSpines.length].id])
+    })
+  })
+
   it('keeps the mgmt firewalls in management and central mode only', () => {
     const graph = deriveTopology(createEmptyPlan())
     expect(filterTopology(graph, 'management').partitions[0].central.mgmtFirewalls).toHaveLength(2)
