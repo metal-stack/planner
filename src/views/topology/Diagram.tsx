@@ -7,6 +7,7 @@ import {
   type TopoNode,
   type TopologyGraph,
   type TopoPartition,
+  type TopoPod,
   type TopoRack,
 } from '../../derive/topology'
 import { nodeSelections, type Selection } from './build'
@@ -90,6 +91,8 @@ interface BoxLayout {
   name: string
   /** Enclosing box of a rack group (drawn dashed, behind its racks). */
   entity?: boolean
+  /** Enclosing box of a pod: its spines over its racks. */
+  pod?: boolean
   target?: DiagramTarget
 }
 
@@ -211,6 +214,24 @@ function racksRowWidth(racks: TopoRack[]): number {
   return w
 }
 
+/** Padding of a pod box, and the band above its racks for its spines. */
+const POD_PAD = 10
+const POD_BAND = RACK_HEAD + NODE_H + 30
+
+/** Racks grouped by pod, in pod order; one group without a pod for a
+ *  leaf-spine partition (or in a view mode that shows no pods). */
+function rackGroups(partition: TopoPartition): { pod?: TopoPod; racks: TopoRack[] }[] {
+  const pods = partition.pods.filter((p) => p.spines.length > 0)
+  if (pods.length === 0) return [{ racks: partition.racks }]
+  return pods.map((pod) => ({ pod, racks: partition.racks.filter((r) => r.podId === pod.id) }))
+}
+
+function groupWidth(group: { pod?: TopoPod; racks: TopoRack[] }): number {
+  const racks = racksRowWidth(group.racks)
+  if (!group.pod) return racks
+  return Math.max(racks, rowWidth(group.pod.spines.length)) + 2 * POD_PAD
+}
+
 function layoutPartition(
   layout: Layout,
   partition: TopoPartition,
@@ -219,7 +240,10 @@ function layoutPartition(
   const { rects } = layout
   const { central } = partition
 
-  const racksW = racksRowWidth(partition.racks)
+  const groups = rackGroups(partition)
+  const hasPods = groups.some((g) => g.pod)
+  const racksW =
+    groups.reduce((w, g) => w + groupWidth(g), 0) + Math.max(0, groups.length - 1) * RACK_GAP
   // Storage networks hang off the storage leaves when the partition has
   // them (attachesAtStorageLeaves), so they are drawn over the storage box
   // instead of over the central rack, keeping their links short.
@@ -289,43 +313,71 @@ function layoutPartition(
 
   // Compute racks and the storage box below. The physical racks of a
   // rack group sit close together inside an enclosing box.
-  const rackY = boxRect.y + boxRect.h + 56
+  const rackY = boxRect.y + boxRect.h + 56 + (hasPods ? POD_BAND : 0)
   let x = Math.max(0, (fabricW - racksW - storageW) / 2)
   let maxRackH = 0
   const rackBoxes: BoxLayout[] = []
-  let entityStartX = 0
-  partition.racks.forEach((rack, i) => {
-    const prev = partition.racks[i - 1]
-    const next = partition.racks[i + 1]
-    const startsEntity = !!rack.entity && !sameEntity(prev, rack)
-    const endsEntity = !!rack.entity && !sameEntity(rack, next)
-    if (startsEntity) {
-      entityStartX = x
-      x += ENTITY_PAD
+  groups.forEach((group, g) => {
+    const groupX = x
+    const width = groupWidth(group)
+    // A pod box goes in first, so it is drawn behind its racks; its size
+    // is known once they are laid out.
+    const podBox: BoxLayout | undefined = group.pod
+      ? {
+          rect: { x: groupX, y: rackY - POD_BAND, w: width, h: 0 },
+          name: group.pod.name,
+          pod: true,
+        }
+      : undefined
+    if (podBox) {
+      layout.boxes.push(podBox)
+      placeRow(rects, group.pod!.spines, groupX + width / 2, rackY - POD_BAND + RACK_HEAD)
     }
-    const rl = layoutRack(rects, rack, x, rackY, partition.id)
-    rackBoxes.push(rl)
-    maxRackH = Math.max(maxRackH, rl.rect.h)
-    x += rl.rect.w
-    if (endsEntity) {
-      x += ENTITY_PAD
-      const entityRacks = rackBoxes.filter((b) => b.rect.x >= entityStartX)
-      const h = Math.max(...entityRacks.map((b) => b.rect.h))
-      layout.boxes.push({
-        rect: {
-          x: entityStartX,
-          y: rackY - ENTITY_HEAD,
-          w: x - entityStartX,
-          h: h + ENTITY_HEAD + ENTITY_PAD,
-        },
-        name: rack.entity!.name,
-        entity: true,
-        target: { partitionId: partition.id, rackId: rack.entity!.id },
-      })
-      maxRackH = Math.max(maxRackH, h + ENTITY_PAD)
-    }
-    if (next) x += sameEntity(rack, next) ? ENTITY_GAP : RACK_GAP
+    x = groupX + (width - racksRowWidth(group.racks)) / 2
+    const groupRackH = layoutRackRow(group.racks)
+    if (podBox) podBox.rect.h = POD_BAND + groupRackH + POD_PAD
+    maxRackH = Math.max(maxRackH, groupRackH + (podBox ? POD_PAD : 0))
+    x = groupX + width + (g < groups.length - 1 ? RACK_GAP : 0)
   })
+
+  /** Lays out a row of racks from x at rackY; returns its height. */
+  function layoutRackRow(racks: TopoRack[]): number {
+    let rowH = 0
+    let entityStartX = 0
+    racks.forEach((rack, i) => {
+      const prev = racks[i - 1]
+      const next = racks[i + 1]
+      const startsEntity = !!rack.entity && !sameEntity(prev, rack)
+      const endsEntity = !!rack.entity && !sameEntity(rack, next)
+      if (startsEntity) {
+        entityStartX = x
+        x += ENTITY_PAD
+      }
+      const rl = layoutRack(rects, rack, x, rackY, partition.id)
+      rackBoxes.push(rl)
+      rowH = Math.max(rowH, rl.rect.h)
+      x += rl.rect.w
+      if (endsEntity) {
+        x += ENTITY_PAD
+        const entityRacks = rackBoxes.filter((b) => b.rect.x >= entityStartX)
+        const h = Math.max(...entityRacks.map((b) => b.rect.h))
+        layout.boxes.push({
+          rect: {
+            x: entityStartX,
+            y: rackY - ENTITY_HEAD,
+            w: x - entityStartX,
+            h: h + ENTITY_HEAD + ENTITY_PAD,
+          },
+          name: rack.entity!.name,
+          entity: true,
+          target: { partitionId: partition.id, rackId: rack.entity!.id },
+        })
+        rowH = Math.max(rowH, h + ENTITY_PAD)
+      }
+      if (next) x += sameEntity(rack, next) ? ENTITY_GAP : RACK_GAP
+    })
+    return rowH
+  }
   layout.boxes.push(...rackBoxes)
   x += partition.racks.length > 0 ? RACK_GAP : 0
   if (partition.storageLeaves.length > 0) {
@@ -572,6 +624,7 @@ export default function Diagram({
       ...p.central.mgmtServers,
       ...p.central.mgmtFirewalls,
       ...p.storageLeaves,
+      ...p.pods.flatMap((pod) => pod.spines),
       ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),
     ]),
@@ -615,14 +668,16 @@ export default function Diagram({
               fill={
                 isDropTarget(box.target)
                   ? COLOR.brandTint
-                  : box.entity
-                    ? COLOR.gray100
-                    : COLOR.gray50
+                  : box.pod
+                    ? COLOR.white
+                    : box.entity
+                      ? COLOR.gray100
+                      : COLOR.gray50
               }
               stroke={
                 isSelected(box.target) || isDropTarget(box.target)
                   ? COLOR.brand
-                  : box.entity
+                  : box.entity || box.pod
                     ? COLOR.gray300
                     : COLOR.gray200
               }
