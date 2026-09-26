@@ -11,6 +11,8 @@ const MIN_SCALE = 0.15
 const MAX_SCALE = 3
 const MAX_FIT = 1.6
 const PAD = 16
+/** Pointer travel in px before a press counts as a pan instead of a click. */
+const PAN_THRESHOLD = 4
 
 interface View {
   x: number
@@ -31,6 +33,10 @@ export default function ZoomPane({
   const [content, setContent] = useState({ w: 0, h: 0 })
   const [dragging, setDragging] = useState(false)
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
+  // Capture the pointer only once a press has moved far enough to be a
+  // pan: capturing on press would retarget the click to this container, and
+  // a click on a diagram element would never arrive.
+  const panned = useRef(false)
 
   function fit(w = content.w, h = content.h) {
     const el = outer.current
@@ -100,12 +106,17 @@ export default function ZoomPane({
         onPointerDown={(e) => {
           if (e.button !== 0) return
           drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }
-          setDragging(true)
-          e.currentTarget.setPointerCapture(e.pointerId)
+          panned.current = false
         }}
         onPointerMove={(e) => {
           const d = drag.current
           if (!d) return
+          if (!panned.current) {
+            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < PAN_THRESHOLD) return
+            panned.current = true
+            setDragging(true)
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }
           setView((v) => ({ ...v, x: d.vx + (e.clientX - d.x), y: d.vy + (e.clientY - d.y) }))
         }}
         onPointerUp={() => {
