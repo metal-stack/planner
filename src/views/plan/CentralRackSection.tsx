@@ -63,7 +63,7 @@ export default function CentralRackSection({
   return (
     <section
       id={fabricAnchor(partition.id)}
-      className={`scroll-mt-6 rounded-lg border bg-white p-4 ${
+      className={`@container scroll-mt-6 rounded-lg border bg-white p-4 ${
         hasErrors ? 'border-red-300' : 'border-gray-200'
       }`}
     >
@@ -104,7 +104,7 @@ export default function CentralRackSection({
         </span>
       </div>
       <p className="-mt-2 mb-3 text-sm text-gray-600">{modelSummary(fabric)}</p>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
         <SelectField
           label="Fabric type"
           info={{
@@ -172,7 +172,7 @@ export default function CentralRackSection({
           }}
         />
       </h4>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
         <SelectField
           label="Layer"
           info={{
@@ -214,7 +214,7 @@ export default function CentralRackSection({
         </summary>
 
         <h5 className="mt-3 mb-2 text-xs font-semibold text-gray-500">Devices and models</h5>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
           <NumberField
             label="Internet routers"
             info={{
@@ -293,7 +293,7 @@ export default function CentralRackSection({
         </div>
 
         <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Fabric links</h5>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
           <SelectField
             label="Network OS"
             info={{
@@ -317,7 +317,7 @@ export default function CentralRackSection({
             min={1}
             onChange={(n) => patch({ leafSpineLinks: n })}
           />
-          <label className="col-span-2 flex items-start gap-2 pt-6 text-sm md:col-span-2">
+          <label className="col-span-2 flex items-start gap-2 pt-6 text-sm @2xl:col-span-2">
             <input
               type="checkbox"
               checked={fabric.nonBlocking}
@@ -342,7 +342,7 @@ export default function CentralRackSection({
         </p>
 
         <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Rack defaults</h5>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
           <NumberField
             label="Default rack height (U)"
             value={partition.rackDefaults.heightUnits}

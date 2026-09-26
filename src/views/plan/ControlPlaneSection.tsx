@@ -33,7 +33,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
   return (
     <section
       id={CONTROL_PLANE_ANCHOR}
-      className={`scroll-mt-6 rounded-lg border bg-white p-4 ${
+      className={`@container scroll-mt-6 rounded-lg border bg-white p-4 ${
         hasErrors ? 'border-red-300' : 'border-gray-200'
       }`}
     >
@@ -57,7 +57,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
         <SelectField
           label="Hosting"
           info={{
@@ -139,7 +139,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
           <summary className="cursor-pointer text-sm font-medium text-gray-700">
             Advanced <span className="font-normal text-gray-500">· the control plane rack</span>
           </summary>
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 @2xl:grid-cols-4">
             <label className="block text-sm">
               <span className="mb-1 block text-gray-600">Rack name</span>
               <input

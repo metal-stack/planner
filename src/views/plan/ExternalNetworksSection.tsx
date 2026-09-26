@@ -27,7 +27,7 @@ export default function ExternalNetworksSection({ plan }: { plan: Plan }) {
   ]
 
   return (
-    <section className="card p-4">
+    <section className="@container card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold">
           <Icon
@@ -53,7 +53,7 @@ export default function ExternalNetworksSection({ plan }: { plan: Plan }) {
       {plan.externalNetworks.map((net) => (
         <div
           key={net.id}
-          className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 md:grid-cols-4"
+          className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 @2xl:grid-cols-4"
         >
           <label className="block text-sm">
             <span className="mb-1 block text-gray-600">Name</span>

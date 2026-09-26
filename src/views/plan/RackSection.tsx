@@ -58,7 +58,7 @@ function ServerGroupRow({
   const perNode = Math.min(group.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
 
   return (
-    <div className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 md:grid-cols-6">
+    <div className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 @2xl:grid-cols-6">
       <SelectField
         label="Role"
         value={group.role}
@@ -177,7 +177,7 @@ export default function RackSection({
   return (
     <section
       id={rackAnchor(rack.id)}
-      className={`relative scroll-mt-6 rounded-lg border bg-white p-4 ${
+      className={`@container relative scroll-mt-6 rounded-lg border bg-white p-4 ${
         hasErrors ? 'border-red-300' : 'border-gray-200'
       }`}
     >
