@@ -47,6 +47,10 @@ export interface TopoLink {
   count: number
   speed?: '1G' | '10G' | '25G' | '100G'
   network: LinkNetwork
+  /** One end lands on a switch's dedicated management interface (eth0)
+   *  rather than a front-panel port: a leaf or spine reaching the
+   *  management network, or the mgmt firewall bootstrapping a mgmt spine. */
+  mgmtPort?: true
 }
 
 /** One physical rack. A rack group yields three of these that
@@ -149,6 +153,7 @@ function deriveRack(partition: Partition, rack: Rack, links: TopoLink[]): TopoRa
         count: 1,
         speed: '1G',
         network: 'management',
+        mgmtPort: true,
       })
     }
   }
@@ -297,6 +302,7 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
       count: 1,
       speed: '1G',
       network: 'management',
+      mgmtPort: true,
     })
   })
   central.mgmtServers.forEach((mgmtServer, i) => {
@@ -330,6 +336,7 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
         count: 1,
         speed: '1G',
         network: 'management',
+        mgmtPort: true,
       })
     }
   })

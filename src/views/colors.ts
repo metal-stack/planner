@@ -13,6 +13,10 @@ export const COLOR = {
   brandTint: 'var(--color-brand-tint)',
   production: 'var(--color-production)',
   mgmt: 'var(--color-mgmt)',
+  /** Management links between front-panel ports. */
+  mgmtData: 'var(--color-green-600)',
+  /** Management links that land on a switch's management interface (eth0). */
+  mgmtPort: 'var(--color-red-600)',
   /** Grays, lightest first. */
   gray50: 'var(--color-gray-50)',
   gray100: 'var(--color-gray-100)',

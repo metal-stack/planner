@@ -50,8 +50,14 @@ const EXT_H = 34
 
 const LINK_COLOR: Record<TopoLink['network'], string> = {
   production: COLOR.production,
-  management: COLOR.mgmt,
+  management: COLOR.mgmtData,
   external: COLOR.gray500,
+}
+
+/** Management links are colored by the port they land on: green between
+ *  front-panel ports, red where one end is a switch's eth0. */
+function linkColor(link: TopoLink): string {
+  return link.mgmtPort ? COLOR.mgmtPort : LINK_COLOR[link.network]
 }
 
 const LINK_WIDTH: Record<NonNullable<TopoLink['speed']> | 'none', number> = {
@@ -570,7 +576,7 @@ export default function Diagram({
           const to = rects.get(link.to)
           if (!from || !to) return null
           const { path } = linkGeometry(from, to)
-          const color = LINK_COLOR[link.network]
+          const color = linkColor(link)
           return (
             <g key={i}>
               <path

@@ -59,6 +59,39 @@ describe('deriveTopology', () => {
     })
   })
 
+  it('marks exactly the links that land on a switch management interface', () => {
+    const graph = deriveTopology(createEmptyPlan())
+    const partition = graph.partitions[0]
+    const { spines, mgmtSpines, mgmtServers, mgmtFirewalls } = partition.central
+    const rack = partition.racks[0]
+    const kindOf = new Map(
+      [
+        ...spines,
+        ...mgmtSpines,
+        ...mgmtServers,
+        ...mgmtFirewalls,
+        ...rack.leaves,
+        ...rack.mgmtLeaves,
+      ].map((n) => [n.id, n.kind]),
+    )
+    const pair = (l: { from: string; to: string }) => `${kindOf.get(l.from)}>${kindOf.get(l.to)}`
+    const management = graph.links.filter((l) => l.network === 'management')
+    const marked = new Set(management.filter((l) => l.mgmtPort).map(pair))
+    const unmarked = new Set(management.filter((l) => !l.mgmtPort).map(pair))
+
+    expect([...marked].sort()).toEqual([
+      'leaf>mgmt-leaf',
+      'mgmt-firewall>mgmt-spine',
+      'spine>mgmt-spine',
+    ])
+    expect([...unmarked].sort()).toEqual([
+      'mgmt-firewall>mgmt-server',
+      'mgmt-leaf>mgmt-spine',
+      'mgmt-server>mgmt-spine',
+    ])
+    expect(graph.links.filter((l) => l.network !== 'management' && l.mgmtPort)).toHaveLength(0)
+  })
+
   it('keeps the mgmt firewalls in management and central mode only', () => {
     const graph = deriveTopology(createEmptyPlan())
     expect(filterTopology(graph, 'management').partitions[0].central.mgmtFirewalls).toHaveLength(2)

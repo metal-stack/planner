@@ -97,7 +97,10 @@ export default function TopologyView() {
               <LegendLine color={COLOR.production} width={2.2} label="Production 100G" />
             )}
             {mode !== 'production' && (
-              <LegendLine color={COLOR.mgmt} width={1} label="Management 1G" />
+              <>
+                <LegendLine color={COLOR.mgmtData} width={1} label="Management 1G" />
+                <LegendLine color={COLOR.mgmtPort} width={1} label="Mgmt interface (eth0)" />
+              </>
             )}
             {mode !== 'management' && (
               <LegendLine color={COLOR.gray500} width={1.4} dashed label="External network" />
