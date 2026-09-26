@@ -131,6 +131,7 @@ export function defaultPartition(name: string): Partition {
     name,
     fabric: defaultFabric(),
     racks: [defaultRack('Rack 1')],
+    pods: [],
     rackDefaults: { ...DEFAULT_RACK_DEFAULTS },
   }
 }

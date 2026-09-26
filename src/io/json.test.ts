@@ -36,6 +36,29 @@ describe('plan JSON round-trip', () => {
   })
 })
 
+describe('format version 2 (pods)', () => {
+  it('reads a version 1 file with superspines as one pod holding every rack', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].fabric.fabricType = 'leaf-spine-superspine'
+    plan.partitions[0].fabric.superspineCount = 2
+    const raw = JSON.parse(exportPlanJson(plan)) as Record<string, unknown>
+    raw.schemaVersion = 1
+    const partitions = raw.partitions as Record<string, unknown>[]
+    delete partitions[0].pods
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(imported.schemaVersion).toBe(2)
+    expect(imported.partitions[0].pods).toEqual([])
+    expect(imported.partitions[0].racks[0].podId).toBeUndefined()
+  })
+
+  it('round-trips pods and the racks assigned to them', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].pods = [{ id: 'p1', name: 'Pod A' }]
+    plan.partitions[0].racks[0].podId = 'p1'
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
+})
+
 describe('files with shapes from before the format version', () => {
   /** A plan as an early build wrote it: zones instead of partitions, a
    *  management server group, and none of the later fields. */

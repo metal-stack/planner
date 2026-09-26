@@ -73,8 +73,19 @@ export const RackSchema = z.object({
   leafModelId: z.string(),
   leafCount: z.number().int().min(0),
   servers: z.array(ServerGroupSchema),
+  /** Pod of a leaf-spine-superspine partition this rack belongs to; racks
+   *  without a known pod go to the first (derive/pods.ts). */
+  podId: z.string().optional(),
 })
 export type Rack = z.infer<typeof RackSchema>
+
+/** A pod of a leaf-spine-superspine partition: its racks' leaves uplink
+ *  to the pod's own spines, which uplink to the superspines by plane. */
+export const PodSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+})
+export type Pod = z.infer<typeof PodSchema>
 
 /** The management network has its own topology: a flat L2 network or an L3
  *  (routed) fabric, redundant (2 mgmt spines / 2 mgmt servers / 2 mgmt
@@ -139,6 +150,8 @@ export const PartitionSchema = z.object({
   name: z.string(),
   fabric: FabricConfigSchema,
   racks: z.array(RackSchema),
+  /** Pods, only used with fabricType leaf-spine-superspine. */
+  pods: z.array(PodSchema).default([]),
   rackDefaults: RackDefaultsSchema.default({ heightUnits: 42, maxPowerWatts: 10000 }),
 })
 export type Partition = z.infer<typeof PartitionSchema>

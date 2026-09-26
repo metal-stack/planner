@@ -51,6 +51,7 @@ function productionPartition(name: string): Partition {
       rackGroup('Rack group 1', ['Rack 1', 'Rack 2', 'Rack 3'], 3),
       rackGroup('Rack group 2', ['Rack 4', 'Rack 5', 'Rack 6']),
     ],
+    pods: [],
     rackDefaults: { ...DEFAULT_RACK_DEFAULTS },
   }
 }
@@ -77,6 +78,7 @@ export const templates: PlanTemplate[] = [
           name: 'Partition 1',
           fabric,
           racks: [rack],
+          pods: [],
           rackDefaults: { ...DEFAULT_RACK_DEFAULTS },
         },
       ])

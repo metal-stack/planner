@@ -6,19 +6,23 @@
 // A file from a newer version is refused with a readable message rather
 // than a schema error.
 //
-// The current format is version 1 and needs no migration. Fields added
-// with a Zod `.default()` stay compatible on their own; only a change that
-// breaks older files bumps SCHEMA_VERSION and adds a function to
-// MIGRATIONS, keyed by the version it upgrades *from*:
+// Fields added with a Zod `.default()` stay compatible on their own; a
+// change that breaks older files, or that an older planner would silently
+// drop, bumps SCHEMA_VERSION and adds a function to MIGRATIONS, keyed by
+// the version it upgrades *from*.
 //
-//   export const SCHEMA_VERSION = 2
-//   const MIGRATIONS = { 1: (raw) => ({ ...raw, /* reshape here */ }) }
+// Version 2 adds pods (Partition.pods, Rack.podId) for leaf-spine-superspine
+// fabrics. A version 1 file needs no reshaping: without pods, every rack of
+// a superspine partition is in one implicit pod. The version is bumped so
+// that a version 1 planner refuses a file with pods instead of dropping them.
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 type RawPlan = Record<string, unknown>
 
-const MIGRATIONS: Record<number, (raw: RawPlan) => RawPlan> = {}
+const MIGRATIONS: Record<number, (raw: RawPlan) => RawPlan> = {
+  1: (raw) => raw,
+}
 
 /** Shapes from before the format version was enforced: `zones` became
  *  `partitions`, `attachedZoneId` became `attachedPartitionId`, and server
