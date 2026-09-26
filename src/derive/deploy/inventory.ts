@@ -1,6 +1,7 @@
 import type { Partition, Plan } from '../../model/plan'
 import type { YamlMap } from '../../io/yaml'
 import { formatIp, subnet, type Cidr } from '../ip/cidr'
+import { rackNodes } from '../nodes'
 import { deriveIpPlan, type InfraPartition } from '../ip/ipPlan'
 import {
   deriveCabling,
@@ -30,6 +31,10 @@ import {
 //   leaves' eth0 the following ones; BMCs lease the rest over DHCP.
 // - PXE (vlan4000): the range is split evenly over all leaves; each leaf's
 //   metal_core_cidr is the first address of its part.
+// - DHCP: each mgmt server serves every network the switches relay from
+//   (central and rack management, each leaf's PXE part) with the relaying
+//   SVI as router, the dynamic range cut in one share per mgmt server, and
+//   the ONIE / SONiC ZTP options of the dhcp and ztp role examples.
 // - Mgmt links: four /30 per side, in the order firewall to mgmt server,
 //   firewall to mgmt server BMC, firewall to mgmt spine eth0, mgmt server to
 //   mgmt spine; the firewall (or the mgmt server on the last) takes the
@@ -93,6 +98,7 @@ export const MISSING_INPUTS: { where: string; inputs: string[] }[] = [
       'mgmt_server_metal_ssh_privkey, mgmt_server_metal_ssh_pubkey, mgmt_server_nameservers (mgmt-server)',
       'ztp_authorized_keys (ztp)',
       'dhcp_static_hosts: switch MACs for ZTP (dhcp)',
+      'DNS servers handed out over DHCP (a domain-name-servers option per subnet)',
       'lvm_pvs: the disks (lvm)',
       'CI runner registration and WireGuard keys, if used',
     ],
@@ -121,6 +127,8 @@ const ASN = {
 } as const
 
 const MGMT_VLAN = 1
+/** The ztp role's default port, where ZTP scripts and images are served. */
+const ZTP_PORT = 8080
 const MGMT_PORTS = new Set(['eth0', 'bmc', 'mgmt'])
 
 const ip = (c: Cidr, offset: number) => formatIp(c.family, c.addr + BigInt(offset))
@@ -130,6 +138,24 @@ const withPrefix = (c: Cidr, offset: number) => `${ip(c, offset)}/${c.prefix}`
 function split(c: Cidr, parts: number): Cidr[] {
   const bits = Math.ceil(Math.log2(Math.max(parts, 1)))
   return Array.from({ length: parts }, (_, i) => subnet(c, c.prefix + bits, BigInt(i)))
+}
+
+/** Dotted netmask of an IPv4 prefix. */
+function netmask(prefix: number): string {
+  const bits = (0xffffffff << (32 - prefix)) >>> 0
+  return [24, 16, 8, 0].map((s) => (bits >>> s) & 255).join('.')
+}
+
+/** Offsets first..last cut into `parts` contiguous shares, one per mgmt
+ *  server, so two DHCP servers without failover never lease the same
+ *  address. A share is missing when there are fewer addresses than parts. */
+function splitRange(first: number, last: number, parts: number): ([number, number] | undefined)[] {
+  const count = last - first + 1
+  return Array.from({ length: parts }, (_, i) => {
+    const begin = first + Math.floor((count * i) / parts)
+    const end = first + Math.floor((count * (i + 1)) / parts) - 1
+    return end >= begin ? [begin, end] : undefined
+  })
 }
 
 const groupName = (prefix: string, role: string) => `${prefix.replace(/-/g, '_')}_${role}`
@@ -204,6 +230,9 @@ function partitionInventory(
   const mgmtIf = new Map<string, YamlMap>()
   const svi = new Map<string, string>()
   const sviPorts = new Map<string, string[]>()
+  // Every network a switch relays DHCP from: its gateway is the first
+  // address, dynamic leases start at `firstFree`.
+  const relayNets: { net: Cidr; firstFree: number; comment: string }[] = []
   const central = range('Management', 'Central rack')
   if (central && mgmtSpines.length > 0) {
     const parts = split(central, mgmtSpines.length)
@@ -220,6 +249,7 @@ function partitionInventory(
       attached.forEach((sw, k) =>
         mgmtIf.set(sw.name, { ip: withPrefix(part, k + 2), gateway_address: ip(part, 1) }),
       )
+      relayNets.push({ net: part, firstFree: attached.length + 2, comment: `${ms.name} mgmt` })
     })
   }
   partition.racks.forEach((rack) => {
@@ -227,11 +257,15 @@ function partitionInventory(
     const ml = mgmtLeaves.find((m) => m.rackId === rack.id)
     if (!r || !ml) return
     svi.set(ml.name, withPrefix(r, 1))
-    leaves
-      .filter((l) => l.rackId === rack.id)
-      .forEach((leaf, k) =>
-        mgmtIf.set(leaf.name, { ip: withPrefix(r, k + 2), gateway_address: ip(r, 1) }),
-      )
+    const rackLeaves = leaves.filter((l) => l.rackId === rack.id)
+    rackLeaves.forEach((leaf, k) =>
+      mgmtIf.set(leaf.name, { ip: withPrefix(r, k + 2), gateway_address: ip(r, 1) }),
+    )
+    relayNets.push({
+      net: r,
+      firstFree: rackLeaves.length + 2,
+      comment: `${ml.name} mgmt and BMCs`,
+    })
   })
   mgmtSpines.forEach((ms, i) => {
     const l = link(i, 2)
@@ -265,6 +299,43 @@ function partitionInventory(
     return l ? ip(l, 1) : undefined
   })
   const dhcpServers = serverSpineIp.filter((x): x is string => !!x)
+  leaves.forEach((leaf, i) => {
+    if (pxeParts[i]) relayNets.push({ net: pxeParts[i], firstFree: 2, comment: `${leaf.name} PXE` })
+  })
+  // A node may PXE boot through either of its leaves, so each leaf's part
+  // must hold every node of its rack.
+  for (const rack of partition.racks) {
+    const nodes = rackNodes(rack).total
+    const i = leaves.findIndex((l) => l.rackId === rack.id)
+    const part = pxeParts[i]
+    if (part && nodes > Number(2n ** BigInt(32 - part.prefix)) - 3) {
+      problems.push(
+        `${partition.name}: ${rack.name} has ${nodes} nodes, more than its leaves' PXE subnets (${withPrefix(part, 0)}) hold; enlarge the infrastructure range or the headroom in the IPs tab.`,
+      )
+    }
+  }
+  const dhcpSubnets = (server: number): YamlMap[] => [
+    ...relayNets.map(({ net, firstFree, comment }) => {
+      const last = Number(2n ** BigInt(32 - net.prefix)) - 2
+      const share = splitRange(firstFree, last, c.mgmtServers.length)[server]
+      return {
+        comment,
+        network: ip(net, 0),
+        netmask: netmask(net.prefix),
+        range: share ? { begin: ip(net, share[0]), end: ip(net, share[1]) } : undefined,
+        options: [`routers ${ip(net, 1)}`],
+      }
+    }),
+    ...(link(server, 3)
+      ? [
+          {
+            comment: 'eno3, to the mgmt spine',
+            network: ip(link(server, 3)!, 0),
+            netmask: netmask(30),
+          },
+        ]
+      : []),
+  ]
 
   const switchHost = (sw: SwitchHost, extra: YamlMap): YamlMap => ({
     ansible_host:
@@ -368,6 +439,11 @@ function partitionInventory(
       vars: {
         mgmt_server_spine_facing_interface: 'eno3',
         dhcp_listening_interfaces: ['eno3'],
+        dhcp_global_options: [
+          `default-url = "http://{{ ztp_listen_address }}:${ZTP_PORT}/{{ sonic_image_name }}"`,
+          'ztp_provisioning_script_url code 239 = text',
+          `ztp_provisioning_script_url "http://{{ ztp_listen_address }}:${ZTP_PORT}/user.sh"`,
+        ],
       },
       hosts: Object.fromEntries(
         c.mgmtServers.map((name, i) => {
@@ -380,6 +456,7 @@ function partitionInventory(
               mgmt_server_router_id: serverSpineIp[i],
               mgmt_server_firewall_ip: fw ? ip(fw, 1) : undefined,
               ztp_listen_address: serverSpineIp[i],
+              dhcp_subnets: dhcpSubnets(i),
               pixiecore_api_host: serverSpineIp[i] ? `http://${serverSpineIp[i]}` : undefined,
               planner_interfaces: {
                 eno1: fw ? withPrefix(fw, 2) : undefined,

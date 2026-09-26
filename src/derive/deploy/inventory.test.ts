@@ -85,6 +85,50 @@ describe.each(plans)('inventory of %s', (_, build) => {
     expect(addresses.length).toBeGreaterThan(0)
   })
 
+  it('serves DHCP for every network a switch relays to the mgmt servers', () => {
+    const toNum = (a: string) => a.split('.').reduce((n, o) => n * 256 + Number(o), 0)
+    const network = (cidr: string) => {
+      const [a, p] = cidr.split('/')
+      const size = 2 ** (32 - Number(p))
+      return toNum(a) - (toNum(a) % size)
+    }
+    const partitionOf = (h: Host) => h.group.replace(/_[a-z]+$/, '')
+    const relayed = new Map<string, Set<number>>()
+    for (const h of hosts) {
+      const vlans = [
+        ...((h.vars.sonic_config_vlans as YamlMap[]) ?? []),
+        ...((h.groupVars.sonic_config_vlans as YamlMap[]) ?? []),
+      ]
+      for (const v of vlans) {
+        if (!v.dhcp_servers) continue
+        const ipCidr = v.ip === '{{ metal_core_cidr }}' ? h.vars.metal_core_cidr : v.ip
+        const set = relayed.get(partitionOf(h)) ?? new Set<number>()
+        set.add(network(ipCidr as string))
+        relayed.set(partitionOf(h), set)
+      }
+    }
+    expect(relayed.size).toBeGreaterThan(0)
+    const servers = hosts.filter((h) => h.group.endsWith('_mgmtservers'))
+    const ranges: [number, number][] = []
+    for (const server of servers) {
+      const subnets = server.vars.dhcp_subnets as YamlMap[]
+      const served = new Set(subnets.map((s) => toNum(s.network as string)))
+      for (const n of relayed.get(partitionOf(server)) ?? []) {
+        expect(served.has(n), `${server.name} serves relayed network`).toBe(true)
+      }
+      for (const s of subnets) {
+        const r = s.range as YamlMap | undefined
+        if (r) ranges.push([toNum(r.begin as string), toNum(r.end as string)])
+      }
+    }
+    const sorted = ranges.sort((a, b) => a[0] - b[0])
+    for (let i = 1; i < sorted.length; i++) {
+      expect(sorted[i][0], 'DHCP ranges of the mgmt servers overlap').toBeGreaterThan(
+        sorted[i - 1][1],
+      )
+    }
+  })
+
   it('writes the same bytes for the same plan', () => {
     expect(exportAnsibleInventory(plan).text).toBe(exportAnsibleInventory(plan).text)
   })
@@ -117,6 +161,15 @@ describe('deriveInventory', () => {
     const plan = createEmptyPlan()
     plan.ipPlan.infra.cidr = ''
     expect(deriveInventory(plan).problems.some((p) => p.includes('the IP plan has no'))).toBe(true)
+  })
+
+  it('reports a rack with more nodes than its leaf PXE subnets hold', () => {
+    const plan = createEmptyPlan()
+    const [big] = plan.partitions[0].racks
+    big.servers[0].count = 64
+    plan.partitions[0].racks.push({ ...big, id: 'small', name: 'Rack 2', servers: [] })
+    plan.ipPlan.infra.headroomPercent = 0
+    expect(deriveInventory(plan).problems.some((p) => p.includes('PXE'))).toBe(true)
   })
 
   it('chains each mgmt server to its firewall and mgmt spine by address', () => {
