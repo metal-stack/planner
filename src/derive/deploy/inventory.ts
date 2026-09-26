@@ -15,7 +15,8 @@ import {
 // inventory: a group per partition with a child group per device role
 // (<partition>_spines, _exits, _leaves, _storageleaves, _mgmtspines,
 // _mgmtleaves, _mgmtservers, _mgmtfirewalls) and the generic role groups
-// (spines, leaves, …) above them, so metal-roles plays can target either.
+// (spines, leaves, …, plus the aliases in ROLE_ALIASES) above them, so
+// plays can target either.
 // Variable names are the ones metal-roles reads (sonic-config, metal-core,
 // mgmt-server, dhcp, pixiecore, ztp); `planner_*` variables only document
 // what the plan decided, such as the cable plan per port.
@@ -125,6 +126,14 @@ const ASN = {
   storageLeaf: 4210000100,
   leaf: 4210001000,
 } as const
+
+/** Further generic group names production playbooks target, per role. */
+const ROLE_ALIASES: Record<string, string[]> = {
+  leaves: ['sonic_leaves'],
+  mgmtspines: ['mgmt_spine_switches'],
+  mgmtleaves: ['mgmt_leaf_switches', 'sonic_mgmtleaves'],
+  mgmtservers: ['mgmt_servers'],
+}
 
 const MGMT_VLAN = 1
 /** The ztp role's default port, where ZTP scripts and images are served. */
@@ -517,7 +526,9 @@ export function deriveInventory(plan: Plan): Inventory {
     const { group, roleGroups } = partitionInventory(plan, partition, inf, problems)
     partitionGroups[hostLabel(partition.name).replace(/-/g, '_')] = group
     for (const [role, name] of Object.entries(roleGroups)) {
-      roleChildren[role] = { ...(roleChildren[role] ?? {}), [name]: {} }
+      for (const generic of [role, ...(ROLE_ALIASES[role] ?? [])]) {
+        roleChildren[generic] = { ...(roleChildren[generic] ?? {}), [name]: {} }
+      }
     }
   }
   const doc: YamlMap = {
