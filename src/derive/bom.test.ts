@@ -63,16 +63,20 @@ describe('deriveBom breakout math (2x25G)', () => {
     // 10 nodes x 2 ports = 20x 25G server ports
     const plan = planWithWorkers(10, '2x25G')
     expect(serverQuantity(plan, 'sfp-25g-sr')).toBe(20)
-    // 20 ports / 4 per breakout = 5 leaf-side 100G ports
-    expect(serverQuantity(plan, 'sfp-100g-sr4')).toBe(5)
-    expect(serverQuantity(plan, 'cable-mtp-breakout')).toBe(5)
+    // One port per node on each of the 2 leaves: 10 ports per leaf need
+    // ceil(10/4) = 3 breakouts each, since a breakout serves a single
+    // switch port: 6 leaf-side 100G ports, not 20 / 4 = 5.
+    expect(serverQuantity(plan, 'sfp-100g-sr4')).toBe(6)
+    expect(serverQuantity(plan, 'cable-mtp-breakout')).toBe(6)
   })
 
-  it('rounds leaf-side ports up to a started breakout group', () => {
-    // 3 nodes x 2 ports = 6 ports -> ceil(6/4) = 2
-    const plan = planWithWorkers(3, '2x25G')
-    expect(serverQuantity(plan, 'sfp-100g-sr4')).toBe(2)
-    expect(serverQuantity(plan, 'cable-mtp-breakout')).toBe(2)
+  it('rounds leaf-side ports up to a started breakout group per leaf', () => {
+    // 3 nodes: 3 ports per leaf -> 1 breakout on each of the 2 leaves
+    expect(serverQuantity(planWithWorkers(3, '2x25G'), 'cable-mtp-breakout')).toBe(2)
+    // 9 nodes: 9 ports per leaf -> 3 breakouts each, 6 in all
+    expect(serverQuantity(planWithWorkers(9, '2x25G'), 'cable-mtp-breakout')).toBe(6)
+    // 8 nodes: 8 ports per leaf -> 2 each, where per-leaf and per-group agree
+    expect(serverQuantity(planWithWorkers(8, '2x25G'), 'cable-mtp-breakout')).toBe(4)
   })
 })
 

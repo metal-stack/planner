@@ -37,8 +37,9 @@ describe('leaf port capacity', () => {
       { id: 'a', role: 'worker', modelId: 'server-microcloud-x11', count: 30, uplink: '2x25G' },
       { id: 'b', role: 'worker', modelId: 'server-bigtwin-x11', count: 2, uplink: '2x100G' },
     ]
-    // 30 nodes x 2 = 60 x25G -> ceil(60/4)=15 ports; 2 nodes x 2 = 4 x100G ports
-    expect(leafPortsNeeded(rack)).toBe(19)
+    // 30 nodes: 30 x 25G ports per leaf -> ceil(30/4) = 8 breakouts on each of
+    // the 2 leaves = 16; 2 nodes x 2 = 4 x 100G ports
+    expect(leafPortsNeeded(rack)).toBe(20)
   })
 
   it('flags a rack that exceeds leaf capacity', () => {

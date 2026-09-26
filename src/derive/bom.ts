@@ -191,6 +191,22 @@ export function rackBmcPorts(rack: Rack): number {
   return rack.servers.reduce((n, g) => n + chassisCount(g), 0)
 }
 
+/** 100G switch ports a group of dual-attached nodes takes. Node n's port p
+ *  lands on switch (2n + p) mod `switches`; a 4x25G breakout serves four
+ *  ports of one switch, so 25G ports are rounded up per switch, not per
+ *  group (9 nodes on a leaf pair: 3 + 3 breakouts, not ceil(18 / 4) = 5). */
+export function nodeSwitchPorts(nodes: number, uplink: UplinkSpeed, switches: number): number {
+  const ports = 2 * nodes
+  if (uplink === '2x100G') return ports
+  if (switches <= 0) return Math.ceil(ports / 4)
+  let total = 0
+  for (let s = 0; s < switches; s++) {
+    const onSwitch = Math.floor(ports / switches) + (s < ports % switches ? 1 : 0)
+    total += Math.ceil(onSwitch / 4)
+  }
+  return total
+}
+
 /** Fiber speed between mgmt leaf and mgmt spine: 25G if both have 25G
  *  ports, else 10G. */
 export function mgmtUplinkSpeed(leafModelId: string, spineModelId: string): '25G' | '10G' {
@@ -222,7 +238,7 @@ function addSwitch(
   }
 }
 
-function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
+function addServerGroup(bom: BomBuilder, group: ServerGroup, leafCount: number): void {
   const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
   // The rack is the reason's section now, so the detail only has to say
   // which group within the rack it is.
@@ -239,33 +255,33 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     bom.add(group.gpu.modelId, gpus, `${group.count} ${role} nodes × ${group.gpu.perNode} GPU`)
   }
 
-  addNodeUplinks(bom, group.count, group.uplink, role)
+  addNodeUplinks(bom, group.count, group.uplink, role, leafCount)
 }
 
 /** NIC, transceivers and cables for dual-attached nodes, whatever they are:
  *  server groups on their rack's leaves and the control-plane nodes on the
- *  switch they hang off. `what` names them in the reasons ("worker",
- *  "control plane"). */
-function addNodeUplinks(bom: BomBuilder, nodes: number, uplink: UplinkSpeed, what: string): void {
+ *  switches they hang off (`switches` of them). `what` names them in the
+ *  reasons ("worker", "control plane"). */
+function addNodeUplinks(
+  bom: BomBuilder,
+  nodes: number,
+  uplink: UplinkSpeed,
+  what: string,
+  switches: number,
+): void {
   // Every node carries one dual-port NIC matching its uplink speed.
   const uplinkPorts = 2 * nodes
   if (uplink === '2x25G') {
     bom.add('nic-e810-xxvda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
     // 25G server ports terminate on 100G switch ports via 4x25G breakout:
     // server side gets a 25G-SR transceiver per port, the switch side one
-    // 100G-SR4 per started group of four, joined by an MTP breakout cable.
+    // 100G-SR4 per started group of four on each switch, joined by an MTP
+    // breakout cable.
     bom.add('sfp-25g-sr', uplinkPorts, `${nodes} ${what} nodes × 2 server ports`)
-    const switchPorts = Math.ceil(uplinkPorts / 4)
-    bom.add(
-      'sfp-100g-sr4',
-      switchPorts,
-      `${uplinkPorts} × 25G ${what} ports / 4 per breakout, switch side`,
-    )
-    bom.add(
-      'cable-mtp-breakout',
-      switchPorts,
-      `${uplinkPorts} × 25G ${what} ports / 4 per breakout`,
-    )
+    const switchPorts = nodeSwitchPorts(nodes, uplink, switches)
+    const why = `${uplinkPorts} × 25G ${what} ports over ${switches} switches, 4 per breakout`
+    bom.add('sfp-100g-sr4', switchPorts, `${why}, switch side`)
+    bom.add('cable-mtp-breakout', switchPorts, why)
   } else {
     bom.add('nic-e810-cqda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
     // 100G point-to-point: a 100G-SR4 transceiver on each end plus an MTP
@@ -382,7 +398,13 @@ function addControlPlane(
   const mgmt = central ? mgmtCentral : bom.on('management').at(where)
 
   prod.add(cp.nodeModelId, nodes, `${nodes} control plane nodes`)
-  addNodeUplinks(prod, nodes, cp.uplink, 'control plane')
+  addNodeUplinks(
+    prod,
+    nodes,
+    cp.uplink,
+    'control plane',
+    central ? fabric.exitSwitchCount : cp.rack.leafCount,
+  )
 
   if (ownRack) {
     // A rack of its own: leaves uplinked to the spines like a compute
@@ -508,7 +530,7 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
       `${fabric.mgmt.leafPerRack} mgmt leaves`,
     )
     for (const group of rack.servers) {
-      addServerGroup(bom.on('production').at(rack.name), group)
+      addServerGroup(bom.on('production').at(rack.name), group, rack.leafCount)
     }
   }
 }

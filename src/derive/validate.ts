@@ -8,7 +8,13 @@ import {
   requiredSuperspines,
   spineBandwidth,
 } from './bandwidth'
-import { deriveBom, mgmtUplinkSpeed, rackBmcPorts, spinePortsPerSpine } from './bom'
+import {
+  deriveBom,
+  mgmtUplinkSpeed,
+  nodeSwitchPorts,
+  rackBmcPorts,
+  spinePortsPerSpine,
+} from './bom'
 import { controlPlaneLeafCount, controlPlaneSwitchPorts, inCentralRack } from './controlPlane'
 import { validateIpPlan } from './ip/validateIp'
 import { deriveRackLayout, formatPower } from './rackLayout'
@@ -102,16 +108,13 @@ function checkSwitchRole(
   }
 }
 
-/** 100G leaf ports a rack's servers consume (breakout math for 25G). */
+/** 100G leaf ports a rack's servers consume: 25G ports on 4x25G breakouts, a
+ *  breakout per started four ports of one group on one leaf (nodeSwitchPorts). */
 export function leafPortsNeeded(rack: Rack): number {
-  let breakout25gPorts = 0
-  let native100gPorts = 0
-  for (const group of rack.servers) {
-    const uplinkPorts = 2 * group.count
-    if (group.uplink === '2x25G') breakout25gPorts += uplinkPorts
-    else native100gPorts += uplinkPorts
-  }
-  return Math.ceil(breakout25gPorts / 4) + native100gPorts
+  return rack.servers.reduce(
+    (n, group) => n + nodeSwitchPorts(group.count, group.uplink, rack.leafCount),
+    0,
+  )
 }
 
 /** 100G leaf ports a rack has left for servers after spine uplinks. The
