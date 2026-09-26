@@ -29,6 +29,8 @@ import {
 // - Underlay: one loopback per BGP speaker — used as router ID and VTEP
 //   address — for leaves, spines, exits, superspines, storage leaves and
 //   firewalls (EVPN-to-the-host VTEPs).
+// - Mgmt loopbacks: one per mgmt spine and mgmt leaf, which run BGP in the
+//   routed management network and are reached on their loopback.
 // - PXE (vlan4000): one address per server node plus one per exit switch,
 //   whose SVI runs the PXE DHCP server.
 // - Management (mgmt VRF / out-of-band): one per switch management
@@ -37,6 +39,10 @@ import {
 //   server's own interface. L2 management: one subnet per partition; L3:
 //   a central subnet plus one per compute rack (a rack group once).
 // - Transfer networks: one per router ↔ exit link (2 × routers × exits).
+// - Mgmt links: four /30 per side of the management network, as in the
+//   deployment guide's routed out-of-band network: firewall ↔ mgmt server,
+//   firewall ↔ mgmt server BMC, firewall ↔ mgmt spine mgmt port, and mgmt
+//   server ↔ mgmt spine.
 // Host subnets reserve 3 addresses (network, broadcast, gateway), the
 // loopback pool none. Every size except the transfer networks gets the
 // growth headroom; subnets are packed largest first, so they stay aligned.
@@ -463,6 +469,16 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
   )
   out.push(
     hostSubnet(
+      'Mgmt loopbacks',
+      'Partition',
+      mgmtCount + mgmtLeaves,
+      `${mgmtCount} mgmt spines + ${mgmtLeaves} mgmt leaves`,
+      infra,
+      0,
+    ),
+  )
+  out.push(
+    hostSubnet(
       'PXE (vlan4000)',
       'Partition',
       nodes + fabric.exitSwitchCount,
@@ -525,8 +541,21 @@ export function partitionInfraNeeds(partition: Partition, infra: IpInfra): Infra
       detail: `${fabric.routerCount} routers × ${fabric.exitSwitchCount} exits × 2 links × /${infra.transferPrefix}`,
     })
   }
+  const mgmtLinks = MGMT_LINKS_PER_SIDE * mgmtCount
+  out.push({
+    purpose: 'Mgmt links',
+    scope: 'Partition',
+    needed: mgmtLinks,
+    sized: mgmtLinks * 4,
+    prefix: fitPrefix(4, mgmtLinks * 4),
+    cidr: null,
+    detail: `${mgmtCount} × (firewall to mgmt server, its BMC and the mgmt spine, mgmt server to mgmt spine) × /30`,
+  })
   return out.filter((s): s is InfraSubnet => !!s)
 }
+
+/** /30 networks per side of the management network (see the header). */
+export const MGMT_LINKS_PER_SIDE = 4
 
 function deriveInfra(plan: Plan): InfraResult {
   const input = plan.ipPlan.infra

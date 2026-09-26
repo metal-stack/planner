@@ -132,6 +132,26 @@ describe('invalid input', () => {
 })
 
 describe('infrastructure ranges', () => {
+  it('gives every mgmt spine and mgmt leaf a loopback', () => {
+    const plan = createEmptyPlan()
+    const loopbacks = deriveIpPlan(plan).infra.partitions[0].subnets.find(
+      (s) => s.purpose === 'Mgmt loopbacks',
+    )
+    // 2 mgmt spines + 1 mgmt leaf, with the default headroom, no reserved addresses
+    expect(loopbacks?.needed).toBe(3)
+    expect(loopbacks?.detail).toBe('2 mgmt spines + 1 mgmt leaves')
+  })
+
+  it('sizes four /30 mgmt links per side of the management network', () => {
+    const plan = createEmptyPlan()
+    const links = () =>
+      deriveIpPlan(plan).infra.partitions[0].subnets.find((s) => s.purpose === 'Mgmt links')
+    // 2 sides × 4 links × 4 addresses = 32 -> /27
+    expect(links()).toMatchObject({ needed: 8, sized: 32, prefix: 27 })
+    plan.partitions[0].fabric.mgmt.redundant = false
+    expect(links()).toMatchObject({ needed: 4, sized: 16, prefix: 28 })
+  })
+
   it('sizes underlay, PXE, management and transfer nets for the default plan', () => {
     const r = deriveIpPlan(createEmptyPlan())
     const p = r.infra.partitions[0]
