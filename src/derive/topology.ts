@@ -37,6 +37,8 @@ export interface TopoNode {
   sublabel?: string
   /** For external networks: what kind of network it is. */
   networkKind?: ExternalNetwork['kind']
+  /** For server groups: the plan ServerGroup it draws. */
+  groupId?: string
 }
 
 export type LinkNetwork = 'production' | 'management' | 'external'
@@ -184,6 +186,7 @@ function deriveRack(partition: Partition, rack: Rack, links: TopoLink[]): TopoRa
         kind: 'server-group',
         label: `${count} × ${group.role}`,
         sublabel: `${part(group.modelId)}, ${group.uplink}`,
+        groupId: group.id,
       })
       // Server groups have no edges on purpose: their uplinks to the leaves
       // and their BMC links to the mgmt leaf are one edge per group and

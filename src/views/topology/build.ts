@@ -1,3 +1,4 @@
+import type { MoveChassisArgs } from '../../model/moveChassis'
 import type { FabricConfig, Plan, Rack } from '../../model/plan'
 import {
   CONTROL_PLANE_RACK_ID,
@@ -195,4 +196,30 @@ export function nodeSelections(graph: TopologyGraph): Map<string, Selection> {
     }
   }
   return out
+}
+
+/** The move a server group dropped on a rack stands for: all its nodes,
+ *  into another plan rack of the same partition. Nothing for a drop on
+ *  its own rack, the central rack, the control-plane rack or another
+ *  partition. */
+export function moveGroupArgs(
+  plan: Plan,
+  from: Selection,
+  groupId: string,
+  to: Selection,
+): MoveChassisArgs | undefined {
+  if (!from.rackId || !to.rackId || from.rackId === to.rackId) return undefined
+  if (from.partitionId !== to.partitionId) return undefined
+  const partition = plan.partitions.find((p) => p.id === from.partitionId)
+  const source = partition?.racks.find((r) => r.id === from.rackId)
+  const target = partition?.racks.find((r) => r.id === to.rackId)
+  const group = source?.servers.find((g) => g.id === groupId)
+  if (!partition || !target || !group) return undefined
+  return {
+    partitionId: partition.id,
+    fromRackId: from.rackId,
+    groupId,
+    nodes: group.count,
+    toRackId: to.rackId,
+  }
 }

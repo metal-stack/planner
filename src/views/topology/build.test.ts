@@ -3,6 +3,7 @@ import { createEmptyPlan, defaultPartition, withRackKind } from '../../model/def
 import { CONTROL_PLANE_RACK_ID, deriveTopology } from '../../derive/topology'
 import {
   modeShowing,
+  moveGroupArgs,
   nodeSelections,
   paletteAction,
   paletteState,
@@ -171,5 +172,51 @@ describe('nodeSelections', () => {
     expect(sel.get(mid.leaves[0].id)).toEqual({ partitionId: partition.id, rackId })
     expect(p.externalNetworks.length).toBeGreaterThan(0)
     expect(sel.get(p.externalNetworks[0].id)).toEqual({ section: 'networks' })
+  })
+})
+
+describe('moveGroupArgs', () => {
+  function twoRacks() {
+    const plan = createEmptyPlan()
+    const partition = plan.partitions[0]
+    partition.racks.push({ ...partition.racks[0], id: 'r2', name: 'Rack 2', servers: [] })
+    const [from, to] = partition.racks
+    return { plan, partitionId: partition.id, from, to, group: from.servers[0] }
+  }
+
+  it('moves a whole group to another rack of the same partition', () => {
+    const { plan, partitionId, from, to, group } = twoRacks()
+    expect(
+      moveGroupArgs(plan, { partitionId, rackId: from.id }, group.id, {
+        partitionId,
+        rackId: to.id,
+      }),
+    ).toEqual({
+      partitionId,
+      fromRackId: from.id,
+      groupId: group.id,
+      nodes: group.count,
+      toRackId: to.id,
+    })
+  })
+
+  it('refuses a drop on the same rack, the central rack or another partition', () => {
+    const { plan, partitionId, from, group } = twoRacks()
+    const src = { partitionId, rackId: from.id }
+    expect(moveGroupArgs(plan, src, group.id, { partitionId, rackId: from.id })).toBeUndefined()
+    expect(moveGroupArgs(plan, src, group.id, { partitionId })).toBeUndefined()
+    expect(
+      moveGroupArgs(plan, src, group.id, { partitionId: 'other', rackId: 'r2' }),
+    ).toBeUndefined()
+    expect(
+      moveGroupArgs(plan, src, group.id, { partitionId, rackId: CONTROL_PLANE_RACK_ID }),
+    ).toBeUndefined()
+  })
+
+  it('refuses an unknown group', () => {
+    const { plan, partitionId, from, to } = twoRacks()
+    expect(
+      moveGroupArgs(plan, { partitionId, rackId: from.id }, 'nope', { partitionId, rackId: to.id }),
+    ).toBeUndefined()
   })
 })

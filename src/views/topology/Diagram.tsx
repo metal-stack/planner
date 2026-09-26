@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { EXTERNAL_NETWORK_ICON, NODE_ICON } from '../icons'
 import { COLOR } from '../colors'
 import {
@@ -382,6 +382,23 @@ interface Pt {
   y: number
 }
 
+/** A server group being dragged towards another rack. */
+interface GroupDrag {
+  nodeId: string
+  groupId: string
+  from: Selection
+  /** Pointer offset within the node, so the ghost does not jump. */
+  grab: Pt
+  start: Pt
+  at: Pt
+  /** Set once the pointer travelled DRAG_THRESHOLD; before that it is a click. */
+  moved: boolean
+  target?: DiagramTarget
+}
+
+/** Pointer travel, in diagram units, before a press on a group is a drag. */
+const DRAG_THRESHOLD = 4
+
 /** Anchor points and a curve between two rects: side-to-side only when
  *  both sit on the same row (spine ↔ mgmt spine, mgmt server ↔ mgmt spine),
  *  top/bottom otherwise — so every uplink from a compute rack leaves from
@@ -475,6 +492,7 @@ export default function Diagram({
   fit = false,
   onSelect,
   selected,
+  onMoveGroup,
 }: {
   graph: TopologyGraph
   fit?: boolean
@@ -483,9 +501,41 @@ export default function Diagram({
   onSelect?: (target: DiagramTarget) => void
   /** Boxes belonging to this selection are outlined. */
   selected?: Selection
+  /** A server group dragged from its rack and dropped on another rack. */
+  onMoveGroup?: (from: Selection, groupId: string, to: Selection) => void
 }) {
   const layout = computeLayout(graph)
   const { rects } = layout
+  const content = useRef<SVGGElement>(null)
+  const [drag, setDrag] = useState<GroupDrag | null>(null)
+  // The click that ends a drag must not also select the dragged group.
+  const dragEnded = useRef(false)
+
+  function toContent(clientX: number, clientY: number): Pt | undefined {
+    const m = content.current?.getScreenCTM()
+    if (!m) return undefined
+    const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse())
+    return { x: p.x, y: p.y }
+  }
+  /** The rack of `partitionId` under a point, the innermost box first. */
+  function rackAt(pt: Pt, partitionId: string | undefined): DiagramTarget | undefined {
+    const hits = layout.boxes.filter(
+      (b) =>
+        b.target?.rackId &&
+        b.target.partitionId === partitionId &&
+        pt.x >= b.rect.x &&
+        pt.x <= b.rect.x + b.rect.w &&
+        pt.y >= b.rect.y &&
+        pt.y <= b.rect.y + b.rect.h,
+    )
+    return (hits.find((b) => !b.entity) ?? hits[0])?.target
+  }
+  const isDropTarget = (target: DiagramTarget | undefined) =>
+    !!drag?.target &&
+    !!target &&
+    target.rackId === drag.target.rackId &&
+    target.partitionId === drag.target.partitionId &&
+    drag.target.rackId !== drag.from.rackId
   const selectionOf = nodeSelections(graph)
   const isSelected = (target: DiagramTarget | undefined) =>
     !!selected &&
@@ -505,8 +555,11 @@ export default function Diagram({
       if (l.to === hover) neighbours.add(l.from)
     }
   }
-  const nodeOpacity = (id: string) => (!hover || id === hover || neighbours.has(id) ? 1 : 0.35)
+  // While a group is dragged the hover fade would dim the drop targets.
+  const nodeOpacity = (id: string) =>
+    !hover || drag?.moved || id === hover || neighbours.has(id) ? 1 : 0.35
   const linkTouches = (l: TopoLink) => !!hover && (l.from === hover || l.to === hover)
+  const fading = !!hover && !drag?.moved
 
   const allNodes: TopoNode[] = [
     ...graph.partitions.flatMap((p) => [
@@ -543,7 +596,7 @@ export default function Diagram({
       role="img"
       aria-label="Topology diagram"
     >
-      <g transform={`translate(${MARGIN} 0)`}>
+      <g ref={content} transform={`translate(${MARGIN} 0)`}>
         {layout.boxes.map((box, i) => (
           <g
             key={i}
@@ -559,12 +612,22 @@ export default function Diagram({
               width={box.rect.w}
               height={box.rect.h}
               rx={8}
-              fill={box.entity ? COLOR.gray100 : COLOR.gray50}
-              stroke={
-                isSelected(box.target) ? COLOR.brand : box.entity ? COLOR.gray300 : COLOR.gray200
+              fill={
+                isDropTarget(box.target)
+                  ? COLOR.brandTint
+                  : box.entity
+                    ? COLOR.gray100
+                    : COLOR.gray50
               }
-              strokeWidth={isSelected(box.target) ? 2 : 1}
-              strokeDasharray={box.entity ? '5 4' : undefined}
+              stroke={
+                isSelected(box.target) || isDropTarget(box.target)
+                  ? COLOR.brand
+                  : box.entity
+                    ? COLOR.gray300
+                    : COLOR.gray200
+              }
+              strokeWidth={isSelected(box.target) || isDropTarget(box.target) ? 2 : 1}
+              strokeDasharray={box.entity || isDropTarget(box.target) ? '5 4' : undefined}
             />
             <text
               x={box.rect.x + RACK_PAD}
@@ -597,7 +660,7 @@ export default function Diagram({
                 stroke={color}
                 strokeWidth={LINK_WIDTH[link.speed ?? 'none'] + (linkTouches(link) ? 0.9 : 0)}
                 strokeDasharray={link.network === 'external' ? '5 4' : undefined}
-                opacity={!hover ? 0.75 : linkTouches(link) ? 1 : 0.12}
+                opacity={!fading ? 0.75 : linkTouches(link) ? 1 : 0.12}
               />
               <path
                 className="topo-flow"
@@ -605,7 +668,7 @@ export default function Diagram({
                 fill="none"
                 stroke={color}
                 strokeWidth={LINK_WIDTH[link.speed ?? 'none'] + 0.6}
-                opacity={!hover ? 1 : linkTouches(link) ? 1 : 0.1}
+                opacity={!fading ? 1 : linkTouches(link) ? 1 : 0.1}
                 style={{
                   animationDuration: `${FLOW_DURATION[link.speed ?? 'none']}s`,
                   animationDelay: `${(i % 7) * -0.6}s`,
@@ -616,26 +679,104 @@ export default function Diagram({
         })}
         {allNodes.map((node) => {
           const r = rects.get(node.id)
+          const from = selectionOf.get(node.id)
+          const draggable = interactive && !!onMoveGroup && !!node.groupId && !!from?.rackId
           return r ? (
             <g
               key={node.id}
-              opacity={nodeOpacity(node.id)}
+              opacity={drag?.nodeId === node.id && drag.moved ? 0.35 : nodeOpacity(node.id)}
               onMouseEnter={interactive ? () => setHover(node.id) : undefined}
               onMouseLeave={interactive ? () => setHover(null) : undefined}
               onClick={
-                interactive && onSelect && selectionOf.has(node.id)
+                interactive && onSelect && from
                   ? (e) => {
                       e.stopPropagation()
-                      onSelect(selectionOf.get(node.id)!)
+                      if (dragEnded.current) {
+                        dragEnded.current = false
+                        return
+                      }
+                      onSelect(from)
                     }
                   : undefined
               }
-              style={interactive && onSelect ? { cursor: 'pointer' } : undefined}
+              onPointerDown={
+                draggable
+                  ? (e) => {
+                      if (e.button !== 0) return
+                      e.stopPropagation()
+                      e.currentTarget.setPointerCapture(e.pointerId)
+                      const at = toContent(e.clientX, e.clientY)
+                      if (!at) return
+                      setDrag({
+                        nodeId: node.id,
+                        groupId: node.groupId!,
+                        from: from!,
+                        grab: { x: at.x - r.x, y: at.y - r.y },
+                        start: at,
+                        at,
+                        moved: false,
+                      })
+                    }
+                  : undefined
+              }
+              onPointerMove={
+                draggable
+                  ? (e) => {
+                      if (drag?.nodeId !== node.id) return
+                      const at = toContent(e.clientX, e.clientY)
+                      if (!at) return
+                      const moved =
+                        drag.moved ||
+                        Math.hypot(at.x - drag.start.x, at.y - drag.start.y) >= DRAG_THRESHOLD
+                      setDrag({
+                        ...drag,
+                        at,
+                        moved,
+                        target: moved ? rackAt(at, drag.from.partitionId) : undefined,
+                      })
+                    }
+                  : undefined
+              }
+              onPointerUp={
+                draggable
+                  ? () => {
+                      if (drag?.nodeId !== node.id) return
+                      if (drag.moved) {
+                        dragEnded.current = true
+                        if (drag.target && drag.target.rackId !== drag.from.rackId) {
+                          onMoveGroup!(drag.from, drag.groupId, drag.target)
+                        }
+                      }
+                      setDrag(null)
+                    }
+                  : undefined
+              }
+              onPointerCancel={draggable ? () => setDrag(null) : undefined}
+              style={
+                draggable
+                  ? { cursor: drag?.moved ? 'grabbing' : 'grab', touchAction: 'none' }
+                  : interactive && onSelect
+                    ? { cursor: 'pointer' }
+                    : undefined
+              }
             >
+              {draggable && <title>Drag onto another rack to move this group</title>}
               <NodeBox node={node} r={r} capsule={capsuleIds.has(node.id)} />
             </g>
           ) : null
         })}
+        {drag?.moved &&
+          (() => {
+            const node = allNodes.find((n) => n.id === drag.nodeId)
+            const r = rects.get(drag.nodeId)
+            if (!node || !r) return null
+            const ghost = { ...r, x: drag.at.x - drag.grab.x, y: drag.at.y - drag.grab.y }
+            return (
+              <g opacity={0.75} pointerEvents="none">
+                <NodeBox node={node} r={ghost} />
+              </g>
+            )
+          })()}
       </g>
     </svg>
   )

@@ -21,6 +21,7 @@ import Diagram from './topology/Diagram'
 import {
   PALETTE,
   modeShowing,
+  moveGroupArgs,
   paletteAction,
   paletteState,
   resolveSelection,
@@ -200,6 +201,13 @@ export default function TopologyView() {
     setMode(modeShowing(id, mode))
   }
 
+  function moveGroup(from: Selection, groupId: string, to: Selection) {
+    const args = moveGroupArgs(usePlanStore.getState().plan, from, groupId, to)
+    if (!args) return
+    usePlanStore.getState().moveChassis(args)
+    setPicked({ partitionId: args.partitionId, rackId: args.toRackId })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -259,7 +267,12 @@ export default function TopologyView() {
                 </>
               }
             >
-              <Diagram graph={graph} onSelect={setPicked} selected={selection} />
+              <Diagram
+                graph={graph}
+                onSelect={setPicked}
+                selected={selection}
+                onMoveGroup={moveGroup}
+              />
             </ZoomPane>
           ) : (
             <p className="card p-4 text-sm text-gray-600">
