@@ -1,5 +1,6 @@
 import { catalog } from '../model/catalog'
 import { controlPlaneHost } from './controlPlane'
+import { podsOf, superspinesPerPlane } from './pods'
 import { physicalRacks, type RackPosition } from './rackLayout'
 import {
   mgmtDeviceCount,
@@ -66,6 +67,16 @@ export interface TopoRack {
   leaves: TopoNode[]
   mgmtLeaves: TopoNode[]
   serverGroups: TopoNode[]
+  /** Pod of a leaf-spine-superspine partition the rack belongs to. */
+  podId?: string
+}
+
+/** A compute pod of a leaf-spine-superspine partition: its spines, which
+ *  its racks' leaves uplink to (derive/pods.ts). */
+export interface TopoPod {
+  id: string
+  name: string
+  spines: TopoNode[]
 }
 
 /** Spines, exits, superspines, mgmt spines, mgmt servers and mgmt
@@ -90,6 +101,9 @@ export interface TopoPartition {
   central: TopoCentralRack
   storageLeaves: TopoNode[]
   racks: TopoRack[]
+  /** Compute pods; empty for a leaf-spine partition, whose racks uplink to
+   *  the central rack's spines. */
+  pods: TopoPod[]
   /** The control plane, when this partition carries it: a KaaS cluster
    *  (`managed`, drawn as a capsule like an external network) or on-prem
    *  nodes in the central rack. On-prem nodes in a rack of their own are a
@@ -267,16 +281,29 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
     }
   }
 
+  // Pods (RFC 7938 5-stage Clos): spine j of the border pod and of every
+  // compute pod connects to plane j of the superspines only.
+  const pods: TopoPod[] = podsOf(partition).map((pod) => ({
+    id: pod.id,
+    name: pod.name,
+    spines: tier(`${p}${pod.id}/spine`, 'spine', 'Spine', fabric.spineModelId, fabric.spineCount),
+  }))
+  const perPlane = superspinesPerPlane(partition)
+  for (const spines of [central.spines, ...pods.map((pod) => pod.spines)]) {
+    spines.forEach((spine, j) => {
+      for (const superspine of central.superspines.slice(j * perPlane, (j + 1) * perPlane)) {
+        links.push({
+          from: spine.id,
+          to: superspine.id,
+          count: 1,
+          speed: '100G',
+          network: 'production',
+        })
+      }
+    })
+  }
+
   for (const spine of central.spines) {
-    for (const superspine of central.superspines) {
-      links.push({
-        from: spine.id,
-        to: superspine.id,
-        count: 1,
-        speed: '100G',
-        network: 'production',
-      })
-    }
     for (const exit of central.exits) {
       links.push({ from: exit.id, to: spine.id, count: 1, speed: '100G', network: 'production' })
     }
@@ -296,7 +323,7 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
   // twice (its interface and its BMC) and to mgmt spine i's own mgmt port,
   // and mgmt server i uplinks to mgmt spine i only.
   const mgmtSpines = central.mgmtSpines
-  central.spines.forEach((spine, i) => {
+  ;[...central.spines, ...pods.flatMap((pod) => pod.spines)].forEach((spine, i) => {
     if (mgmtSpines.length === 0) return
     const mgmtSpine = mgmtSpines[i % mgmtSpines.length]
     links.push({
@@ -344,11 +371,15 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
     }
   })
 
-  const racks = partition.racks.flatMap((rack) => deriveRack(partition, rack, links))
+  const podOf = new Map(podsOf(partition).flatMap((pod) => pod.racks.map((r) => [r.id, pod.id])))
+  const racks = partition.racks.flatMap((rack) =>
+    deriveRack(partition, rack, links).map((r) => ({ ...r, podId: podOf.get(rack.id) })),
+  )
 
   for (const rack of racks) {
+    const uplinkSpines = pods.find((pod) => pod.id === rack.podId)?.spines ?? central.spines
     for (const leaf of rack.leaves) {
-      for (const spine of central.spines) {
+      for (const spine of uplinkSpines) {
         links.push({
           from: leaf.id,
           to: spine.id,
@@ -377,6 +408,7 @@ function derivePartition(partition: Partition, links: TopoLink[]): TopoPartition
     central,
     storageLeaves,
     racks,
+    pods,
     externalNetworks: [],
   }
 }
@@ -568,6 +600,7 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       mgmtFirewalls: keep(p.central.mgmtFirewalls),
     },
     storageLeaves: mode === 'central' ? [] : keep(p.storageLeaves),
+    pods: mode === 'central' ? [] : p.pods.map((pod) => ({ ...pod, spines: keep(pod.spines) })),
     racks:
       mode === 'central'
         ? []
@@ -594,6 +627,7 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       ...p.central.mgmtServers,
       ...p.central.mgmtFirewalls,
       ...p.storageLeaves,
+      ...p.pods.flatMap((pod) => pod.spines),
       ...(p.controlPlane ? [p.controlPlane.node] : []),
       ...p.racks.flatMap((r) => [...r.leaves, ...r.mgmtLeaves, ...r.serverGroups]),
     ]) {

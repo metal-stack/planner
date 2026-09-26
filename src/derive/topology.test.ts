@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyPlan, defaultPartition, withRackKind } from '../model/defaults'
+import { createEmptyPlan, defaultPartition, defaultRack, withRackKind } from '../model/defaults'
 import type { Plan } from '../model/plan'
 import { CONTROL_PLANE_RACK_ID, deriveTopology, filterTopology } from './topology'
 
@@ -136,7 +136,9 @@ describe('deriveTopology', () => {
     const spineSuper = graph.links.filter((l) =>
       partition.central.superspines.some((n) => n.id === l.to),
     )
-    expect(spineSuper).toHaveLength(4) // 2 spines x 2 superspines
+    // 2 spines per pod, 2 superspines = 1 per plane: the border pod and the
+    // implicit Pod 1 each link 2 spines x 1 superspine
+    expect(spineSuper).toHaveLength(4)
   })
 
   it('attaches the internet network at the routers, or the exits without routers', () => {
@@ -362,5 +364,85 @@ describe('control plane in the topology', () => {
     expect(filterTopology(graph, 'management').partitions[0].controlPlane).toBeUndefined()
     expect(filterTopology(graph, 'central').partitions[0].controlPlane).toBeDefined()
     expect(filterTopology(graph, 'production').partitions[0].controlPlane).toBeDefined()
+  })
+})
+
+describe('leaf-spine-superspine fabric (RFC 7938 5-stage Clos)', () => {
+  /** Two pods of one rack each, 2 spines per pod, 4 superspines (2 per plane). */
+  function podPlan(): Plan {
+    const plan = createEmptyPlan()
+    const p = plan.partitions[0]
+    p.fabric.fabricType = 'leaf-spine-superspine'
+    p.fabric.spineCount = 2
+    p.fabric.superspineCount = 4
+    p.pods = [
+      { id: 'pa', name: 'Pod A' },
+      { id: 'pb', name: 'Pod B' },
+    ]
+    p.racks[0].podId = 'pa'
+    p.racks.push({ ...defaultRack('Rack 2'), podId: 'pb' })
+    return plan
+  }
+  const ends = (graph: ReturnType<typeof deriveTopology>, id: string) =>
+    graph.links
+      .filter((l) => l.network === 'production' && (l.from === id || l.to === id))
+      .map((l) => (l.from === id ? l.to : l.from))
+      .sort()
+
+  it('gives every pod its own spines and marks each rack with its pod', () => {
+    const p = deriveTopology(podPlan()).partitions[0]
+    expect(p.pods.map((pod) => [pod.name, pod.spines.length])).toEqual([
+      ['Pod A', 2],
+      ['Pod B', 2],
+    ])
+    expect(p.racks.map((r) => r.podId)).toEqual(['pa', 'pb'])
+    expect(p.central.spines).toHaveLength(2)
+  })
+
+  it('uplinks a leaf only to the spines of its own pod', () => {
+    const graph = deriveTopology(podPlan())
+    const p = graph.partitions[0]
+    const podB = p.pods[1].spines.map((s) => s.id).sort()
+    for (const leaf of p.racks[1].leaves) expect(ends(graph, leaf.id)).toEqual(podB)
+  })
+
+  it('connects spine j of every pod, and of the border pod, to plane j only', () => {
+    const graph = deriveTopology(podPlan())
+    const p = graph.partitions[0]
+    const ss = p.central.superspines.map((s) => s.id)
+    const plane = (j: number) => ss.slice(2 * j, 2 * j + 2).sort()
+    for (const spines of [p.central.spines, ...p.pods.map((pod) => pod.spines)]) {
+      spines.forEach((spine, j) => {
+        const up = ends(graph, spine.id).filter((id) => ss.includes(id))
+        expect(up, spine.id).toEqual(plane(j))
+      })
+    }
+  })
+
+  it('attaches exits and storage leaves to the border spines only', () => {
+    const plan = podPlan()
+    plan.partitions[0].fabric.storageLeafCount = 1
+    const graph = deriveTopology(plan)
+    const p = graph.partitions[0]
+    const border = p.central.spines.map((s) => s.id).sort()
+    for (const n of [...p.central.exits, ...p.storageLeaves]) {
+      expect(
+        ends(graph, n.id).filter((id) => id.includes('spine')),
+        n.id,
+      ).toEqual(border)
+    }
+  })
+
+  it('keeps pod spines and their links in production mode only', () => {
+    const graph = deriveTopology(podPlan())
+    const prod = filterTopology(graph, 'production')
+    const podSpine = prod.partitions[0].pods[0].spines[0].id
+    expect(prod.links.some((l) => l.from === podSpine || l.to === podSpine)).toBe(true)
+    expect(filterTopology(graph, 'management').partitions[0].pods[0].spines).toEqual([])
+    expect(filterTopology(graph, 'central').partitions[0].pods).toEqual([])
+  })
+
+  it('has no pods in a leaf-spine fabric', () => {
+    expect(deriveTopology(createEmptyPlan()).partitions[0].pods).toEqual([])
   })
 })

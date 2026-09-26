@@ -183,6 +183,7 @@ export function nodeSelections(graph: TopologyGraph): Map<string, Selection> {
         ...central.mgmtServers,
         ...central.mgmtFirewalls,
         ...p.storageLeaves,
+        ...p.pods.flatMap((pod) => pod.spines),
       ],
       partition,
     )
