@@ -1,7 +1,9 @@
 import { useMemo, useRef } from 'react'
 import { physicalRackCount } from '../derive/rackLayout'
 import { validatePlan } from '../derive/validate'
+import { exportAnsibleInventory } from '../io/ansible'
 import { exportPlanJson, importPlanJson } from '../io/json'
+import { MISSING_INPUTS } from '../derive/deploy/inventory'
 import { downloadText } from '../io/download'
 import { usePlanStore } from '../store/planStore'
 import { useToastStore } from '../store/toastStore'
@@ -34,6 +36,18 @@ export default function PlanView() {
   const fileInput = useRef<HTMLInputElement>(null)
   const issues = useMemo(() => validatePlan(plan), [plan])
 
+  function onExportAnsible() {
+    const { text, problems } = exportAnsibleInventory(plan)
+    if (problems.length > 0) {
+      const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : ''
+      notify(`Ansible export not possible: ${problems[0]}${more}`, { kind: 'error' })
+      return
+    }
+    downloadText(text, `${plan.name}-inventory.yaml`, 'application/yaml')
+    const inputs = MISSING_INPUTS.reduce((n, m) => n + m.inputs.length, 0)
+    notify(`Inventory exported. ${inputs} inputs are still to be set, listed in its header.`)
+  }
+
   async function onImportFile(file: File | undefined) {
     if (!file) return
     try {
@@ -63,6 +77,14 @@ export default function PlanView() {
             >
               <Icon icon={ACTION_ICON.download} />
               Export JSON
+            </button>
+            <button
+              onClick={onExportAnsible}
+              title="Ansible inventory for metal-roles: hosts, addresses, ASNs and the cable plan"
+              className="btn-secondary"
+            >
+              <Icon icon={ACTION_ICON.download} />
+              Export Ansible
             </button>
             <button onClick={() => fileInput.current?.click()} className="btn-secondary">
               <Icon icon={ACTION_ICON.upload} />
