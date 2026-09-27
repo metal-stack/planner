@@ -433,13 +433,16 @@ describe('leaf-spine-superspine fabric (RFC 7938 5-stage Clos)', () => {
     }
   })
 
-  it('keeps pod spines and their links in production mode only', () => {
+  it('keeps pod spines in the production and central views, not in management', () => {
     const graph = deriveTopology(podPlan())
     const prod = filterTopology(graph, 'production')
     const podSpine = prod.partitions[0].pods[0].spines[0].id
     expect(prod.links.some((l) => l.from === podSpine || l.to === podSpine)).toBe(true)
     expect(filterTopology(graph, 'management').partitions[0].pods[0].spines).toEqual([])
-    expect(filterTopology(graph, 'central').partitions[0].pods).toEqual([])
+    // Pod spines sit in the central rack, so the central view keeps them.
+    const central = filterTopology(graph, 'central').partitions[0]
+    expect(central.pods.map((pod) => pod.spines.length)).toEqual([2, 2])
+    expect(central.racks).toEqual([])
   })
 
   it('has no pods in a leaf-spine fabric', () => {

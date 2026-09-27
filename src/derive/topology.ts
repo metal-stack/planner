@@ -600,7 +600,8 @@ export function filterTopology(graph: TopologyGraph, mode: TopologyMode): Topolo
       mgmtFirewalls: keep(p.central.mgmtFirewalls),
     },
     storageLeaves: mode === 'central' ? [] : keep(p.storageLeaves),
-    pods: mode === 'central' ? [] : p.pods.map((pod) => ({ ...pod, spines: keep(pod.spines) })),
+    // Pod spines sit in the central rack, so the central view keeps them.
+    pods: p.pods.map((pod) => ({ ...pod, spines: keep(pod.spines) })),
     racks:
       mode === 'central'
         ? []

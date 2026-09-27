@@ -1,13 +1,15 @@
 import type { Partition, Rack } from '../model/plan'
 
-// Pods of a leaf-spine-superspine partition, as RFC 7938 section 3.2.3
-// builds a 5-stage Clos: a pod's leaves uplink only to that pod's spines
-// (Tier 2), and spine j of every pod uplinks to plane j of the superspines
-// (Tier 1): "Every Tier 2 device connects to a single group of Tier 1
-// devices". The central rack is the border pod: exits, storage leaves and
-// a control-plane rack of its own hang off its spines (`fabric.spineCount`
-// of them, like every pod), as the dedicated cluster for external
-// connectivity of RFC 7938 section 5.2.4. With fabricType leaf-spine there
+// Pods of a leaf-spine-superspine partition, after the 5-stage Clos of
+// RFC 7938 (Figure 3, section 3.2.3): a pod's leaves uplink only to that
+// pod's spines (Tier 2), and spine j of every pod uplinks to plane j of the
+// superspines (Tier 1), since "Every Tier 2 device connects to a single
+// group of Tier 1 devices" (section 3.2.4). The central rack is the border
+// pod: exits, storage leaves and a control-plane rack of its own hang off
+// its spines (`fabric.spineCount` of them, like every pod), adapted from
+// the dedicated cluster for external connectivity of section 5.2.4, whose
+// Tier 3 are WAN routers; here the exits are Tier 3 and the routers sit
+// beyond them. With fabricType leaf-spine there
 // are no pods: every rack uplinks to the central rack's spines.
 
 export interface PodRacks {
