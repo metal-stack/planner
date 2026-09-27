@@ -102,3 +102,18 @@ describe('spine tier with pods', () => {
     expect(requiredSuperspines(podPlan().partitions[0])).toBe(4)
   })
 })
+
+describe('spine tier with a busy central rack', () => {
+  it('counts the central rack spines, which carry every pod’s storage traffic', () => {
+    const plan = podPlan()
+    plan.partitions[0].fabric.storageLeafCount = 4
+    // Central rack spine: 2 exits + 4 storage leaves = 600 down, 2 superspines = 200 up;
+    // a pod spine is 200 : 200, so the central rack is the worst.
+    expect(spineBandwidth(plan.partitions[0])).toMatchObject({
+      downGbps: 600,
+      upGbps: 200,
+      ratio: 3,
+    })
+    expect(requiredSuperspines(plan.partitions[0])).toBe(2 * 6)
+  })
+})

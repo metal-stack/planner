@@ -1,5 +1,11 @@
 import { catalog, itemLabel, portCount, type SwitchRole } from '../model/catalog'
-import { type Partition, type Plan, type Rack, type ServerGroup } from '../model/plan'
+import {
+  mgmtDeviceCount,
+  type Partition,
+  type Plan,
+  type Rack,
+  type ServerGroup,
+} from '../model/plan'
 import {
   formatGbps,
   formatRatio,
@@ -307,9 +313,30 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
           `${fabric.spineCount}, e.g. ${perPlane * fabric.spineCount}.`,
       )
     }
-    for (const pod of podsOf(partition)) {
+    const pods = podsOf(partition)
+    for (const pod of pods) {
       if (pod.racks.length === 0) {
         report(issues, scope, 'warning', `${pod.name} has no racks; its spines carry nothing.`)
+      }
+    }
+    if (pods.length === 1) {
+      report(
+        issues,
+        scope,
+        'warning',
+        'Superspines with only one pod just join it to the central rack: leaf-spine gives the ' +
+          'same with half the spines. Add pods, or use leaf-spine.',
+      )
+    }
+    const known = new Set(partition.pods.map((p) => p.id))
+    for (const rack of partition.racks) {
+      if (rack.podId && !known.has(rack.podId)) {
+        report(
+          issues,
+          { where: rack.name, target: { partitionId: partition.id, rackId: rack.id } },
+          'warning',
+          `${rack.name} names a pod that does not exist; it counts to ${pods[0]?.name ?? 'the first pod'}. Pick its pod in the rack section.`,
+        )
       }
     }
     const superspine = catalog[fabric.superspineModelId]
@@ -359,7 +386,7 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
   }
 
   // Non-blocking fabric at the spine tier (only with superspines).
-  const spineTier = spineBandwidth(partition)
+  const spineTier = spineBandwidth(partition, controlPlaneLeafCount(plan, partition))
   if (fabric.nonBlocking && spineTier && spineTier.ratio !== null && spineTier.ratio > 1) {
     report(
       issues,
@@ -367,7 +394,7 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
       'error',
       `Spine tier is oversubscribed ${formatRatio(spineTier.ratio)}: ${formatGbps(spineTier.downGbps)} ` +
         `from the leaves against ${formatGbps(spineTier.upGbps)} towards the superspines. ` +
-        `A non-blocking fabric needs ${requiredSuperspines(partition)} superspines ` +
+        `A non-blocking fabric needs ${requiredSuperspines(partition, controlPlaneLeafCount(plan, partition))} superspines ` +
         `(now ${fabric.superspineCount}).`,
     )
   }
@@ -393,28 +420,33 @@ function validatePartition(issues: Issue[], plan: Plan, partition: Partition): v
     }
   }
 
-  // Mgmt spine port budgets, matching the cabling model in bom.ts: copper
-  // 1G ports for its own mgmt server and the management interface of every
-  // central-rack switch and router (the mgmt firewall lands on the spine's
-  // own mgmt port, not a front-panel one); fiber ports (25G, or 10G on
-  // switches without 25G) for the uplink of every mgmt leaf.
+  // Mgmt spine port budgets, matching the cable plan (derive/deploy/
+  // cabling.ts): the management interfaces of the central rack's switches,
+  // routers and on-prem control plane nodes are spread over the mgmt spines
+  // in turn, so each takes its share plus its own mgmt server on 1G copper
+  // (the mgmt firewall lands on the spine's own mgmt port, not a front-panel
+  // one); fiber ports (25G, or 10G on switches without 25G) take the uplink
+  // of every mgmt leaf.
   const mgmtSpine = catalog[fabric.mgmt.spineModelId]
   if (mgmtSpine && partition.racks.length > 0) {
     const superspines = fabric.fabricType === 'leaf-spine-superspine' ? fabric.superspineCount : 0
-    const copperNeeded =
-      1 +
+    const devices =
       spinesTotal(partition) +
       fabric.exitSwitchCount +
       superspines +
       fabric.storageLeafCount +
-      fabric.routerCount
+      fabric.routerCount +
+      (inCentralRack(plan, partition) ? plan.controlPlane.nodeCount : 0)
+    const mgmtSpines = mgmtDeviceCount(fabric.mgmt)
+    const copperNeeded = Math.ceil(devices / mgmtSpines) + 1
     const copperAvailable = portCount(mgmtSpine, '1G')
     if (copperNeeded > copperAvailable) {
       report(
         issues,
         scope,
         'error',
-        `Mgmt spine capacity exceeded: ${copperNeeded} 1G ports needed, ` +
+        `Mgmt spine capacity exceeded: ${copperNeeded} 1G ports needed per mgmt spine ` +
+          `(${devices} management interfaces over ${mgmtSpines}, plus its mgmt server), ` +
           `but ${itemLabel(fabric.mgmt.spineModelId)} has ${copperAvailable}.`,
       )
     }

@@ -474,3 +474,38 @@ describe('leaf-spine-superspine validation', () => {
     expect(messages(plan).some((m) => m.includes('Pod C has no racks'))).toBe(true)
   })
 })
+
+describe('review follow-ups', () => {
+  const messages = (plan: Plan) => validatePlan(plan).map((i) => i.message)
+
+  it('warns that a single compute pod gains nothing over leaf-spine', () => {
+    const plan = podPlan()
+    plan.partitions[0].pods = [{ id: 'pa', name: 'Pod A' }]
+    plan.partitions[0].racks[1].podId = 'pa'
+    expect(messages(plan).some((m) => m.includes('only one pod'))).toBe(true)
+    expect(messages(podPlan()).some((m) => m.includes('only one pod'))).toBe(false)
+  })
+
+  it('warns about a rack whose pod does not exist', () => {
+    const plan = podPlan()
+    plan.partitions[0].racks[1].podId = 'gone'
+    expect(messages(plan).some((m) => m.includes('Rack 2 names a pod that does not exist'))).toBe(
+      true,
+    )
+  })
+
+  it('budgets mgmt spine copper per mgmt spine, as the devices are spread', () => {
+    const plan = podPlan()
+    const p = plan.partitions[0]
+    p.fabric.spineCount = 4
+    p.fabric.superspineCount = 8
+    p.pods = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, name: `Pod ${i + 1}` }))
+    p.racks.forEach((r, i) => (r.podId = `p${i}`))
+    // 36 spines + 8 superspines + 2 exits + 2 routers = 48 eth0s over 2 mgmt
+    // spines: 24 each plus its mgmt server fits 48 ports; all on one would not.
+    expect(messages(plan).some((m) => m.startsWith('Mgmt spine capacity exceeded'))).toBe(false)
+    p.fabric.mgmt.redundant = false
+    // One mgmt spine: 48 + its mgmt server = 49 > 48
+    expect(messages(plan).some((m) => m.startsWith('Mgmt spine capacity exceeded'))).toBe(true)
+  })
+})
