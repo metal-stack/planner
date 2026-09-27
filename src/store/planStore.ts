@@ -68,6 +68,18 @@ interface PlannerState {
   resetPlan: () => void
 }
 
+/** Where merge keeps a stored plan it could not read. Defined before the
+ *  store: rehydration runs while this module is still being evaluated. */
+export const UNREADABLE_PLAN_KEY = 'metal-stack-planner/plan-unreadable'
+
+function keepUnreadablePlan(plan: unknown): void {
+  try {
+    localStorage.setItem(UNREADABLE_PLAN_KEY, JSON.stringify(plan))
+  } catch {
+    // Storage unavailable (private mode, tests): nothing to keep it in.
+  }
+}
+
 function touched(plan: Plan, changes: Partial<Plan>): Plan {
   return { ...plan, ...changes, updatedAt: new Date().toISOString() }
 }
@@ -326,6 +338,10 @@ export const usePlanStore = create<PlannerState>()(
         const s = persisted as { plan?: unknown; activeView?: View } | undefined
         const migrated = migrateRawPlan(s?.plan)
         const parsed = migrated.ok ? PlanSchema.safeParse(migrated.plan) : null
+        // A plan this build cannot read (e.g. written by a newer planner) is
+        // replaced by a fresh one, which is persisted right after; keep the
+        // stored original under its own key first so it is not lost.
+        if (s?.plan !== undefined && !parsed?.success) keepUnreadablePlan(s.plan)
         return {
           ...current,
           plan: parsed?.success ? normalizePlan(parsed.data) : createEmptyPlan(),
