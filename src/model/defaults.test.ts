@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEmptyPlan,
+  defaultPartition,
   newRack,
   nextGroupName,
   nextRackNames,
   physicalRackNames,
+  withPodAdded,
+  withPodRemoved,
   withRackKind,
 } from './defaults'
 
@@ -56,5 +59,34 @@ describe('withRackKind', () => {
   it('leaves a rack of the requested kind unchanged', () => {
     const p = partition()
     expect(withRackKind(p, p.racks[0], 'single')).toBe(p.racks[0])
+  })
+})
+
+describe('pods', () => {
+  it('turns the implicit Pod 1 into a real one when the first pod is added', () => {
+    const p = defaultPartition('Partition 1')
+    const added = withPodAdded(p)
+    expect(added.pods.map((pod) => pod.name)).toEqual(['Pod 1', 'Pod 2'])
+    // Racks without a pod stay in the first one.
+    expect(added.racks[0].podId).toBeUndefined()
+  })
+
+  it('numbers a new pod above the highest in use', () => {
+    const p = { ...defaultPartition('P'), pods: [{ id: 'a', name: 'Pod 3' }] }
+    expect(withPodAdded(p).pods.map((pod) => pod.name)).toEqual(['Pod 3', 'Pod 4'])
+  })
+
+  it('moves the racks of a removed pod back to the first pod', () => {
+    const p = {
+      ...defaultPartition('P'),
+      pods: [
+        { id: 'a', name: 'Pod 1' },
+        { id: 'b', name: 'Pod 2' },
+      ],
+    }
+    p.racks[0].podId = 'b'
+    const removed = withPodRemoved(p, 'b')
+    expect(removed.pods.map((pod) => pod.id)).toEqual(['a'])
+    expect(removed.racks[0].podId).toBeUndefined()
   })
 })

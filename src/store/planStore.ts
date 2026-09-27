@@ -2,7 +2,14 @@ import { create, useStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
 import { temporal } from 'zundo'
-import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../model/defaults'
+import {
+  createEmptyPlan,
+  defaultPartition,
+  newRack,
+  withPodAdded,
+  withPodRemoved,
+  withRackKind,
+} from '../model/defaults'
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
 import { moveChassis as moveChassisPlan, type MoveChassisArgs } from '../model/moveChassis'
@@ -38,6 +45,9 @@ interface PlannerState {
   renamePartition: (partitionId: string, name: string) => void
   patchFabric: (partitionId: string, patch: Partial<FabricConfig>) => void
   patchRackDefaults: (partitionId: string, patch: Partial<RackDefaults>) => void
+  addPod: (partitionId: string) => void
+  renamePod: (partitionId: string, podId: string, name: string) => void
+  removePod: (partitionId: string, podId: string) => void
   addRack: (partitionId: string, kind?: Rack['kind']) => void
   removeRack: (partitionId: string, rackId: string) => void
   patchRack: (partitionId: string, rackId: string, patch: Partial<Rack>) => void
@@ -178,6 +188,19 @@ export const usePlanStore = create<PlannerState>()(
               ...p,
               fabric: { ...p.fabric, ...patch },
             })),
+          })),
+        addPod: (partitionId) =>
+          set((s) => ({ plan: mapPartition(s.plan, partitionId, withPodAdded) })),
+        renamePod: (partitionId, podId, name) =>
+          set((s) => ({
+            plan: mapPartition(s.plan, partitionId, (p) => ({
+              ...p,
+              pods: p.pods.map((pod) => (pod.id === podId ? { ...pod, name } : pod)),
+            })),
+          })),
+        removePod: (partitionId, podId) =>
+          set((s) => ({
+            plan: mapPartition(s.plan, partitionId, (p) => withPodRemoved(p, podId)),
           })),
         addRack: (partitionId, kind = 'single') =>
           set((s) => ({

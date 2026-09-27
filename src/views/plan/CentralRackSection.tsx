@@ -7,6 +7,7 @@ import {
 } from '../../model/catalog'
 import type { FabricConfig, MgmtNetwork, Partition } from '../../model/plan'
 import { formatTally, partitionNodes } from '../../derive/nodes'
+import { podsOf } from '../../derive/pods'
 import { formatGbps, formatRatio, spineBandwidth } from '../../derive/bandwidth'
 import { issuesFor, type Issue } from '../../derive/validate'
 import HoverHint from '../HoverHint'
@@ -16,7 +17,7 @@ import { NumberField, SelectField } from './fields'
 import InfoBubble from './InfoBubble'
 import IssueBadges from './IssueBadges'
 import { fabricAnchor } from './navigate'
-import { Icon, SECTION_ICON } from '../icons'
+import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import { nosOptionLabel, optionLabel } from './options'
 
 function switchOptions(role: SwitchRole) {
@@ -40,6 +41,58 @@ function modelSummary(fabric: FabricConfig): string {
     `mgmt ${[...new Set(mgmtSwitches)].map(itemLabel).join(', ')}`,
     `mgmt servers ${itemLabel(fabric.mgmt.serverModelId)}`,
   ].join(' · ')
+}
+
+/** The pods of a leaf-spine-superspine partition: named, added and removed
+ *  here; racks pick theirs in their own section. */
+function PodList({ partition }: { partition: Partition }) {
+  const addPod = usePlanStore((s) => s.addPod)
+  const renamePod = usePlanStore((s) => s.renamePod)
+  const removePod = usePlanStore((s) => s.removePod)
+  const pods = podsOf(partition)
+  return (
+    <div className="mt-3">
+      <span className="mb-1 flex items-center gap-1 text-sm text-gray-600">
+        Pods
+        <InfoBubble
+          label="Pods"
+          info={{
+            text: 'A pod is a group of racks whose leaves uplink only to the pod’s own spines. The central rack is a pod of its own for exits and storage leaves. Racks pick their pod in their section; a rack without one belongs to the first pod.',
+          }}
+        />
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {pods.map((pod) => (
+          <span key={pod.id} className="flex items-center gap-1">
+            <input
+              type="text"
+              aria-label="Pod name"
+              value={pod.name}
+              disabled={partition.pods.length === 0}
+              onChange={(e) => renamePod(partition.id, pod.id, e.target.value)}
+              className="w-28 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm disabled:bg-gray-50"
+            />
+            <span className="text-xs text-gray-500">{pod.racks.length} racks</span>
+            {partition.pods.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removePod(partition.id, pod.id)}
+                title="Remove this pod; its racks move to the first pod (undoable)"
+                aria-label={`Remove ${pod.name}`}
+                className="text-gray-400 hover:text-red-700"
+              >
+                <Icon icon={ACTION_ICON.remove} className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </span>
+        ))}
+        <button type="button" onClick={() => addPod(partition.id)} className="btn-secondary">
+          <Icon icon={ACTION_ICON.add} />
+          Add pod
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function CentralRackSection({
@@ -128,11 +181,17 @@ export default function CentralRackSection({
           }
         />
         <NumberField
-          label="Spines"
-          info={{
-            text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth, at the cost of one leaf port per spine and link.',
-            href: DOCS.networking,
-          }}
+          label={hasSuperspine ? 'Spines per pod' : 'Spines'}
+          info={
+            hasSuperspine
+              ? {
+                  text: 'Every pod, the central rack included, gets this many spines, and every leaf of a pod uplinks to all of its pod’s spines. Spine j of every pod forms plane j towards the superspines.',
+                }
+              : {
+                  text: 'Every leaf uplinks to every spine, so two spines give redundancy and more spines add fabric bandwidth, at the cost of one leaf port per spine and link.',
+                  href: DOCS.networking,
+                }
+          }
           value={fabric.spineCount}
           onChange={(n) => patch({ spineCount: n })}
         />
@@ -149,14 +208,14 @@ export default function CentralRackSection({
           <NumberField
             label="Superspines"
             info={{
-              text: 'A third tier above the spines for very large partitions. Each spine connects once to every superspine.',
-              href: DOCS.networking,
+              text: 'A third tier above the pods, after RFC 7938 (5-stage Clos): not part of the metal-stack documentation. The superspines form one plane per spine of a pod; spine j of every pod connects to each superspine of plane j, so the count must be a multiple of the spines per pod.',
             }}
             value={fabric.superspineCount}
             onChange={(n) => patch({ superspineCount: n })}
           />
         )}
       </div>
+      {hasSuperspine && <PodList partition={partition} />}
 
       <h4 className="mt-4 mb-3 text-sm font-semibold text-gray-700">
         <Icon

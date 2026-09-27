@@ -8,6 +8,7 @@ import {
 import type { Partition, Rack, ServerGroup } from '../../model/plan'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
+import { podsOf } from '../../derive/pods'
 import { issuesFor, leafPortsAvailable, leafPortsNeeded, type Issue } from '../../derive/validate'
 import HoverHint from '../HoverHint'
 import { usePlanStore } from '../../store/planStore'
@@ -173,6 +174,7 @@ export default function RackSection({
   const available = leafPortsAvailable(rack, partition)
   const overCapacity = needed > available
   const nodes = rackNodes(rack)
+  const pods = podsOf(partition)
 
   return (
     <section
@@ -222,6 +224,16 @@ export default function RackSection({
             onChange={(v) => setRackKind(partition.id, rack.id, v as Rack['kind'])}
           />
         </div>
+        {pods.length > 0 && (
+          <div className="w-40">
+            <SelectField
+              label="Pod"
+              value={pods.find((p) => p.racks.some((r) => r.id === rack.id))?.id ?? pods[0].id}
+              options={pods.map((p) => ({ value: p.id, label: p.name }))}
+              onChange={(v) => patchRack(partition.id, rack.id, { podId: v })}
+            />
+          </div>
+        )}
         {rack.memberNames && (
           <span className="mb-2 text-xs text-gray-500">{rack.memberNames.join(' · ')}</span>
         )}

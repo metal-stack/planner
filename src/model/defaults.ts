@@ -158,3 +158,21 @@ export function createEmptyPlan(): Plan {
     ],
   }
 }
+
+/** Adds a pod, numbered above the highest "Pod <N>" in use. Without pods a
+ *  superspine partition has an implicit Pod 1 holding every rack; the first
+ *  add makes that one real, so the racks stay where they are. */
+export function withPodAdded(partition: Partition): Partition {
+  const pods = partition.pods.length > 0 ? partition.pods : [{ id: id(), name: 'Pod 1' }]
+  const highest = Math.max(0, ...pods.map((p) => Number(/^Pod (\d+)$/.exec(p.name)?.[1] ?? 0)))
+  return { ...partition, pods: [...pods, { id: id(), name: `Pod ${highest + 1}` }] }
+}
+
+/** Removes a pod; its racks fall back to the first pod. */
+export function withPodRemoved(partition: Partition, podId: string): Partition {
+  return {
+    ...partition,
+    pods: partition.pods.filter((p) => p.id !== podId),
+    racks: partition.racks.map((r) => (r.podId === podId ? { ...r, podId: undefined } : r)),
+  }
+}
