@@ -28,6 +28,14 @@ function header(plan: Plan): string {
     'SONiC 202111.x and 202211.x; metal-core needs sonic_config_docker_routing_config_mode',
     '"split" there (the role default).',
     '',
+    ...(plan.partitions.some((p) => p.fabric.fabricType === 'leaf-spine-superspine')
+      ? [
+          'Leaf-spine-superspine partitions follow RFC 7938 (pods and planes), a planning',
+          'design and not a metal-stack reference architecture. Their variables are',
+          'UNTESTED in a lab: run them in containerlab or mini-lab before any rollout.',
+          '',
+        ]
+      : []),
     'Still to be set, left undefined on purpose so the roles stop instead of',
     'running with a placeholder:',
     ...MISSING_INPUTS.flatMap((m) => [`  ${m.where}:`, ...m.inputs.map((i) => `    - ${i}`)]),

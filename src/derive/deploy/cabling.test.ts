@@ -35,11 +35,24 @@ function everythingPlan(): Plan {
   return plan
 }
 
+/** Pods combined with the other cabled features. */
+function podsEverything(): Plan {
+  const plan = podPlan()
+  const p = plan.partitions[0]
+  p.fabric.storageLeafCount = 2
+  p.fabric.leafSpineLinks = 2
+  p.racks[0].servers[0].count = 9
+  const group = withRackKind(p, { ...p.racks[1], id: 'grp' }, 'rack-group')
+  p.racks.push({ ...group, podId: 'pb' })
+  return plan
+}
+
 const plans: [string, () => Plan][] = [
   ['the default plan', createEmptyPlan],
   ...templates.map((t): [string, () => Plan] => [`template ${t.name}`, t.build]),
   ['a plan with every cabled feature', everythingPlan],
   ['a leaf-spine-superspine plan with two pods', podPlan],
+  ['pods with a rack group, storage leaves, 2 links per pair and 9 nodes', podsEverything],
 ]
 
 describe.each(plans)('cabling of %s', (_, build) => {

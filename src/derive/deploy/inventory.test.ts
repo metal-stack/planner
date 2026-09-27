@@ -160,6 +160,11 @@ describe.each(plans)('inventory of %s', (_, build) => {
 })
 
 describe('deriveInventory', () => {
+  it('marks a superspine export as untested in a lab, and only that one', () => {
+    expect(exportAnsibleInventory(podPlan()).text).toContain('UNTESTED in a lab')
+    expect(exportAnsibleInventory(createEmptyPlan()).text).not.toContain('UNTESTED')
+  })
+
   it('gives superspines one ASN and the spines of each pod their own (RFC 7938 5.2.1)', () => {
     const hosts = hostsOf(deriveInventory(podPlan()).doc)
     const asn = (h: Host) => h.vars.sonic_config_asn ?? h.groupVars.sonic_config_asn
