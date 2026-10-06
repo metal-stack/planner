@@ -1,5 +1,6 @@
 import {
   catalog,
+  cpuLabel,
   cpusForServer,
   defaultDrives,
   defaultNicId,
@@ -146,7 +147,7 @@ function ServerGroupRow({
   // The collapsed summary always describes the group's shared configuration.
   const groupResolved = resolveNodeCompute(group)
   const nodeSummary = [
-    groupResolved.cpuModelId ? itemLabel(groupResolved.cpuModelId) : undefined,
+    groupResolved.cpuModelId ? cpuLabel(catalog[groupResolved.cpuModelId]) : undefined,
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
       ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
       : undefined,
@@ -367,7 +368,7 @@ function ServerGroupRow({
                     {
                       value: '',
                       label: presetParts.cpuModelId
-                        ? `${itemLabel(presetParts.cpuModelId)} (preset)`
+                        ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
                         : 'Preset default',
                     },
                     ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),

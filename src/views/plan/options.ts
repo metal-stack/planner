@@ -1,15 +1,17 @@
 import type { CatalogItem, NosOption } from '../../model/catalog'
-import { catalog, itemLabel, nosLabel } from '../../model/catalog'
+import { catalog, cpuLabel, itemLabel, nosLabel } from '../../model/catalog'
 
 // How hardware is named in the plan editor's dropdowns: the vendor model
 // designation (never the region-suffixed ordering code), with the caveats a
-// planner needs to see before picking it.
+// planner needs to see before picking it. CPUs carry their core and thread
+// counts: "EPYC 4344P (8C/16T)".
 export function optionLabel(item: CatalogItem): string {
   const notes = [
     item.status === 'alpha' ? 'alpha' : '',
     item.availability === 'eol' ? 'end of life' : '',
     item.availability === 'withdrawn' ? 'withdrawn' : '',
   ].filter(Boolean)
+  if (item.category === 'cpu') return cpuLabel(item, ...notes)
   return notes.length ? `${itemLabel(item.id)} (${notes.join(', ')})` : itemLabel(item.id)
 }
 

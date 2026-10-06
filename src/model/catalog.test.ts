@@ -163,6 +163,7 @@ describe('category invariants', () => {
       expect(item.partNumber, `${id}.partNumber`).toBeDefined()
       expect(item.socket, `${id}.socket`).toBeDefined()
       expect(item.cores, `${id}.cores`).toBeGreaterThan(0)
+      expect(item.threads, `${id}.threads`).toBeGreaterThanOrEqual(item.cores ?? 0)
       expect(item.powerWatts, `${id}.powerWatts`).toBeGreaterThan(0)
     }
   })

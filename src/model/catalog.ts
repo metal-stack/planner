@@ -132,6 +132,8 @@ export interface CatalogItem {
   socket?: CpuSocket
   /** Physical cores on CPUs. */
   cores?: number
+  /** Hardware threads on CPUs. */
+  threads?: number
   /** DIMM slots available per server node. */
   dimmSlots?: number
   /** Memory module technology and capacity. */
@@ -549,6 +551,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: '100-000001479',
     description: '8 cores, 16 threads, 3.8 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 65,
     socket: 'AM5',
   },
@@ -560,6 +563,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CM8071505024520',
     description: '8 cores, 16 threads, 3.2 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 95,
     socket: 'LGA-1700',
   },
@@ -571,6 +575,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8068904658102',
     description: '8 cores, 16 threads, 2.8 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 105,
     socket: 'LGA-4189',
   },
@@ -582,6 +587,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8068904656703',
     description: '24 cores, 48 threads, 2.1 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 165,
     socket: 'LGA-4189',
   },
@@ -593,6 +599,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8071305554400',
     description: '8 cores, 16 threads, 2.6 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 125,
     socket: 'LGA-4677',
   },
@@ -604,6 +611,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8071305120500',
     description: '24 cores, 48 threads, 2.6 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 225,
     socket: 'LGA-4677',
   },
@@ -616,6 +624,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8069504194401',
     description: '24 cores, 48 threads, 2.1 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 150,
     socket: 'LGA-3647',
     availability: 'eol',
@@ -628,6 +637,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8069504449200',
     description: '8 cores, 16 threads, 3.2 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 130,
     socket: 'LGA-3647',
     availability: 'eol',
@@ -640,6 +650,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8068904657701',
     description: '24 cores, 48 threads, 2.8 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 230,
     socket: 'LGA-4189',
   },
@@ -651,6 +662,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'CD8068904657601',
     description: '8 cores, 16 threads, 3.6 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 165,
     socket: 'LGA-4189',
   },
@@ -662,6 +674,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8072205559200',
     description: '24 cores, 48 threads, 2.2 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 185,
     socket: 'LGA-4677',
   },
@@ -673,6 +686,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8072205559600',
     description: '24 cores, 48 threads, 2.9 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 250,
     socket: 'LGA-4677',
   },
@@ -684,6 +698,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8072006348300',
     description: '24 cores, 48 threads, 3.0 GHz base',
     cores: 24,
+    threads: 48,
     powerWatts: 255,
     socket: 'LGA-4710',
   },
@@ -695,6 +710,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'PK8072006399000',
     description: '8 cores, 16 threads, 4.0 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 165,
     socket: 'LGA-4710',
   },
@@ -706,6 +722,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: '100-000001477',
     description: '8 cores, 16 threads, 4.5 GHz base',
     cores: 8,
+    threads: 16,
     powerWatts: 105,
     socket: 'AM5',
   },
@@ -1061,6 +1078,13 @@ export function gpusForServer(serverModelId: string): CatalogItem[] {
   return Object.values(catalog)
     .filter((i) => i.category === 'gpu' && gpuFits(i, server))
     .sort(byAvailability)
+}
+
+/** "EPYC 4344P (8C/16T)" — how CPUs are named in dropdowns and summaries.
+ *  Extra notes join the parenthesis: cpuLabel(cpu, 'preset'). */
+export function cpuLabel(cpu: CatalogItem, ...notes: string[]): string {
+  const extra = notes.length ? `, ${notes.join(', ')}` : ''
+  return `${itemLabel(cpu.id)} (${cpu.cores}C/${cpu.threads}T${extra})`
 }
 
 export function uplinkPortSpeed(uplink: UplinkSpeed): PortSpeed {
