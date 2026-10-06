@@ -55,7 +55,7 @@ export const nodeSizes: NodeSize[] = [
       },
       'LGA-4710': {
         cpuModelId: 'cpu-xeon-6714p',
-        dimmModelId: 'mem-ddr5r-16g',
+        dimmModelId: 'mem-ddr5r-6400-16g',
         dimmsPerNode: 2,
       },
       'D-2100': { dimmModelId: 'mem-ddr4r-16g', dimmsPerNode: 2 },
@@ -89,7 +89,7 @@ export const nodeSizes: NodeSize[] = [
       },
       'LGA-4710': {
         cpuModelId: 'cpu-xeon-6714p',
-        dimmModelId: 'mem-ddr5r-32g',
+        dimmModelId: 'mem-ddr5r-6400-32g',
         dimmsPerNode: 4,
       },
       'D-2100': { dimmModelId: 'mem-ddr4r-32g', dimmsPerNode: 4 },
@@ -117,7 +117,7 @@ export const nodeSizes: NodeSize[] = [
       },
       'LGA-4710': {
         cpuModelId: 'cpu-xeon-6527p',
-        dimmModelId: 'mem-ddr5r-32g',
+        dimmModelId: 'mem-ddr5r-6400-32g',
         dimmsPerNode: 6,
       },
     },

@@ -90,9 +90,10 @@ export type DimmType = 'ddr5-ecc-udimm' | 'ddr5-rdimm' | 'ddr4-rdimm'
 
 export type GpuWidth = 'single' | 'double'
 
-// DIMM speeds within a type interchange (a module clocks down to the
-// platform's speed), so the type is the compatibility boundary and the
-// description carries the module's own speed.
+export type NicFormFactor = 'siom' | 'micro-lp'
+
+// Memory technology follows the socket. Individual boards may also require
+// a specific DIMM speed rating, independently of their operating speed.
 export const dimmTypeForSocket: Record<CpuSocket, DimmType> = {
   AM5: 'ddr5-ecc-udimm',
   'LGA-1700': 'ddr5-ecc-udimm',
@@ -139,6 +140,14 @@ export interface CatalogItem {
   /** Memory module technology and capacity. */
   dimmType?: DimmType
   dimmGiB?: number
+  /** Module's rated transfer rate, not its negotiated operating speed. */
+  dimmRatedSpeed?: number
+  /** Required module rating on boards that restrict it. */
+  requiredDimmRatedSpeed?: number
+  /** Proprietary NIC connector; absent means a standard PCIe card. */
+  nicFormFactor?: NicFormFactor
+  /** Proprietary NIC connectors available on a server. */
+  nicFormFactors?: NicFormFactor[]
   /** metal-stack support status; absent = not applicable (mgmt gear, cables…). */
   status?: SupportStatus
   /** Vendor lifecycle; absent = current. */
@@ -250,6 +259,7 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     socket: 'D-2100',
     dimmSlots: 4,
+    nicFormFactors: ['micro-lp'],
   },
   'server-microcloud-x13': {
     id: 'server-microcloud-x13',
@@ -267,6 +277,7 @@ export const catalog: Record<string, CatalogItem> = {
     gpuWidth: 'single',
     socket: 'LGA-1700',
     dimmSlots: 4,
+    nicFormFactors: ['micro-lp'],
   },
   'server-microcloud-h13': {
     id: 'server-microcloud-h13',
@@ -284,6 +295,7 @@ export const catalog: Record<string, CatalogItem> = {
     gpuWidth: 'single',
     socket: 'AM5',
     dimmSlots: 4,
+    nicFormFactors: ['micro-lp'],
   },
   'server-bigtwin-x11': {
     id: 'server-bigtwin-x11',
@@ -300,6 +312,8 @@ export const catalog: Record<string, CatalogItem> = {
     availability: 'eol',
     socket: 'LGA-3647',
     dimmSlots: 12,
+    // https://www.supermicro.com/datasheet/datasheet_BigTwin.pdf
+    nicFormFactors: ['siom'],
   },
   'server-bigtwin-x12': {
     id: 'server-bigtwin-x12',
@@ -331,6 +345,9 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     socket: 'LGA-4710',
     dimmSlots: 16,
+    // X14DBT-B requires 6400-rated RDIMMs even at lower operating speeds:
+    // https://www.supermicro.com/manuals/motherboard/X14/MNL-2674.pdf
+    requiredDimmRatedSpeed: 6400,
   },
   'server-ultra-2029u': {
     id: 'server-ultra-2029u',
@@ -512,6 +529,8 @@ export const catalog: Record<string, CatalogItem> = {
     vendor: 'Supermicro',
     model: 'AOC-MH25G-m2S2T',
     partNumber: 'AOC-MH25G-m2S2T',
+    // https://www.supermicro.com/en/products/accessories/addon/AOC-MH25G-m2S2T.php
+    nicFormFactor: 'siom',
     description: 'ConnectX-4 Lx, 2× 25G SFP28, 2× 10G RJ45',
     status: 'stable',
     ports: [
@@ -535,6 +554,7 @@ export const catalog: Record<string, CatalogItem> = {
     vendor: 'Supermicro',
     model: 'AOC-CTG-i2S',
     partNumber: 'AOC-CTG-i2S',
+    nicFormFactor: 'micro-lp',
     description: 'Dual-port 2× 10G SFP+',
     status: 'stable',
     ports: [{ speed: '10G', count: 2 }],
@@ -736,6 +756,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '16 GB DDR5-4800 ECC UDIMM',
     dimmType: 'ddr5-ecc-udimm',
     dimmGiB: 16,
+    dimmRatedSpeed: 4800,
   },
   'mem-ddr5u-32g': {
     id: 'mem-ddr5u-32g',
@@ -745,6 +766,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '32 GB DDR5-4800 ECC UDIMM',
     dimmType: 'ddr5-ecc-udimm',
     dimmGiB: 32,
+    dimmRatedSpeed: 4800,
   },
   'mem-ddr4r-16g': {
     id: 'mem-ddr4r-16g',
@@ -754,6 +776,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '16 GB DDR4-3200 RDIMM',
     dimmType: 'ddr4-rdimm',
     dimmGiB: 16,
+    dimmRatedSpeed: 3200,
   },
   'mem-ddr4r-32g': {
     id: 'mem-ddr4r-32g',
@@ -763,6 +786,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '32 GB DDR4-3200 RDIMM',
     dimmType: 'ddr4-rdimm',
     dimmGiB: 32,
+    dimmRatedSpeed: 3200,
   },
   'mem-ddr5r-16g': {
     id: 'mem-ddr5r-16g',
@@ -772,6 +796,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '16 GB DDR5-4800 RDIMM',
     dimmType: 'ddr5-rdimm',
     dimmGiB: 16,
+    dimmRatedSpeed: 4800,
   },
   'mem-ddr5r-32g': {
     id: 'mem-ddr5r-32g',
@@ -781,6 +806,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '32 GB DDR5-4800 RDIMM',
     dimmType: 'ddr5-rdimm',
     dimmGiB: 32,
+    dimmRatedSpeed: 4800,
   },
 
   'mem-ddr5r-24g': {
@@ -791,6 +817,30 @@ export const catalog: Record<string, CatalogItem> = {
     description: '24 GB DDR5-4800 RDIMM',
     dimmType: 'ddr5-rdimm',
     dimmGiB: 24,
+    dimmRatedSpeed: 4800,
+  },
+
+  'mem-ddr5r-6400-16g': {
+    id: 'mem-ddr5r-6400-16g',
+    category: 'memory',
+    vendor: 'Kingston',
+    // https://www.kingston.com/datasheets/KSM64R52BS8-16MH.pdf
+    partNumber: 'KSM64R52BS8-16MH',
+    description: '16 GB DDR5-6400 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 16,
+    dimmRatedSpeed: 6400,
+  },
+  'mem-ddr5r-6400-32g': {
+    id: 'mem-ddr5r-6400-32g',
+    category: 'memory',
+    vendor: 'Kingston',
+    // https://www.kingston.com/datasheets/KSM64R52BD8-32HA.pdf
+    partNumber: 'KSM64R52BD8-32HA',
+    description: '32 GB DDR5-6400 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 32,
+    dimmRatedSpeed: 6400,
   },
 
   // --- Drives (representative public orderable parts) ---
@@ -1091,10 +1141,19 @@ export function uplinkPortSpeed(uplink: UplinkSpeed): PortSpeed {
   return uplink === '2x25G' ? '25G' : '100G'
 }
 
-export function nicsForUplink(uplink: UplinkSpeed): CatalogItem[] {
+export function nicFitsServer(nic: CatalogItem, server: CatalogItem): boolean {
+  return !nic.nicFormFactor || (server.nicFormFactors?.includes(nic.nicFormFactor) ?? false)
+}
+
+export function nicsForServer(serverModelId: string, uplink: UplinkSpeed): CatalogItem[] {
+  const server = catalog[serverModelId]
+  if (!server || server.category !== 'server') return []
   const speed = uplinkPortSpeed(uplink)
   return Object.values(catalog)
-    .filter((item) => item.category === 'nic' && portCount(item, speed) > 0)
+    .filter(
+      (item) =>
+        item.category === 'nic' && portCount(item, speed) > 0 && nicFitsServer(item, server),
+    )
     .sort(byAvailability)
 }
 
@@ -1111,11 +1170,17 @@ export function cpusForServer(serverModelId: string): CatalogItem[] {
 }
 
 export function dimmsForServer(serverModelId: string): CatalogItem[] {
-  const socket = catalog[serverModelId]?.socket
+  const server = catalog[serverModelId]
+  const socket = server?.socket
   if (!socket) return []
   const dimmType = dimmTypeForSocket[socket]
   return Object.values(catalog)
-    .filter((item) => item.category === 'memory' && item.dimmType === dimmType)
+    .filter(
+      (item) =>
+        item.category === 'memory' &&
+        item.dimmType === dimmType &&
+        (!server.requiredDimmRatedSpeed || item.dimmRatedSpeed === server.requiredDimmRatedSpeed),
+    )
     .sort(byAvailability)
 }
 

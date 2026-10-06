@@ -88,6 +88,18 @@ describe('deriveBom NIC rules', () => {
 })
 
 describe('deriveBom node size rules', () => {
+  it.each([
+    ['n1-medium-x86', 'mem-ddr5r-6400-16g', 2],
+    ['c1-medium-x86', 'mem-ddr5r-6400-32g', 4],
+    ['c1-large-x86', 'mem-ddr5r-6400-32g', 6],
+  ] as const)('orders 6400-rated X14 memory for %s', (sizeId, dimmId, dimmsPerNode) => {
+    const plan = planWithServer('server-bigtwin-x14', 4)
+    plan.partitions[0].racks[0].servers[0].sizeId = sizeId
+    const memory = deriveBom(plan).filter((line) => line.category === 'memory')
+    expect(memory).toHaveLength(1)
+    expect(memory[0]).toMatchObject({ catalogId: dimmId, quantity: 4 * dimmsPerNode })
+  })
+
   it('adds one board-specific CPU and the preset DIMMs per node', () => {
     const h13 = planWithServer('server-microcloud-h13', 8)
     expect(quantity(h13, 'cpu-epyc-4344p')).toBe(8)

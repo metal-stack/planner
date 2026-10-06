@@ -8,7 +8,7 @@ import {
   driveOptions,
   gpusForServer,
   itemLabel,
-  nicsForUplink,
+  nicsForServer,
   serversForUsage,
   switchesForRole,
 } from '../../model/catalog'
@@ -27,6 +27,13 @@ import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import { optionLabel } from './options'
+
+/** Keep invalid imported or previously selected parts visible and editable. */
+function withCurrentOption(options: { value: string; label: string }[], id?: string) {
+  return id && !options.some((option) => option.value === id)
+    ? [...options, { value: id, label: `${itemLabel(id)} (incompatible)` }]
+    : options
+}
 
 /** Node selector chip in the Node configuration menu: `custom` marks a node
  *  carrying its own configuration. */
@@ -138,16 +145,26 @@ function ServerGroupRow({
     }
   })
   const defaultNic = defaultNicId(group.uplink)
-  const nicOptions = [
-    { value: '', label: `${itemLabel(defaultNic)} (default)` },
-    ...nicsForUplink(group.uplink)
-      .filter((item) => item.id !== defaultNic)
-      .map((item) => ({ value: item.id, label: optionLabel(item) })),
-  ]
+  const nicOptions = withCurrentOption(
+    [
+      { value: '', label: `${itemLabel(defaultNic)} (default)` },
+      ...nicsForServer(group.modelId, group.uplink)
+        .filter((item) => item.id !== defaultNic)
+        .map((item) => ({ value: item.id, label: optionLabel(item) })),
+      ...(shown.nicModelId === defaultNic
+        ? [{ value: defaultNic, label: itemLabel(defaultNic) }]
+        : []),
+    ],
+    shown.nicModelId,
+  )
   // The collapsed summary always describes the group's shared configuration.
   const groupResolved = resolveNodeCompute(group)
   const nodeSummary = [
-    groupResolved.cpuModelId ? cpuLabel(catalog[groupResolved.cpuModelId]) : undefined,
+    groupResolved.cpuModelId
+      ? catalog[groupResolved.cpuModelId]?.category === 'cpu'
+        ? cpuLabel(catalog[groupResolved.cpuModelId])
+        : itemLabel(groupResolved.cpuModelId)
+      : undefined,
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
       ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
       : undefined,
@@ -364,30 +381,36 @@ function ServerGroupRow({
                 <SelectField
                   label="CPU"
                   value={shown.compute?.cpuModelId ?? ''}
-                  options={[
-                    {
-                      value: '',
-                      label: presetParts.cpuModelId
-                        ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
-                        : 'Preset default',
-                    },
-                    ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
-                  ]}
+                  options={withCurrentOption(
+                    [
+                      {
+                        value: '',
+                        label: presetParts.cpuModelId
+                          ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
+                          : 'Preset default',
+                      },
+                      ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
+                    ],
+                    shown.compute?.cpuModelId,
+                  )}
                   onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
                 />
               )}
               <SelectField
                 label="DIMM model"
                 value={shown.compute?.dimmModelId ?? ''}
-                options={[
-                  {
-                    value: '',
-                    label: presetParts.dimmModelId
-                      ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
-                      : 'Preset default',
-                  },
-                  ...dimmOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
-                ]}
+                options={withCurrentOption(
+                  [
+                    {
+                      value: '',
+                      label: presetParts.dimmModelId
+                        ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
+                        : 'Preset default',
+                    },
+                    ...dimmOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
+                  ],
+                  shown.compute?.dimmModelId,
+                )}
                 onChange={(v) => patchCompute({ dimmModelId: v || undefined })}
               />
               <NumberField
@@ -404,7 +427,7 @@ function ServerGroupRow({
           <SelectField
             label="NIC"
             info={{
-              text: "Dual-port NIC fitted to every node, filtered to the group's uplink speed. All options are on the metal-stack hardware compatibility list; the default is the Intel E810 the reference setups use.",
+              text: "Dual-port NIC fitted to every node, filtered to the server's connector compatibility and the group's uplink speed. All options are on the metal-stack hardware compatibility list; the default is the Intel E810 the reference setups use.",
               href: DOCS.hardware,
             }}
             value={shown.nicModelId ?? ''}

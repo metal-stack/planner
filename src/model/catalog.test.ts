@@ -9,7 +9,7 @@ import {
   gpusForServer,
   itemLabel,
   legacyIdMap,
-  nicsForUplink,
+  nicsForServer,
   nosLabel,
   nosLicenseId,
   nosOptions,
@@ -233,14 +233,17 @@ describe('reachability', () => {
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
       ...gpusForServer('server-superserver-tn12'),
-      ...nicsForUplink('2x25G'),
-      ...nicsForUplink('2x100G'),
       ...driveOptions(),
-      // Every board's CPU and DIMM dropdowns, so a part reachable only
+      // Every board's NIC, CPU and DIMM dropdowns, so a part reachable only
       // through a newly annotated socket counts as offered.
       ...Object.values(catalog)
         .filter((item) => item.category === 'server')
-        .flatMap((server) => [...cpusForServer(server.id), ...dimmsForServer(server.id)]),
+        .flatMap((server) => [
+          ...nicsForServer(server.id, '2x25G'),
+          ...nicsForServer(server.id, '2x100G'),
+          ...cpusForServer(server.id),
+          ...dimmsForServer(server.id),
+        ]),
     ].map((i) => i.id),
   )
 
@@ -361,13 +364,37 @@ describe('helpers', () => {
   })
 
   it('offers NICs by uplink speed and picks the E810 defaults', () => {
-    const twentyFive = nicsForUplink('2x25G').map((item) => item.id)
+    const twentyFive = nicsForServer('server-microcloud-h13', '2x25G').map((item) => item.id)
     expect(twentyFive).toContain('nic-xxv710-da2')
     expect(twentyFive).toContain('nic-connectx5')
     expect(twentyFive).not.toContain('nic-e810-cqda2')
-    expect(nicsForUplink('2x100G').map((item) => item.id)).toEqual(['nic-e810-cqda2'])
+    expect(nicsForServer('server-microcloud-h13', '2x100G').map((item) => item.id)).toEqual([
+      'nic-e810-cqda2',
+    ])
     expect(defaultNicId('2x25G')).toBe('nic-e810-xxvda2')
     expect(defaultNicId('2x100G')).toBe('nic-e810-cqda2')
+  })
+
+  it('offers SIOM NICs only for a server with a SIOM connector', () => {
+    expect(nicsForServer('server-microcloud-h13', '2x25G').map((item) => item.id)).not.toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('server-bigtwin-x14', '2x25G').map((item) => item.id)).not.toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('server-bigtwin-x11', '2x25G').map((item) => item.id)).toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('unknown-server', '2x25G')).toEqual([])
+  })
+
+  it('offers only 6400-rated DIMMs for the X14 BigTwin', () => {
+    const dimms = dimmsForServer('server-bigtwin-x14')
+    expect(dimms.map((item) => item.dimmGiB)).toEqual([16, 32])
+    expect(dimms.every((item) => item.dimmRatedSpeed === 6400)).toBe(true)
+    expect(dimmsForServer('server-superserver-tn12').map((item) => item.id)).toContain(
+      'mem-ddr5r-16g',
+    )
   })
 
   it('offers CPU and memory parts matching the server socket', () => {

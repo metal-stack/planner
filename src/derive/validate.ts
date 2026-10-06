@@ -3,6 +3,7 @@ import {
   dimmTypeForSocket,
   gpuFits,
   itemLabel,
+  nicFitsServer,
   portCount,
   uplinkPortSpeed,
   type DimmType,
@@ -297,8 +298,6 @@ function checkGpu(
   }
 }
 
-// Speedless on purpose: DIMM speeds within a type interchange, so the type
-// is the compatibility boundary (see dimmTypeForSocket).
 const DIMM_TYPE_LABEL: Record<DimmType, string> = {
   'ddr5-ecc-udimm': 'DDR5 ECC UDIMM',
   'ddr5-rdimm': 'DDR5 RDIMM',
@@ -364,6 +363,17 @@ function checkCompute(
           `${prefix}${itemLabel(dimm.id)} is ${DIMM_TYPE_LABEL[dimm.dimmType!]}, but ` +
             `${itemLabel(group.modelId)} takes ${DIMM_TYPE_LABEL[expected]}.`,
         )
+      } else if (
+        server.requiredDimmRatedSpeed &&
+        dimm.dimmRatedSpeed !== server.requiredDimmRatedSpeed
+      ) {
+        report(
+          issues,
+          scope,
+          'error',
+          `${prefix}${itemLabel(group.modelId)} requires ${server.requiredDimmRatedSpeed} MT/s-rated DIMMs, ` +
+            `but ${itemLabel(dimm.id)} is rated ${dimm.dimmRatedSpeed ?? 'unknown'} MT/s.`,
+        )
       }
     }
   }
@@ -389,7 +399,7 @@ function checkDrives(issues: Issue[], scope: Scope, config: NodeConfig, prefix: 
   }
 }
 
-/** A custom NIC must exist and provide ports at the group's uplink speed. */
+/** A custom NIC must fit the server and provide ports at the uplink speed. */
 function checkNic(
   issues: Issue[],
   scope: Scope,
@@ -402,6 +412,16 @@ function checkNic(
   if (!nic || nic.category !== 'nic') {
     report(issues, scope, 'error', `${prefix}Unknown NIC model "${config.nicModelId}".`)
     return
+  }
+  const server = catalog[group.modelId]
+  if (server && !nicFitsServer(nic, server)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(nic.id)} requires a ${nic.nicFormFactor?.toUpperCase()} slot, ` +
+        `which ${itemLabel(group.modelId)} does not provide.`,
+    )
   }
   if (portCount(nic, uplinkPortSpeed(group.uplink)) === 0) {
     report(

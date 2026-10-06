@@ -209,6 +209,34 @@ describe('node compute and NIC configuration', () => {
     expect(errors(plan)).toContain('Unknown NIC model "nic-foo".')
   })
 
+  it.each([false, true])('rejects an incompatible NIC, per-position: %s', (perPosition) => {
+    const plan = basePlan()
+    const config = { sizeId: 'n1-medium-x86', nicModelId: 'nic-aoc-mh25g' }
+    if (perPosition) group(plan).nodeConfigs = { 1: config }
+    else group(plan).nicModelId = config.nicModelId
+    expect(errors(plan)).toContain(
+      `${perPosition ? 'Chassis position 2: ' : ''}AOC-MH25G-m2S2T requires a SIOM slot, which AS-3015MR-H8TNR does not provide.`,
+    )
+  })
+
+  it('accepts a SIOM NIC on the X11 BigTwin', () => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-bigtwin-x11'
+    group(plan).nicModelId = 'nic-aoc-mh25g'
+    expect(errors(plan)).toEqual([])
+  })
+
+  it.each([false, true])('rejects 4800-rated X14 memory, per-position: %s', (perPosition) => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-bigtwin-x14'
+    const compute = { dimmModelId: 'mem-ddr5r-16g' }
+    if (perPosition) group(plan).nodeConfigs = { 1: { sizeId: 'n1-medium-x86', compute } }
+    else group(plan).compute = compute
+    expect(errors(plan)).toContain(
+      `${perPosition ? 'Chassis position 2: ' : ''}SYS-222BT-HNR requires 6400 MT/s-rated DIMMs, but MTC10F1084S1RC48BA1 is rated 4800 MT/s.`,
+    )
+  })
+
   it('prefixes issues from per-position configurations with the chassis position', () => {
     const plan = basePlan()
     group(plan).nodeConfigs = {

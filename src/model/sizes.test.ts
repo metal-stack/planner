@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalog, dimmTypeForSocket, type CpuSocket } from './catalog'
+import { catalog, dimmsForServer, dimmTypeForSocket, type CpuSocket } from './catalog'
 import { nodeSizes, resolveNodeCompute } from './sizes'
 
 describe('node size catalog references', () => {
@@ -21,6 +21,13 @@ describe('node size catalog references', () => {
         expect(parts.dimmsPerNode * (dimm?.dimmGiB ?? 0), `${size.id} ${socket} memory`).toBe(
           size.memoryGiB,
         )
+        for (const server of Object.values(catalog)) {
+          if (server.category !== 'server' || server.socket !== socket) continue
+          expect(
+            dimmsForServer(server.id).map((item) => item.id),
+            `${size.id} ${server.id} memory compatibility`,
+          ).toContain(parts.dimmModelId)
+        }
       }
     }
   })
