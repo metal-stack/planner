@@ -53,6 +53,7 @@ describe('resolveNodeCompute', () => {
   it('resolves the board-specific preset', () => {
     expect(resolveNodeCompute(preset)).toEqual({
       size: nodeSizes[0],
+      cpuCount: 1,
       cpuModelId: 'cpu-epyc-4344p',
       dimmModelId: 'mem-ddr5u-16g',
       dimmsPerNode: 2,
@@ -74,6 +75,7 @@ describe('resolveNodeCompute', () => {
   it('leaves parts undefined for an unknown size', () => {
     expect(resolveNodeCompute({ ...preset, sizeId: 'x1-huge' })).toEqual({
       size: undefined,
+      cpuCount: 1,
       cpuModelId: undefined,
       dimmModelId: undefined,
       dimmsPerNode: undefined,

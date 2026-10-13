@@ -1,4 +1,5 @@
 import {
+  availableDimmSlots,
   catalog,
   dimmTypeForSocket,
   gpuFits,
@@ -321,6 +322,15 @@ function checkCompute(
 
   const server = catalog[group.modelId]
   const socket = server?.socket
+  const cpuCount = config.compute?.cpuCount ?? 1
+  if (cpuCount > (server?.cpuSockets ?? 1)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(group.modelId)} does not support a dual-socket configuration in the planner.`,
+    )
+  }
   // Socketless boards get their single group-level warning in validateRack.
   if (!socket) return
 
@@ -378,13 +388,26 @@ function checkCompute(
     }
   }
 
-  if (compute.dimmsPerNode && server.dimmSlots && compute.dimmsPerNode > server.dimmSlots) {
+  const dimmSlots = availableDimmSlots(group.modelId, cpuCount)
+  if (compute.dimmsPerNode && dimmSlots && compute.dimmsPerNode > dimmSlots) {
     report(
       issues,
       scope,
       'error',
-      `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
+      `${prefix}${itemLabel(group.modelId)} has ${dimmSlots} DIMM slots per node` +
+        (server.cpuSockets
+          ? ` with ${cpuCount} CPU${cpuCount === 1 ? '' : 's'} installed, `
+          : ', ') +
         `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
+    )
+  }
+  if (compute.dimmsPerNode && compute.dimmsPerNode < cpuCount) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(group.modelId)} needs at least one DIMM per installed CPU, ` +
+        `but ${compute.dimmsPerNode} DIMM is configured for ${cpuCount} CPUs.`,
     )
   }
 }

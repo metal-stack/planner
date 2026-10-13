@@ -1,4 +1,5 @@
 import {
+  availableDimmSlots,
   catalog,
   cpuLabel,
   cpusForServer,
@@ -110,6 +111,7 @@ function ServerGroupRow({
 
   const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
   const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
+  const dimmSlots = availableDimmSlots(group.modelId, resolvedCompute.cpuCount)
   // The preset's own parts, for naming what "Preset default" resolves to.
   const presetParts = resolveNodeCompute({ modelId: group.modelId, sizeId: shown.sizeId })
   // The preset stays the baseline; deviating fields mark it "customized".
@@ -138,7 +140,7 @@ function ServerGroupRow({
   const nodeSummary = [
     groupResolved.cpuModelId
       ? catalog[groupResolved.cpuModelId]?.category === 'cpu'
-        ? cpuLabel(catalog[groupResolved.cpuModelId])
+        ? `${groupResolved.cpuCount}× ${cpuLabel(catalog[groupResolved.cpuModelId])}`
         : itemLabel(groupResolved.cpuModelId)
       : undefined,
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
@@ -163,9 +165,10 @@ function ServerGroupRow({
   const patchCompute = (change: NonNullable<ServerGroup['compute']>) => {
     const next = { ...shown.compute, ...change }
     const compute =
-      next.cpuModelId || next.dimmModelId || next.dimmsPerNode
+      next.cpuModelId || next.cpuCount === 2 || next.dimmModelId || next.dimmsPerNode
         ? {
             ...(next.cpuModelId && { cpuModelId: next.cpuModelId }),
+            ...(next.cpuCount === 2 && { cpuCount: next.cpuCount }),
             ...(next.dimmModelId && { dimmModelId: next.dimmModelId }),
             ...(next.dimmsPerNode && { dimmsPerNode: next.dimmsPerNode }),
           }
@@ -338,7 +341,7 @@ function ServerGroupRow({
             Reset chassis position {sel + 1} to the group configuration
           </button>
         )}
-        <div className="mt-3 grid grid-cols-2 items-end gap-3 md:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 items-start gap-3 md:grid-cols-6">
           <SelectField
             label="Preset"
             info={{
@@ -367,6 +370,19 @@ function ServerGroupRow({
                   onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
                 />
               )}
+              {catalog[group.modelId]?.cpuSockets === 2 && (
+                <NumberField
+                  label="CPU sockets"
+                  min={1}
+                  max={2}
+                  value={resolvedCompute.cpuCount}
+                  onChange={(value) => {
+                    if (value === 1 || value === 2) {
+                      patchCompute({ cpuCount: value === 2 ? 2 : undefined })
+                    }
+                  }}
+                />
+              )}
               <SelectField
                 label="DIMM model"
                 value={shown.compute?.dimmModelId ?? ''}
@@ -381,6 +397,11 @@ function ServerGroupRow({
               />
               <NumberField
                 label="DIMMs per node"
+                min={resolvedCompute.cpuCount}
+                max={dimmSlots}
+                info={{
+                  text: `Total across the node: ${dimmSlots ?? 'unknown'} slots available with ${resolvedCompute.cpuCount} CPU${resolvedCompute.cpuCount === 1 ? '' : 's'}. Changing the CPU count keeps this memory total. Populate at least one DIMM per CPU and follow the board's memory population guide.`,
+                }}
                 value={shown.compute?.dimmsPerNode ?? resolvedCompute.dimmsPerNode ?? 0}
                 onChange={(value) =>
                   patchCompute({

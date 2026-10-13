@@ -261,7 +261,11 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
       const compute = resolveNodeCompute({ modelId: group.modelId, ...config })
       const sizeNote = compute.custom ? `${config.sizeId}, customized` : config.sizeId
       if (compute.cpuModelId) {
-        bom.add(compute.cpuModelId, count, `${who} × 1 CPU (${sizeNote})`)
+        bom.add(
+          compute.cpuModelId,
+          count * compute.cpuCount,
+          `${who} × ${compute.cpuCount} CPU${compute.cpuCount === 1 ? '' : 's'} (${sizeNote})`,
+        )
       }
       if (compute.dimmModelId && compute.dimmsPerNode) {
         bom.add(
