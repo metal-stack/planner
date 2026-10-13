@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { defaultIpPlan, IpPlanSchema } from './ipPlan'
 import { SCHEMA_VERSION } from './migrate'
+import { DEFAULT_SIZE_ID } from './sizes'
 
 // The Plan is the single document the whole app operates on. These Zod
 // schemas are the source of truth — all TypeScript types are inferred from
@@ -65,7 +66,7 @@ export const NodeConfigSchema = z.object({
 })
 export type NodeConfig = z.infer<typeof NodeConfigSchema>
 
-export const ServerGroupSchema = z.object({
+export const ServerGroupSchema = NodeConfigSchema.extend({
   id: z.string(),
   role: ServerRoleSchema,
   /** Catalog id of the server model (nodes, not chassis — chassis count is derived). */
@@ -73,13 +74,7 @@ export const ServerGroupSchema = z.object({
   /** Number of server nodes in this group. */
   count: z.number().int().min(0),
   uplink: UplinkSpeedSchema,
-  gpu: GpuConfigSchema.optional(),
-  sizeId: z.string().default('n1-medium-x86'),
-  compute: ComputeOverrideSchema.optional(),
-  nicModelId: z.string().optional(),
-  /** Drives fitted to every node. Absent = the catalog's default pair
-   *  (one M.2 boot drive, one data drive); an empty list means none. */
-  drives: z.array(DriveConfigSchema).optional(),
+  sizeId: NodeConfigSchema.shape.sizeId.default(DEFAULT_SIZE_ID),
   /** Per-node deviations, keyed by the node's position within its chassis
    *  ("0" to nodesPerChassis - 1) and applying to that position in every
    *  chassis of the group. Positions without an entry use the group's

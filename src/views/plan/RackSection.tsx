@@ -11,6 +11,7 @@ import {
   nicsForServer,
   serversForUsage,
   switchesForRole,
+  type CatalogItem,
 } from '../../model/catalog'
 import { useState } from 'react'
 import { chassisPositions, groupConfig, nodeConfig } from '../../model/nodeConfig'
@@ -28,11 +29,14 @@ import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import { optionLabel } from './options'
 
-/** Keep invalid imported or previously selected parts visible and editable. */
-function withCurrentOption(options: { value: string; label: string }[], id?: string) {
-  return id && !options.some((option) => option.value === id)
-    ? [...options, { value: id, label: `${itemLabel(id)} (incompatible)` }]
-    : options
+/** Catalog choices with an optional default and any incompatible current selection. */
+function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string) {
+  const options = items.map((item) => ({ value: item.id, label: optionLabel(item) }))
+  if (defaultLabel) options.unshift({ value: '', label: defaultLabel })
+  if (id && !options.some((option) => option.value === id)) {
+    options.push({ value: id, label: `${itemLabel(id)} (incompatible)` })
+  }
+  return options
 }
 
 /** Node selector chip in the Node configuration menu: `custom` marks a node
@@ -87,22 +91,6 @@ function ServerGroupRow({
   const maxNodes = group.uplink === '2x25G' ? freePorts * 2 : Math.floor(freePorts / 2)
   const fillCount = Math.floor(maxNodes / nodesPer) * nodesPer
 
-  const modelOptions = serversForUsage(group.role).map((i) => ({
-    value: i.id,
-    label: optionLabel(i),
-  }))
-  // Keep an out-of-role selection visible so the user can see and fix it.
-  if (!modelOptions.some((o) => o.value === group.modelId)) {
-    modelOptions.push({ value: group.modelId, label: `${group.modelId} (incompatible)` })
-  }
-
-  // GPUs are only offered for server models that accept one; the model's
-  // gpuCapable caps how many go in each node.
-  const gpuOptions = gpusForServer(group.modelId).map((i) => ({
-    value: i.id,
-    label: optionLabel(i),
-  }))
-
   const socket = catalog[group.modelId]?.socket
   const cpuOptions = cpusForServer(group.modelId)
   const dimmOptions = dimmsForServer(group.modelId)
@@ -118,14 +106,7 @@ function ServerGroupRow({
     .map(Number)
     .filter((i) => i >= 0 && i < positions)
 
-  // Keep a GPU that no longer fits the model visible so the user can see
-  // and fix it (validation explains the width mismatch).
-  if (shown.gpu && !gpuOptions.some((o) => o.value === shown.gpu?.modelId)) {
-    gpuOptions.push({
-      value: shown.gpu.modelId,
-      label: `${itemLabel(shown.gpu.modelId)} (incompatible)`,
-    })
-  }
+  const gpuOptions = catalogOptions(gpusForServer(group.modelId), shown.gpu?.modelId)
 
   const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
   const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
@@ -145,17 +126,12 @@ function ServerGroupRow({
     }
   })
   const defaultNic = defaultNicId(group.uplink)
-  const nicOptions = withCurrentOption(
-    [
-      { value: '', label: `${itemLabel(defaultNic)} (default)` },
-      ...nicsForServer(group.modelId, group.uplink)
-        .filter((item) => item.id !== defaultNic)
-        .map((item) => ({ value: item.id, label: optionLabel(item) })),
-      ...(shown.nicModelId === defaultNic
-        ? [{ value: defaultNic, label: itemLabel(defaultNic) }]
-        : []),
-    ],
+  const nicOptions = catalogOptions(
+    nicsForServer(group.modelId, group.uplink).filter(
+      (item) => item.id !== defaultNic || item.id === shown.nicModelId,
+    ),
     shown.nicModelId,
+    `${itemLabel(defaultNic)} (default)`,
   )
   // The collapsed summary always describes the group's shared configuration.
   const groupResolved = resolveNodeCompute(group)
@@ -264,7 +240,7 @@ function ServerGroupRow({
             href: DOCS.hardware,
           }}
           value={group.modelId}
-          options={modelOptions}
+          options={catalogOptions(serversForUsage(group.role), group.modelId)}
           onChange={(v) =>
             patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
           }
@@ -381,17 +357,12 @@ function ServerGroupRow({
                 <SelectField
                   label="CPU"
                   value={shown.compute?.cpuModelId ?? ''}
-                  options={withCurrentOption(
-                    [
-                      {
-                        value: '',
-                        label: presetParts.cpuModelId
-                          ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
-                          : 'Preset default',
-                      },
-                      ...cpuOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
-                    ],
+                  options={catalogOptions(
+                    cpuOptions,
                     shown.compute?.cpuModelId,
+                    presetParts.cpuModelId
+                      ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
+                      : 'Preset default',
                   )}
                   onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
                 />
@@ -399,17 +370,12 @@ function ServerGroupRow({
               <SelectField
                 label="DIMM model"
                 value={shown.compute?.dimmModelId ?? ''}
-                options={withCurrentOption(
-                  [
-                    {
-                      value: '',
-                      label: presetParts.dimmModelId
-                        ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
-                        : 'Preset default',
-                    },
-                    ...dimmOptions.map((item) => ({ value: item.id, label: optionLabel(item) })),
-                  ],
+                options={catalogOptions(
+                  dimmOptions,
                   shown.compute?.dimmModelId,
+                  presetParts.dimmModelId
+                    ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
+                    : 'Preset default',
                 )}
                 onChange={(v) => patchCompute({ dimmModelId: v || undefined })}
               />

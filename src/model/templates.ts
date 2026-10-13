@@ -1,5 +1,6 @@
 import { createEmptyPlan, DEFAULT_RACK_DEFAULTS, defaultFabric, defaultRack } from './defaults'
 import type { Partition, Plan, Rack, ServerGroup } from './plan'
+import { DEFAULT_SIZE_ID } from './sizes'
 
 // Starting points for a new plan. Each template builds a fresh Plan with new
 // ids every time, so loading one twice never aliases racks. They are meant
@@ -22,9 +23,8 @@ function group(
   modelId: string,
   count: number,
   uplink: ServerGroup['uplink'] = '2x25G',
-  sizeId: ServerGroup['sizeId'] = 'n1-medium-x86',
 ): ServerGroup {
-  return { id: id(), role, modelId, count, uplink, sizeId, nodeConfigs: {} }
+  return { id: id(), role, modelId, count, uplink, sizeId: DEFAULT_SIZE_ID, nodeConfigs: {} }
 }
 
 /** Rack group: 112 MicroCloud workers (14 chassis, spread mid → left),
