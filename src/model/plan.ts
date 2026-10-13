@@ -92,15 +92,22 @@ export type ServerGroup = z.infer<typeof ServerGroupSchema>
 export const RackKindSchema = z.enum(['single', 'rack-group'])
 export type RackKind = z.infer<typeof RackKindSchema>
 
+export const RackWidthSchema = z.union([z.literal(19), z.literal(21)])
+export type RackWidth = z.infer<typeof RackWidthSchema>
+
 /** Defaults a partition applies to racks it creates; each rack keeps its
  *  own copy and can override it in its Advanced section. */
 export const RackDefaultsSchema = z.object({
+  /** Native mounting width; heightUnits is U at 19 inches, OU at 21 inches. */
+  widthInches: RackWidthSchema.default(19),
   heightUnits: z.number().int().positive().default(42),
   maxPowerWatts: z.number().int().positive().default(10000),
 })
 export type RackDefaults = z.infer<typeof RackDefaultsSchema>
 
 export const RackSchema = z.object({
+  /** Native mounting width; heightUnits is U at 19 inches, OU at 21 inches. */
+  widthInches: RackWidthSchema.default(19),
   id: z.string(),
   name: z.string(),
   kind: RackKindSchema.default('single'),
@@ -175,7 +182,11 @@ export const PartitionSchema = z.object({
   name: z.string(),
   fabric: FabricConfigSchema,
   racks: z.array(RackSchema),
-  rackDefaults: RackDefaultsSchema.default({ heightUnits: 42, maxPowerWatts: 10000 }),
+  rackDefaults: RackDefaultsSchema.default({
+    widthInches: 19,
+    heightUnits: 42,
+    maxPowerWatts: 10000,
+  }),
 })
 export type Partition = z.infer<typeof PartitionSchema>
 
@@ -213,6 +224,8 @@ export type ControlPlanePlacement = z.infer<typeof ControlPlanePlacementSchema>
 /** Geometry of the control-plane rack, mirroring what a compute rack keeps
  *  in its Advanced section. */
 export const ControlPlaneRackSchema = z.object({
+  /** Native mounting width; heightUnits is U at 19 inches, OU at 21 inches. */
+  widthInches: RackWidthSchema.default(19),
   name: z.string().default('Control plane rack'),
   heightUnits: z.number().int().positive().default(42),
   maxPowerWatts: z.number().int().positive().default(12000),
@@ -231,6 +244,7 @@ export const ControlPlaneSchema = z.object({
   partitionId: z.string().default(''),
   placement: ControlPlanePlacementSchema.default('central-rack'),
   rack: ControlPlaneRackSchema.default({
+    widthInches: 19,
     name: 'Control plane rack',
     heightUnits: 42,
     maxPowerWatts: 12000,

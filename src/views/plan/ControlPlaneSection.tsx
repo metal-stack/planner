@@ -1,3 +1,5 @@
+import RackWidthField from './RackWidthField'
+import { rackUnit } from '../../model/catalog'
 import { itemLabel, serversForUsage, switchesForRole } from '../../model/catalog'
 import type { ControlPlane, Plan } from '../../model/plan'
 import { controlPlaneFootprint } from '../../derive/controlPlane'
@@ -163,8 +165,12 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
               value={cp.rack.leafCount}
               onChange={(n) => patchRack({ leafCount: n })}
             />
+            <RackWidthField
+              value={cp.rack.widthInches}
+              onChange={(widthInches) => patchRack({ widthInches })}
+            />
             <NumberField
-              label="Height (U)"
+              label={`Height (${rackUnit(cp.rack.widthInches)})`}
               value={cp.rack.heightUnits}
               onChange={(n) => patchRack({ heightUnits: n })}
             />

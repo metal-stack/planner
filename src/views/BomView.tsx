@@ -32,6 +32,7 @@ import { ACTION_ICON, CATEGORY_ICON, Icon } from './icons'
 const CATEGORY_LABEL = {
   switch: 'Switches',
   server: 'Servers',
+  chassis: 'Chassis and trays',
   router: 'Routers',
   nic: 'NICs',
   gpu: 'GPUs',

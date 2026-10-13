@@ -3,7 +3,8 @@ import {
   catalog,
   cpuLabel,
   cpusForServer,
-  defaultDrives,
+  drivesForServer,
+  rackUnit,
   defaultNicId,
   dimmsForServer,
   driveOptions,
@@ -28,6 +29,7 @@ import { NumberField, SelectField } from './fields'
 import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
+import RackWidthField from './RackWidthField'
 import { optionLabel } from './options'
 
 /** Catalog choices with an optional default and any incompatible current selection. */
@@ -198,6 +200,7 @@ function ServerGroupRow({
   // Drives are a free list per configuration; a list matching the default
   // pair is stored as "unset" so the configuration keeps following the
   // default.
+  const defaultDrives = drivesForServer(group.modelId)
   const shownDrives = shown.drives ?? defaultDrives
   const patchDrives = (next: DriveConfig[]) => {
     patchShown({
@@ -223,7 +226,7 @@ function ServerGroupRow({
           ]}
           onChange={(v) => {
             const role = v as ServerGroup['role']
-            const compatible = serversForUsage(role)
+            const compatible = serversForUsage(role, rack.widthInches)
             patch(
               compatible.some((i) => i.id === group.modelId)
                 ? { role }
@@ -239,11 +242,11 @@ function ServerGroupRow({
         <SelectField
           label="Server model"
           info={{
-            text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
+            text: 'Server choices match the rack format and metal-stack compatibility for this role. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
             href: DOCS.hardware,
           }}
           value={group.modelId}
-          options={catalogOptions(serversForUsage(group.role), group.modelId)}
+          options={catalogOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
           onChange={(v) =>
             patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
           }
@@ -580,6 +583,12 @@ export default function RackSection({
             onChange={(v) => setRackKind(partition.id, rack.id, v as Rack['kind'])}
           />
         </div>
+        <div className="w-40">
+          <RackWidthField
+            value={rack.widthInches}
+            onChange={(widthInches) => patchRack(partition.id, rack.id, { widthInches })}
+          />
+        </div>
         {rack.memberNames && (
           <span className="mb-2 text-xs text-gray-500">{rack.memberNames.join(' · ')}</span>
         )}
@@ -691,7 +700,7 @@ export default function RackSection({
             </div>
             <div className="w-28">
               <NumberField
-                label="Height (U)"
+                label={`Height (${rackUnit(rack.widthInches)})`}
                 value={rack.heightUnits}
                 min={1}
                 onChange={(n) => patchRack(partition.id, rack.id, { heightUnits: n })}

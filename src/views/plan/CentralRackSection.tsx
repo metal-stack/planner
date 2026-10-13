@@ -1,3 +1,5 @@
+import RackWidthField from './RackWidthField'
+import { rackUnit } from '../../model/catalog'
 import {
   itemLabel,
   nosOptions,
@@ -342,9 +344,15 @@ export default function CentralRackSection({
         </p>
 
         <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Rack defaults</h5>
+        <div className="mb-3 w-40">
+          <RackWidthField
+            value={partition.rackDefaults.widthInches}
+            onChange={(widthInches) => patchRackDefaults(partition.id, { widthInches })}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <NumberField
-            label="Default rack height (U)"
+            label={`Default rack height (${rackUnit(partition.rackDefaults.widthInches)})`}
             value={partition.rackDefaults.heightUnits}
             min={1}
             onChange={(n) => patchRackDefaults(partition.id, { heightUnits: n })}

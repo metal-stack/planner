@@ -137,6 +137,7 @@ export const EXTERNAL_NETWORK_ICON: Record<ExternalNetwork['kind'], LucideIcon> 
 export const CATEGORY_ICON: Record<CatalogCategory | 'spare', LucideIcon> = {
   switch: NetworkSwitch,
   server: Server,
+  chassis: Server,
   router: Router,
   nic: CircuitBoard,
   gpu: Gpu,

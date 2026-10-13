@@ -77,3 +77,20 @@ describe('imported server configurations', () => {
     )
   })
 })
+
+describe('rack format controls', () => {
+  it('shows ORV3 choices, OU height, and preserves incompatible selections', () => {
+    const plan = createEmptyPlan()
+    expect(renderImportedRack(plan).html).not.toContain('TO25-S12-AA01')
+    const rack = plan.partitions[0].racks[0]
+    rack.widthInches = 21
+    const { html } = renderImportedRack(plan)
+    expect(html).toContain('TO25-S12-AA01 (alpha)')
+    expect(html).toContain('Height (OU)')
+    expect(html.match(/<option value="21"/g)).toHaveLength(1)
+    expect(html).toContain('AS-3015MR-H8TNR (incompatible)')
+    rack.servers[0].modelId = 'server-gigabyte-to25-s12'
+    rack.widthInches = 19
+    expect(renderImportedRack(plan).html).toContain('TO25-S12-AA01 (incompatible)')
+  })
+})

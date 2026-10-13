@@ -46,6 +46,15 @@ consistent — you edit the plan, everything else follows from it.
   servers), any number of compute racks, and the external networks that attach at the routers. A compute rack is either a single rack or a _rack group_: three
   physical racks sharing the middle rack's leaf pair and management leaf. Every physical rack
   gets its own number by default (a group takes three), and names stay editable.
+- **Rack formats** — switch each rack or rack group between 19-inch EIA (U) and 21-inch
+  ORV3 (OU). Partition defaults seed new racks and set the central rack format. Gigabyte
+  TO25-S12 and TO25-Z12 sleds use separately counted TO25-BT0 two-node trays, with one BMC
+  link per sled. Server choices follow the native rack format; switching keeps existing
+  selections and reports mismatches. Existing saved plans default to 19-inch racks.
+  ORV3 infrastructure (power shelves, bus bars and equipment conversion shelves) is planned
+  separately; enter usable rack height after reserving space for it. TO25 power values are
+  planning estimates. SP5 CPU/RAM parts for the Z12 and TO25 E1.S/boot-drive options are not
+  yet modeled; the planner flags those omissions instead of adding incompatible default parts.
 - **CPU sockets and RAM** — modeled dual-socket servers offer a count selector for one or two identical CPUs,
   for the group or an individual chassis position. The BOM counts both CPUs, and RAM validation
   checks the DIMM slots enabled by the installed CPUs and at least one DIMM per CPU. Total RAM

@@ -52,11 +52,12 @@
 // Edgecore's site lists ET4202-RJ45 where the orders show ET4201-RJ45. The
 // sample BOMs outrank both — they are what was actually bought.
 
-import type { DriveConfig, Nos, UplinkSpeed } from './plan'
+import type { DriveConfig, Nos, RackWidth, UplinkSpeed } from './plan'
 
 export type CatalogCategory =
   | 'switch'
   | 'server'
+  | 'chassis'
   | 'router'
   | 'nic'
   | 'gpu'
@@ -120,7 +121,17 @@ export interface CatalogItem {
   partNumber?: string
   /** Spec only — see the description grammar in the header. */
   description: string
+  /** Native mounting width; unspecified equipment uses 19-inch EIA racks. */
+  rackWidthInches?: RackWidth
+  /** U for EIA equipment, OU for 21-inch ORv3 equipment. */
   heightUnits?: number
+  /** Separately ordered tray: this item's BOM quantity counts nodes, while
+   * nodesPerChassis and heightUnits describe a populated tray. */
+  trayModelId?: string
+  /** ORv3 sleds each have their own BMC, unlike the legacy chassis model. */
+  bmcPerNode?: boolean
+  /** Empty when the generic drive pair does not fit this platform. */
+  defaultDrives?: DriveConfig[]
   /** For multi-node chassis (MicroCloud, BigTwin): server nodes per chassis. */
   nodesPerChassis?: number
   /** Typical power draw per chassis / device in watts, for rack power
@@ -434,6 +445,65 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'alpha',
     availability: 'withdrawn',
     serverUsages: ['worker'],
+  },
+  // Gigabyte's Open Rack line is alpha in the metal-stack hardware list.
+  // Model facts: https://www.gigabyte.com/Enterprise/Data-Center/TO25-S12-AA01
+  // https://www.gigabyte.com/Enterprise/Data-Center/TO25-Z12-AA01-rev-1x
+  // Each TO25-BT0 tray holds two separately ordered compute sleds.
+  'server-gigabyte-to25-s12': {
+    id: 'server-gigabyte-to25-s12',
+    category: 'server',
+    vendor: 'GIGABYTE',
+    model: 'TO25-S12-AA01',
+    partNumber: 'TO25-S12-AA01',
+    description: 'ORv3 compute sled, MS13-HD0 board, 2× E1.S NVMe, SATA M.2, 48V DC',
+    rackWidthInches: 21,
+    heightUnits: 2,
+    nodesPerChassis: 2,
+    trayModelId: 'chassis-gigabyte-to25-bt0',
+    bmcPerNode: true,
+    // Planning estimate per populated tray, including fans, excluding GPUs.
+    powerWatts: 800,
+    status: 'alpha',
+    serverUsages: ['worker', 'storage'],
+    socket: 'LGA-4677',
+    dimmSlots: 8,
+    gpuCapable: 1,
+    gpuWidth: 'double',
+    // The catalog's default M.2 NVMe / U.2 pair does not fit this sled.
+    defaultDrives: [],
+  },
+  'server-gigabyte-to25-z12': {
+    id: 'server-gigabyte-to25-z12',
+    category: 'server',
+    vendor: 'GIGABYTE',
+    model: 'TO25-Z12-AA01',
+    partNumber: 'TO25-Z12-AA01',
+    description: 'ORv3 compute sled, MZ13-HD0 board, AMD EPYC 9004/9005, 4× E1.S NVMe, 48V DC',
+    rackWidthInches: 21,
+    heightUnits: 2,
+    nodesPerChassis: 2,
+    trayModelId: 'chassis-gigabyte-to25-bt0',
+    bmcPerNode: true,
+    // Planning estimate per populated tray, including fans, excluding GPUs.
+    powerWatts: 800,
+    status: 'alpha',
+    serverUsages: ['worker', 'storage'],
+    // SP5 CPU and memory parts are not yet modeled; validation reports this.
+    gpuCapable: 1,
+    gpuWidth: 'double',
+    defaultDrives: [],
+  },
+  'chassis-gigabyte-to25-bt0': {
+    id: 'chassis-gigabyte-to25-bt0',
+    category: 'chassis',
+    vendor: 'GIGABYTE',
+    model: 'TO25-BT0-AA01',
+    partNumber: 'TO25-BT0-AA01',
+    description: 'ORv3 compute tray, shared fans and bus bar connection',
+    rackWidthInches: 21,
+    heightUnits: 2,
+    nodesPerChassis: 2,
   },
   // Management servers are not provisioned by metal-stack, so the
   // compatibility list does not apply and any current 1U dual-socket server
@@ -1114,9 +1184,13 @@ export function switchesForRole(role: SwitchRole): CatalogItem[] {
     .sort(byAvailability)
 }
 
-export function serversForUsage(usage: ServerUsage): CatalogItem[] {
+export function serversForUsage(usage: ServerUsage, widthInches?: RackWidth): CatalogItem[] {
   return Object.values(catalog)
-    .filter((i) => i.serverUsages?.includes(usage))
+    .filter(
+      (i) =>
+        i.serverUsages?.includes(usage) &&
+        (widthInches === undefined || (i.rackWidthInches ?? 19) === widthInches),
+    )
     .sort(byAvailability)
 }
 
@@ -1223,4 +1297,23 @@ export function driveOptions(): CatalogItem[] {
 export function itemLabel(id: string): string {
   const item = catalog[id]
   return item?.model ?? item?.partNumber ?? id
+}
+
+/** Native height unit label for a rack. */
+export function rackUnit(widthInches: RackWidth): 'U' | 'OU' {
+  return widthInches === 21 ? 'OU' : 'U'
+}
+
+/** Reserve whole rack units, allowing for EIA conversion shelves in ORv3.
+ * The shelf's own extra space is site-specific and must be reserved manually. */
+export function heightInRack(modelId: string, widthInches: RackWidth): number {
+  const item = catalog[modelId]
+  const nativeWidth = item?.rackWidthInches ?? 19
+  const height = item?.heightUnits ?? 1
+  if (nativeWidth === widthInches) return height
+  return Math.ceil((height * (nativeWidth === 21 ? 48 : 44.45)) / (widthInches === 21 ? 48 : 44.45))
+}
+
+export function drivesForServer(modelId: string): DriveConfig[] {
+  return catalog[modelId]?.defaultDrives ?? defaultDrives
 }
