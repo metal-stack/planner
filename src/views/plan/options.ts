@@ -24,19 +24,22 @@ export function serverOptions(
 ): (SelectOption | SelectOptionGroup)[] {
   const groups: SelectOptionGroup[] = [
     { label: 'ORV3', options: [] },
-    { label: 'Standard Formfactor', options: [] },
+    { label: 'Multi-node Servers', options: [] },
+    { label: 'Single-node Servers', options: [] },
     { label: 'Alpha', options: [] },
     { label: 'EOL Systems', options: [] },
   ]
   for (const item of items) {
     const group =
       item.availability === 'eol' || item.availability === 'withdrawn'
-        ? groups[3]
+        ? groups[4]
         : item.rackWidthInches === 21
           ? groups[0]
           : item.status === 'alpha'
-            ? groups[2]
-            : groups[1]
+            ? groups[3]
+            : (item.nodesPerChassis ?? 1) > 1
+              ? groups[1]
+              : groups[2]
     group.options.push({ value: item.id, label: optionLabel(item) })
   }
   const options: (SelectOption | SelectOptionGroup)[] = groups.filter(

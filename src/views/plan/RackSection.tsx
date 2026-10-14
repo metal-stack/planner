@@ -5,8 +5,6 @@ import {
   cpusForServer,
   drivesForServer,
   rackUnit,
-  rackAdapterFor,
-  defaultRackAdapterCount,
   defaultNicId,
   dimmsForServer,
   driveOptions,
@@ -87,10 +85,8 @@ function ServerGroupRow({
   const removeServerGroup = usePlanStore((s) => s.removeServerGroup)
   const patch = (p: Partial<ServerGroup>) => patchServerGroup(partition.id, rack.id, group.id, p)
 
-  const model = catalog[group.modelId]
-  const needsAdapters = model && rackAdapterFor(model, rack.widthInches)
-  const automaticAdapters = model ? defaultRackAdapterCount(model) : 1
-  const nodesPer = model?.nodesPerChassis ?? 1
+  const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
+  const multiNode = nodesPer > 1
   // Nodes this group could grow to with the leaf ports the other groups
   // leave free: 25G needs half a 100G port per node (4x25G breakout, 2
   // ports per node), 100G two full ports — rounded down to whole chassis.
@@ -108,7 +104,15 @@ function ServerGroupRow({
   // chassis and keeps its own complete copy once edited.
   const positions = chassisPositions(group)
   const [selectedNode, setSelectedNode] = useState<number | null>(null)
-  const sel = selectedNode !== null && selectedNode < positions ? selectedNode : null
+  // Single-node servers edit their effective configuration directly, including
+  // a position-zero override from an imported plan or a previous model.
+  const sel = !multiNode
+    ? group.nodeConfigs[0] !== undefined
+      ? 0
+      : null
+    : selectedNode !== null && selectedNode < positions
+      ? selectedNode
+      : null
   const shown: NodeConfig = sel === null ? groupConfig(group) : nodeConfig(group, sel)
   const customPositions = Object.keys(group.nodeConfigs)
     .map(Number)
@@ -142,8 +146,10 @@ function ServerGroupRow({
     shown.nicModelId,
     `${itemLabel(defaultNic)} (default)`,
   )
-  // The collapsed summary always describes the group's shared configuration.
-  const groupResolved = resolveNodeCompute(group)
+  // Multi-node summaries describe the shared configuration; single-node
+  // summaries describe the configuration being edited.
+  const summaryConfig = multiNode ? groupConfig(group) : shown
+  const groupResolved = resolveNodeCompute({ modelId: group.modelId, ...summaryConfig })
   const nodeSummary = [
     groupResolved.cpuModelId
       ? catalog[groupResolved.cpuModelId]?.category === 'cpu'
@@ -153,9 +159,9 @@ function ServerGroupRow({
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
       ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
       : undefined,
-    itemLabel(group.nicModelId ?? defaultNic),
-    group.gpu ? itemLabel(group.gpu.modelId) : undefined,
-    customPositions.length > 0
+    itemLabel(summaryConfig.nicModelId ?? defaultNic),
+    summaryConfig.gpu ? itemLabel(summaryConfig.gpu.modelId) : undefined,
+    multiNode && customPositions.length > 0
       ? `${customPositions.length} chassis position${customPositions.length === 1 ? '' : 's'} customized`
       : undefined,
   ]
@@ -238,7 +244,6 @@ function ServerGroupRow({
                 : {
                     role,
                     modelId: compatible[0]?.id ?? group.modelId,
-                    mountingAdaptersPerChassis: undefined,
                     compute: undefined,
                     nodeConfigs: configsWithout('compute'),
                   },
@@ -256,7 +261,6 @@ function ServerGroupRow({
           onChange={(v) =>
             patch({
               modelId: v,
-              mountingAdaptersPerChassis: undefined,
               compute: undefined,
               nodeConfigs: configsWithout('compute'),
             })
@@ -315,63 +319,36 @@ function ServerGroupRow({
           Remove
         </button>
       </div>
-      {needsAdapters && (
-        <div className="mt-3 flex items-end gap-3">
-          <div className="w-48">
-            <NumberField
-              label="Adapters per chassis"
-              min={1}
-              value={group.mountingAdaptersPerChassis ?? automaticAdapters}
-              onChange={(n) => patch({ mountingAdaptersPerChassis: n })}
-              info={{
-                text: 'Automatic estimate: 1 adapter kit for 1U chassis, 2 for 2U and taller. Adjust this count to match the selected rail kit. The BOM multiplies it by physical chassis, including partially filled chassis, not by nodes. This setting applies to the whole server group.',
-              }}
-            />
-          </div>
-          <span className="mb-2 text-xs text-gray-600">
-            {group.mountingAdaptersPerChassis === undefined
-              ? `Automatic (${model.heightUnits ?? 1}U chassis)`
-              : 'Rail kit override'}
-          </span>
-          {group.mountingAdaptersPerChassis !== undefined && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => patch({ mountingAdaptersPerChassis: undefined })}
-            >
-              Use automatic ({automaticAdapters})
-            </button>
-          )}
-        </div>
-      )}
       <details className="mt-3">
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Node configuration{' '}
           {nodeSummary && <span className="font-normal text-gray-500">· {nodeSummary}</span>}
         </summary>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <NodeButton active={sel === null} onClick={() => setSelectedNode(null)}>
-            All nodes
-          </NodeButton>
-          {Array.from({ length: positions }, (_, i) => (
-            <NodeButton
-              key={i}
-              active={sel === i}
-              custom={customPositions.includes(i)}
-              onClick={() => setSelectedNode(i)}
-            >
-              {i + 1}
+        {multiNode && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <NodeButton active={sel === null} onClick={() => setSelectedNode(null)}>
+              All nodes
             </NodeButton>
-          ))}
-          <button
-            onClick={configureAll}
-            disabled={sel === null && customPositions.length === 0}
-            className="btn-secondary ml-auto"
-          >
-            Configure all nodes
-          </button>
-        </div>
-        {sel !== null && group.nodeConfigs[sel] !== undefined && (
+            {Array.from({ length: positions }, (_, i) => (
+              <NodeButton
+                key={i}
+                active={sel === i}
+                custom={customPositions.includes(i)}
+                onClick={() => setSelectedNode(i)}
+              >
+                {i + 1}
+              </NodeButton>
+            ))}
+            <button
+              onClick={configureAll}
+              disabled={sel === null && customPositions.length === 0}
+              className="btn-secondary ml-auto"
+            >
+              Configure all nodes
+            </button>
+          </div>
+        )}
+        {multiNode && sel !== null && group.nodeConfigs[sel] !== undefined && (
           <button
             type="button"
             onClick={() => {
@@ -388,7 +365,11 @@ function ServerGroupRow({
           <SelectField
             label="Preset"
             info={{
-              text: 'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset; selecting a number above configures that node position in every chassis of the group.',
+              text:
+                'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset.' +
+                (multiNode
+                  ? ' Selecting a number above configures that node position in every chassis of the group.'
+                  : ''),
             }}
             value={shown.sizeId}
             options={sizeOptions}

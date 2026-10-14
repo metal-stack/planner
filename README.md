@@ -50,8 +50,7 @@ consistent — you edit the plan, everything else follows from it.
   ORV3 (OU) under Advanced, consistently across all rack types. Partition defaults seed new racks and set the central rack format. Gigabyte
   TO25-S12 and TO25-Z12 sleds use separately counted TO25-BT0 two-node trays, with one BMC
   link per sled. ORV3 racks also accept 19-inch equipment: the BOM estimates one mounting
-  adapter kit for 1U chassis/devices and two for 2U and taller. Each server group can override
-  the adapters per chassis to match its rail kit, or return to automatic sizing. Counts use
+  adapter kit for 1U chassis/devices and two for 2U and taller. Counts use
   physical chassis, including partially filled ones, rather than nodes. Choose shelves or
   rails to match each device's height, depth and load. Switching keeps existing selections;
   21-inch nodes in 19-inch racks remain incompatible. Existing saved plans default to 19-inch racks.

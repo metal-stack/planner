@@ -4,18 +4,13 @@ import { SCHEMA_VERSION } from '../model/migrate'
 import { exportPlanJson, importPlanJson } from './json'
 
 describe('plan JSON round-trip', () => {
-  it('round-trips rail-kit adapter counts and accepts older plans without them', () => {
+  it.each([1, 2, 3])('discards a legacy adapter count of %s on import', (count) => {
     const plan = createEmptyPlan()
-    const group = plan.partitions[0].racks[0].servers[0]
-    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
-    group.mountingAdaptersPerChassis = 2
-    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
-  })
-
-  it.each([0, -1, 1.5, '2'])('rejects an invalid adapter count: %s', (count) => {
-    const raw = JSON.parse(exportPlanJson(createEmptyPlan()))
+    const raw = JSON.parse(exportPlanJson(plan))
     raw.partitions[0].racks[0].servers[0].mountingAdaptersPerChassis = count
-    expect(() => importPlanJson(JSON.stringify(raw))).toThrow('not a valid plan')
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(imported).toEqual(plan)
+    expect(exportPlanJson(imported)).not.toContain('mountingAdaptersPerChassis')
   })
 
   it('round-trips group and per-position CPU counts', () => {

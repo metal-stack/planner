@@ -17,7 +17,7 @@ export default function RackWidthField({
         { value: '21', label: '21″ ORV3' },
       ]}
       info={{
-        text: 'Applies to every physical rack in a rack group. Height is measured in U for 19-inch racks and OU for 21-inch ORV3 racks. Switching format keeps your server selections and height count; review compatibility and usable height. 19-inch equipment is supported in ORV3 racks with height-based adapter estimates added to the BOM. Each server group can override adapters per chassis for its rail kit. Power shelves, bus bars and any additional space for the selected mounting hardware must be planned separately.',
+        text: 'Applies to every physical rack in a rack group. Height is measured in U for 19-inch racks and OU for 21-inch ORV3 racks. Switching format keeps your server selections and height count; review compatibility and usable height. 19-inch equipment is supported in ORV3 racks with height-based adapter estimates added to the BOM. The estimate is one kit for 1U devices and two for 2U and taller. Power shelves, bus bars and any additional space for the selected mounting hardware must be planned separately.',
       }}
       onChange={(v) => onChange(v === '21' ? 21 : 19)}
     />

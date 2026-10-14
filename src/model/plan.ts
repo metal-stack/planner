@@ -75,10 +75,6 @@ export const ServerGroupSchema = NodeConfigSchema.extend({
   modelId: z.string(),
   /** Number of server nodes in this group. */
   count: z.number().int().min(0),
-  /** Mounting adapters per physical chassis for its rail kit in an ORV3 rack.
-   * Absent uses the height estimate; this is shared by all chassis in the group,
-   * independent of per-node configuration. */
-  mountingAdaptersPerChassis: z.number().int().positive().optional(),
   uplink: UplinkSpeedSchema,
   sizeId: NodeConfigSchema.shape.sizeId.default(DEFAULT_SIZE_ID),
   /** Per-node deviations, keyed by the node's position within its chassis

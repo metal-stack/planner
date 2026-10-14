@@ -507,7 +507,7 @@ export const catalog: Record<string, CatalogItem> = {
   },
   // Gigabyte lists EIA conversion shelves as ORv3 rack options:
   // https://www.gigabyte.com/FileUpload/Global/WebPage/1052/OCP-ORV3-Solution.pdf
-  // Adapter quantities use a height estimate, overridable for the rail kit. The exact
+  // Adapter quantities use a height estimate. The exact
   // shelf/rail SKU depends on its height, depth and load, so no SKU is invented.
   'rack-adapter-19-to-21': {
     id: 'rack-adapter-19-to-21',
@@ -1316,7 +1316,7 @@ export function fitsRack(item: CatalogItem, widthInches: RackWidth): boolean {
 }
 
 /** Planning estimate, not a verified rail-kit requirement: 1 adapter for
- * 1U equipment and 2 for chassis of 2U or taller. Server groups can override it. */
+ * 1U equipment and 2 for chassis of 2U or taller. */
 export function defaultRackAdapterCount(item: CatalogItem): number {
   return (item.heightUnits ?? 1) >= 2 ? 2 : 1
 }

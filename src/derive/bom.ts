@@ -54,8 +54,7 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 // - Licenses: one NOS support license per switch, chosen by the partition's
 //   `nos` and the switch's `licenseClass` (catalog `nosLicenseId`).
 // - Mounting: height-based adapter estimates per 19-inch chassis/device in
-//   an ORv3 rack, overridable per server group for its rail kit. Adapters
-//   inherit the mounted device's network and location.
+//   an ORv3 rack. Adapters inherit the mounted device's network and location.
 // - Spares: a fixed number (Plan.sparesPerLine) of spares per transceiver
 //   and cable line, added to the plan-wide BOM only (not per partition).
 
@@ -166,7 +165,7 @@ class BomBuilder {
     return [this.partition, this.location].filter(Boolean).join(' - ')
   }
 
-  add(catalogId: string, quantity: number, detail: string, adaptersPerDevice?: number): void {
+  add(catalogId: string, quantity: number, detail: string): void {
     if (quantity <= 0) return
     if (this.scope !== 'all' && this.scope !== this.network) return
     // Unknown ids are skipped here; validatePlan reports them to the user.
@@ -174,12 +173,11 @@ class BomBuilder {
     if (!item) return
     const adapterId = rackAdapterFor(item, this.widthInches)
     if (adapterId) {
-      const perDevice = adaptersPerDevice ?? defaultRackAdapterCount(item)
-      const basis = adaptersPerDevice === undefined ? 'height estimate' : 'rail kit override'
+      const perDevice = defaultRackAdapterCount(item)
       this.add(
         adapterId,
         quantity * perDevice,
-        `${quantity} × ${part(catalogId)} (${item.heightUnits ?? 1}U) × ${perDevice} mounting adapter${perDevice === 1 ? '' : 's'} per device (${basis})`,
+        `${quantity} × ${part(catalogId)} (${item.heightUnits ?? 1}U) × ${perDevice} mounting adapter${perDevice === 1 ? '' : 's'} per device (height estimate)`,
       )
     }
     const entry: BomReason = { quantity, detail, where: this.where() }
@@ -265,7 +263,6 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     trayModelId
       ? `${group.count} ${role} compute sleds`
       : `${group.count} ${role} nodes / ${nodesPer} per chassis`,
-    group.mountingAdaptersPerChassis,
   )
   if (trayModelId) {
     bom.add(trayModelId, chassisCount(group), `${group.count} ${role} nodes / ${nodesPer} per tray`)

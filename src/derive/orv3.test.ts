@@ -180,31 +180,26 @@ describe('19-inch equipment in ORV3 racks', () => {
     expect(adapters(plan)?.quantity).toBe(7)
   })
 
-  it('uses rail-kit overrides per chassis, including partial chassis and node overrides', () => {
+  it('sizes adapters automatically per chassis, ignoring legacy rail-kit overrides', () => {
     const plan = createEmptyPlan()
     const rack = plan.partitions[0].racks[0]
     rack.widthInches = 21
     const group = rack.servers[0]
-    group.count = 9 // Two 3U chassis.
+    group.count = 9 // Two 3U chassis, including a partially filled one.
     group.nodeConfigs = { 0: { sizeId: 'c1-medium-x86' } }
     expect(adapters(plan)?.quantity).toBe(7)
-    expect(adapters(plan)?.reasons.some((r) => r.detail.includes('height estimate'))).toBe(true)
-    group.mountingAdaptersPerChassis = 1
-    const imported = importPlanJson(exportPlanJson(plan))
-    expect(adapters(imported)?.quantity).toBe(5)
-    expect(adapters(imported, 'production')?.quantity).toBe(4)
+    const raw = JSON.parse(exportPlanJson(plan))
+    raw.partitions[0].racks[0].servers[0].mountingAdaptersPerChassis = 1
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(adapters(imported)?.quantity).toBe(7)
+    expect(adapters(imported, 'production')?.quantity).toBe(6)
     expect(adapters(imported, 'management')?.quantity).toBe(1)
-    const reason = adapters(imported)?.reasons.find((r) => r.detail.includes('rail kit override'))
-    expect(reason?.quantity).toBe(2)
-    expect(reason?.detail).toContain('2 × AS-3015MR-H8TNR (3U) × 1 mounting adapter')
-    group.mountingAdaptersPerChassis = 3
-    expect(adapters(plan)?.quantity).toBe(9)
-    delete group.mountingAdaptersPerChassis
-    expect(adapters(plan)?.quantity).toBe(7)
+    const reason = adapters(imported)?.reasons.find((r) => r.detail.includes('AS-3015MR-H8TNR'))
+    expect(reason?.quantity).toBe(4)
+    expect(reason?.detail).toContain('2 × AS-3015MR-H8TNR (3U) × 2 mounting adapters')
+    expect(reason?.detail).toContain('(height estimate)')
     group.modelId = 'server-bigtwin-x12' // Three 2U chassis for nine nodes.
     expect(adapters(plan)?.quantity).toBe(9)
-    group.mountingAdaptersPerChassis = 1
-    expect(adapters(plan)?.quantity).toBe(6)
     group.modelId = 'server-gigabyte-to25-s12'
     expect(adapters(plan)?.quantity).toBe(3) // No mounting adapters for native ORV3 sleds.
     rack.widthInches = 19

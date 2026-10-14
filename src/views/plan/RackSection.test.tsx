@@ -38,6 +38,19 @@ describe('imported server configurations', () => {
   it('does not offer dual CPUs on a single-socket server', () => {
     expect(renderImportedRack(createEmptyPlan()).html).not.toContain('CPU sockets')
   })
+
+  it('edits the effective single-node configuration without a position selector', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.modelId = 'server-superserver-tn12'
+    group.nodeConfigs = { 0: { sizeId: group.sizeId, compute: { cpuCount: 2 } } }
+    const { html } = renderImportedRack(plan)
+    expect(html).not.toContain('All nodes')
+    expect(html).not.toContain('Configure all nodes')
+    expect(html).not.toContain('Reset chassis position')
+    expect(html).not.toContain('Selecting a number above')
+    expect(html).toMatch(/CPU sockets<\/span><input type="number" min="1" max="2"[^>]*value="2"/)
+  })
   it('renders an unknown CPU with its validation error and a selected replacement option', () => {
     const plan = createEmptyPlan()
     plan.partitions[0].racks[0].servers[0].compute = { cpuModelId: 'cpu-foo' }
@@ -87,7 +100,8 @@ describe('rack format controls', () => {
     const groups = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)]
     expect(groups.map((group) => group[1])).toEqual([
       'ORV3',
-      'Standard Formfactor',
+      'Multi-node Servers',
+      'Single-node Servers',
       'Alpha',
       'EOL Systems',
     ])
@@ -95,9 +109,11 @@ describe('rack format controls', () => {
     expect(groups[1][2]).toContain(
       '<option value="server-microcloud-h13" selected="">AS-3015MR-H8TNR</option>',
     )
-    expect(groups[2][2]).toContain('SYS-222BT-HNR (alpha)')
-    expect(groups[3][2]).toContain('SYS-2029U-TN24R4T (alpha, end of life)')
-    expect(groups[3][2]).toContain('SD530 (alpha, withdrawn)')
+    expect(groups[1][2]).toContain('SYS-220BT-HNTR')
+    expect(groups[2][2]).toContain('SYS-621C-TN12R')
+    expect(groups[3][2]).toContain('SYS-222BT-HNR (alpha)')
+    expect(groups[4][2]).toContain('SYS-2029U-TN24R4T (alpha, end of life)')
+    expect(groups[4][2]).toContain('SD530 (alpha, withdrawn)')
     const ids = groups.flatMap((group) =>
       [...group[2].matchAll(/<option value="([^"]+)"/g)].map((option) => option[1]),
     )
@@ -110,21 +126,13 @@ describe('rack format controls', () => {
     expect(renderImportedRack(plan).html).not.toContain('<optgroup label="ORV3">')
   })
 
-  it('shows automatic or overridden adapters per chassis only when mounting adapters are needed', () => {
+  it('does not offer an adapter-count override for ORV3 racks', () => {
     const plan = createEmptyPlan()
-    const rack = plan.partitions[0].racks[0]
-    expect(renderImportedRack(plan).html).not.toContain('Adapters per chassis')
-    rack.widthInches = 21
-    let html = renderImportedRack(plan).html
-    expect(html).toContain('Adapters per chassis')
-    expect(html).toContain('Automatic (3U chassis)')
-    expect(html).not.toContain('Use automatic (2)')
-    rack.servers[0].mountingAdaptersPerChassis = 1
-    html = renderImportedRack(plan).html
-    expect(html).toContain('Rail kit override')
-    expect(html).toContain('Use automatic (2)')
-    rack.servers[0].modelId = 'server-gigabyte-to25-s12'
-    expect(renderImportedRack(plan).html).not.toContain('Adapters per chassis')
+    plan.partitions[0].racks[0].widthInches = 21
+    const { html } = renderImportedRack(plan)
+    expect(html).not.toContain('Adapters per chassis')
+    expect(html).not.toContain('Rail kit override')
+    expect(html).not.toContain('Use automatic')
   })
 
   it('shows ORV3 choices, OU height, and preserves incompatible selections', () => {
