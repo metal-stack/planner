@@ -221,7 +221,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     if (group.count > 0 && !fitsRack(item, rack.widthInches)) {
       report(
         issues,
-        scope,
+        inAdvanced,
         'error',
         `${itemLabel(group.modelId)} requires a ${item.rackWidthInches ?? 19}″ rack, but this rack is ${rack.widthInches}″. Change the rack format or server model.`,
       )

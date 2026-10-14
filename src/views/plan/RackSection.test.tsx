@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createEmptyPlan } from '../../model/defaults'
+import { serversForUsage } from '../../model/catalog'
 import { exportPlanJson, importPlanJson } from '../../io/json'
 import { validatePlan } from '../../derive/validate'
 import type { Plan } from '../../model/plan'
@@ -79,6 +80,36 @@ describe('imported server configurations', () => {
 })
 
 describe('rack format controls', () => {
+  it('groups server choices once, retaining lifecycle notes and the selected model', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].racks[0].widthInches = 21
+    const { html } = renderImportedRack(plan)
+    const groups = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)]
+    expect(groups.map((group) => group[1])).toEqual([
+      'ORV3',
+      'Standard Formfactor',
+      'Alpha',
+      'EOL Systems',
+    ])
+    expect(groups[0][2]).toContain('TO25-S12-AA01 (alpha)')
+    expect(groups[1][2]).toContain(
+      '<option value="server-microcloud-h13" selected="">AS-3015MR-H8TNR</option>',
+    )
+    expect(groups[2][2]).toContain('SYS-222BT-HNR (alpha)')
+    expect(groups[3][2]).toContain('SYS-2029U-TN24R4T (alpha, end of life)')
+    expect(groups[3][2]).toContain('SD530 (alpha, withdrawn)')
+    const ids = groups.flatMap((group) =>
+      [...group[2].matchAll(/<option value="([^"]+)"/g)].map((option) => option[1]),
+    )
+    expect(ids.sort()).toEqual(
+      serversForUsage('worker', 21)
+        .map((item) => item.id)
+        .sort(),
+    )
+    plan.partitions[0].racks[0].widthInches = 19
+    expect(renderImportedRack(plan).html).not.toContain('<optgroup label="ORV3">')
+  })
+
   it('shows automatic or overridden adapters per chassis only when mounting adapters are needed', () => {
     const plan = createEmptyPlan()
     const rack = plan.partitions[0].racks[0]

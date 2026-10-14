@@ -47,7 +47,7 @@ consistent — you edit the plan, everything else follows from it.
   physical racks sharing the middle rack's leaf pair and management leaf. Every physical rack
   gets its own number by default (a group takes three), and names stay editable.
 - **Rack formats** — switch each rack or rack group between 19-inch EIA (U) and 21-inch
-  ORV3 (OU). Partition defaults seed new racks and set the central rack format. Gigabyte
+  ORV3 (OU) under Advanced, consistently across all rack types. Partition defaults seed new racks and set the central rack format. Gigabyte
   TO25-S12 and TO25-Z12 sleds use separately counted TO25-BT0 two-node trays, with one BMC
   link per sled. ORV3 racks also accept 19-inch equipment: the BOM estimates one mounting
   adapter kit for 1U chassis/devices and two for 2U and taller. Each server group can override

@@ -75,6 +75,7 @@ describe('ORV3 racks', () => {
     )
     expect(mismatch?.severity).toBe('error')
     expect(mismatch?.target.rackId).toBe(rack.id)
+    expect(mismatch?.target.field).toBe('advanced')
     expect(rack.servers[0].modelId).toBe('server-gigabyte-to25-s12')
     rack.widthInches = 21
     rack.heightUnits = 6

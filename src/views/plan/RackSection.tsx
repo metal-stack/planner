@@ -32,7 +32,7 @@ import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import RackWidthField from './RackWidthField'
-import { optionLabel } from './options'
+import { optionLabel, serverOptions } from './options'
 
 /** Catalog choices with an optional default and any incompatible current selection. */
 function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string) {
@@ -252,7 +252,7 @@ function ServerGroupRow({
             href: DOCS.hardware,
           }}
           value={group.modelId}
-          options={catalogOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
+          options={serverOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
           onChange={(v) =>
             patch({
               modelId: v,
@@ -623,12 +623,6 @@ export default function RackSection({
             onChange={(v) => setRackKind(partition.id, rack.id, v as Rack['kind'])}
           />
         </div>
-        <div className="w-40">
-          <RackWidthField
-            value={rack.widthInches}
-            onChange={(widthInches) => patchRack(partition.id, rack.id, { widthInches })}
-          />
-        </div>
         {rack.memberNames && (
           <span className="mb-2 text-xs text-gray-500">{rack.memberNames.join(' · ')}</span>
         )}
@@ -683,7 +677,8 @@ export default function RackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            · {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
+            · {rack.widthInches}″ {rack.widthInches === 21 ? 'ORV3' : 'EIA'}, rack format,{' '}
+            {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -712,6 +707,12 @@ export default function RackSection({
             </div>
           )}
           <div className="flex flex-wrap items-end gap-3">
+            <div className="w-40">
+              <RackWidthField
+                value={rack.widthInches}
+                onChange={(widthInches) => patchRack(partition.id, rack.id, { widthInches })}
+              />
+            </div>
             <div className="w-44">
               <SelectField
                 label="Leaf model"

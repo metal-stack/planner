@@ -2,9 +2,14 @@ import type { ReactNode } from 'react'
 import type { Info } from './docs'
 import InfoBubble from './InfoBubble'
 
-interface Option {
+export interface SelectOption {
   value: string
   label: string
+}
+
+export interface SelectOptionGroup {
+  label: string
+  options: SelectOption[]
 }
 
 function FieldLabel({
@@ -29,7 +34,7 @@ function FieldLabel({
 export function SelectField(props: {
   label: string
   value: string
-  options: Option[]
+  options: (SelectOption | SelectOptionGroup)[]
   onChange: (value: string) => void
   info?: Info
 }) {
@@ -41,11 +46,21 @@ export function SelectField(props: {
         onChange={(e) => props.onChange(e.target.value)}
         className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5"
       >
-        {props.options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
+        {props.options.map((o) =>
+          'options' in o ? (
+            <optgroup key={o.label} label={o.label}>
+              {o.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ),
+        )}
       </select>
     </label>
   )

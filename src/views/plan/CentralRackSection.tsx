@@ -19,7 +19,7 @@ import InfoBubble from './InfoBubble'
 import IssueBadges from './IssueBadges'
 import { fabricAnchor } from './navigate'
 import { Icon, SECTION_ICON } from '../icons'
-import { nosOptionLabel, optionLabel } from './options'
+import { nosOptionLabel, optionLabel, serverOptions } from './options'
 
 function switchOptions(role: SwitchRole) {
   return switchesForRole(role).map((i) => ({
@@ -206,7 +206,9 @@ export default function CentralRackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            · devices and models, network OS, fabric links and rack defaults
+            · {partition.rackDefaults.widthInches}″{' '}
+            {partition.rackDefaults.widthInches === 21 ? 'ORV3' : 'EIA'}, devices and models,
+            network OS, fabric links and rack defaults
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -286,10 +288,7 @@ export default function CentralRackSection({
               href: DOCS.architecture,
             }}
             value={fabric.mgmt.serverModelId}
-            options={serversForUsage('management').map((i) => ({
-              value: i.id,
-              label: optionLabel(i),
-            }))}
+            options={serverOptions(serversForUsage('management'), fabric.mgmt.serverModelId)}
             onChange={(v) => patchMgmt({ serverModelId: v })}
           />
         </div>
