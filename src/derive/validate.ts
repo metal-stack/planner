@@ -4,6 +4,7 @@ import {
   dimmTypeForSocket,
   gpuFits,
   itemLabel,
+  fitsRack,
   rackUnit,
   drivesForServer,
   nicFitsServer,
@@ -217,7 +218,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
       report(issues, scope, 'error', `Unknown server model "${group.modelId}".`)
       continue
     }
-    if (group.count > 0 && (item.rackWidthInches ?? 19) !== rack.widthInches) {
+    if (group.count > 0 && !fitsRack(item, rack.widthInches)) {
       report(
         issues,
         scope,
@@ -712,7 +713,7 @@ export function validatePlan(plan: Plan): Issue[] {
           issues,
           inAdvanced,
           'warning',
-          'ORV3 infrastructure is not included in the BOM or elevation: reserve space and budget for 48V DC bus bars, power shelves and any 19-inch equipment conversion shelves. Enter usable rack height after these reservations.',
+          'ORV3 power infrastructure is not included in the BOM or elevation: reserve space and budget for 48V DC bus bars and power shelves. The BOM includes mounting adapter kits for 19-inch equipment; reserve any extra space needed by the selected shelves or rails. Enter usable rack height after these reservations.',
         )
       }
       if (seen.has(rack.name)) {

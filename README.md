@@ -49,10 +49,14 @@ consistent — you edit the plan, everything else follows from it.
 - **Rack formats** — switch each rack or rack group between 19-inch EIA (U) and 21-inch
   ORV3 (OU). Partition defaults seed new racks and set the central rack format. Gigabyte
   TO25-S12 and TO25-Z12 sleds use separately counted TO25-BT0 two-node trays, with one BMC
-  link per sled. Server choices follow the native rack format; switching keeps existing
-  selections and reports mismatches. Existing saved plans default to 19-inch racks.
-  ORV3 infrastructure (power shelves, bus bars and equipment conversion shelves) is planned
-  separately; enter usable rack height after reserving space for it. TO25 power values are
+  link per sled. ORV3 racks also accept 19-inch equipment: the BOM estimates one mounting
+  adapter kit for 1U chassis/devices and two for 2U and taller. Each server group can override
+  the adapters per chassis to match its rail kit, or return to automatic sizing. Counts use
+  physical chassis, including partially filled ones, rather than nodes. Choose shelves or
+  rails to match each device's height, depth and load. Switching keeps existing selections;
+  21-inch nodes in 19-inch racks remain incompatible. Existing saved plans default to 19-inch racks.
+  ORV3 power shelves and bus bars are planned separately; enter usable rack height after
+  reserving space for them and any extra space required by the selected mounting hardware. TO25 power values are
   planning estimates. SP5 CPU/RAM parts for the Z12 and TO25 E1.S/boot-drive options are not
   yet modeled; the planner flags those omissions instead of adding incompatible default parts.
 - **CPU sockets and RAM** — modeled dual-socket servers offer a count selector for one or two identical CPUs,

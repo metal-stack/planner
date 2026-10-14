@@ -6,6 +6,8 @@ import {
   nosLabel,
   nosLicenseId,
   portCount,
+  rackAdapterFor,
+  defaultRackAdapterCount,
 } from '../model/catalog'
 import {
   mgmtDeviceCount,
@@ -13,6 +15,7 @@ import {
   type Partition,
   type Plan,
   type Rack,
+  type RackWidth,
   type ServerGroup,
   type UplinkSpeed,
 } from '../model/plan'
@@ -50,6 +53,9 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   2x 100G-SR4 per link — plus one OOB copper port each.
 // - Licenses: one NOS support license per switch, chosen by the partition's
 //   `nos` and the switch's `licenseClass` (catalog `nosLicenseId`).
+// - Mounting: height-based adapter estimates per 19-inch chassis/device in
+//   an ORv3 rack, overridable per server group for its rail kit. Adapters
+//   inherit the mounted device's network and location.
 // - Spares: a fixed number (Plan.sparesPerLine) of spares per transceiver
 //   and cable line, added to the plan-wide BOM only (not per partition).
 
@@ -129,6 +135,7 @@ class BomBuilder {
     private partition = '',
     private location = '',
     private network: BomNetwork = 'production',
+    private widthInches: RackWidth = 19,
   ) {}
 
   /** A view whose rules belong to a named partition. Left empty for a
@@ -141,9 +148,10 @@ class BomBuilder {
 
   /** A view whose rules belong to a place within the partition, e.g. a rack
    *  name or "Central rack". */
-  at(location: string): BomBuilder {
+  at(location: string, widthInches: RackWidth = 19): BomBuilder {
     const view = Object.create(this) as BomBuilder
     view.location = location
+    view.widthInches = widthInches
     return view
   }
 
@@ -158,9 +166,22 @@ class BomBuilder {
     return [this.partition, this.location].filter(Boolean).join(' - ')
   }
 
-  add(catalogId: string, quantity: number, detail: string): void {
+  add(catalogId: string, quantity: number, detail: string, adaptersPerDevice?: number): void {
     if (quantity <= 0) return
     if (this.scope !== 'all' && this.scope !== this.network) return
+    // Unknown ids are skipped here; validatePlan reports them to the user.
+    const item = catalog[catalogId]
+    if (!item) return
+    const adapterId = rackAdapterFor(item, this.widthInches)
+    if (adapterId) {
+      const perDevice = adaptersPerDevice ?? defaultRackAdapterCount(item)
+      const basis = adaptersPerDevice === undefined ? 'height estimate' : 'rail kit override'
+      this.add(
+        adapterId,
+        quantity * perDevice,
+        `${quantity} × ${part(catalogId)} (${item.heightUnits ?? 1}U) × ${perDevice} mounting adapter${perDevice === 1 ? '' : 's'} per device (${basis})`,
+      )
+    }
     const entry: BomReason = { quantity, detail, where: this.where() }
     const existing = this.lines.get(catalogId)
     if (existing) {
@@ -168,9 +189,6 @@ class BomBuilder {
       existing.reasons.push(entry)
       return
     }
-    // Unknown ids are skipped here; validatePlan reports them to the user.
-    const item = catalog[catalogId]
-    if (!item) return
     this.lines.set(catalogId, {
       category: item.category,
       catalogId,
@@ -247,6 +265,7 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     trayModelId
       ? `${group.count} ${role} compute sleds`
       : `${group.count} ${role} nodes / ${nodesPer} per chassis`,
+    group.mountingAdaptersPerChassis,
   )
   if (trayModelId) {
     bom.add(trayModelId, chassisCount(group), `${group.count} ${role} nodes / ${nodesPer} per tray`)
@@ -431,8 +450,8 @@ function addControlPlane(
   const { fabric } = partition
   const nodes = cp.nodeCount
   const where = central ? CENTRAL_RACK : cp.rack.name
-  const prod = central ? prodCentral : bom.on('production').at(where)
-  const mgmt = central ? mgmtCentral : bom.on('management').at(where)
+  const prod = central ? prodCentral : bom.on('production').at(where, cp.rack.widthInches)
+  const mgmt = central ? mgmtCentral : bom.on('management').at(where, cp.rack.widthInches)
 
   prod.add(cp.nodeModelId, nodes, `${nodes} control plane nodes`)
   prod.add(defaultNicId(cp.uplink), nodes, `${nodes} control plane nodes × 1 NIC`)
@@ -486,8 +505,8 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
   const { fabric } = partition
   // Network and location are tagged once here, so every rule below inherits
   // the network it belongs to and the section it is reported under.
-  const prodCentral = bom.on('production').at(CENTRAL_RACK)
-  const mgmtCentral = bom.on('management').at(CENTRAL_RACK)
+  const prodCentral = bom.on('production').at(CENTRAL_RACK, partition.rackDefaults.widthInches)
+  const mgmtCentral = bom.on('management').at(CENTRAL_RACK, partition.rackDefaults.widthInches)
 
   addSwitch(
     prodCentral,
@@ -543,21 +562,21 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
 
   for (const rack of partition.racks) {
     addSwitch(
-      bom.on('production').at(rack.name),
+      bom.on('production').at(rack.name, rack.widthInches),
       fabric.nos,
       rack.leafModelId,
       rack.leafCount,
       `${rack.leafCount} leaves`,
     )
     addSwitch(
-      bom.on('management').at(rack.name),
+      bom.on('management').at(rack.name, rack.widthInches),
       fabric.nos,
       fabric.mgmt.leafModelId,
       fabric.mgmt.leafPerRack,
       `${fabric.mgmt.leafPerRack} mgmt leaves`,
     )
     for (const group of rack.servers) {
-      addServerGroup(bom.on('production').at(rack.name), group)
+      addServerGroup(bom.on('production').at(rack.name, rack.widthInches), group)
     }
   }
 }

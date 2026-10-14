@@ -5,6 +5,8 @@ import {
   cpusForServer,
   drivesForServer,
   rackUnit,
+  rackAdapterFor,
+  defaultRackAdapterCount,
   defaultNicId,
   dimmsForServer,
   driveOptions,
@@ -85,7 +87,10 @@ function ServerGroupRow({
   const removeServerGroup = usePlanStore((s) => s.removeServerGroup)
   const patch = (p: Partial<ServerGroup>) => patchServerGroup(partition.id, rack.id, group.id, p)
 
-  const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
+  const model = catalog[group.modelId]
+  const needsAdapters = model && rackAdapterFor(model, rack.widthInches)
+  const automaticAdapters = model ? defaultRackAdapterCount(model) : 1
+  const nodesPer = model?.nodesPerChassis ?? 1
   // Nodes this group could grow to with the leaf ports the other groups
   // leave free: 25G needs half a 100G port per node (4x25G breakout, 2
   // ports per node), 100G two full ports — rounded down to whole chassis.
@@ -233,6 +238,7 @@ function ServerGroupRow({
                 : {
                     role,
                     modelId: compatible[0]?.id ?? group.modelId,
+                    mountingAdaptersPerChassis: undefined,
                     compute: undefined,
                     nodeConfigs: configsWithout('compute'),
                   },
@@ -242,13 +248,18 @@ function ServerGroupRow({
         <SelectField
           label="Server model"
           info={{
-            text: 'Server choices match the rack format and metal-stack compatibility for this role. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
+            text: 'Server choices match metal-stack compatibility for this role and fit the rack. ORV3 racks also accept 19-inch servers, with mounting adapter kits added to the BOM. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
             href: DOCS.hardware,
           }}
           value={group.modelId}
           options={catalogOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
           onChange={(v) =>
-            patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
+            patch({
+              modelId: v,
+              mountingAdaptersPerChassis: undefined,
+              compute: undefined,
+              nodeConfigs: configsWithout('compute'),
+            })
           }
         />
         <NumberField
@@ -304,6 +315,35 @@ function ServerGroupRow({
           Remove
         </button>
       </div>
+      {needsAdapters && (
+        <div className="mt-3 flex items-end gap-3">
+          <div className="w-48">
+            <NumberField
+              label="Adapters per chassis"
+              min={1}
+              value={group.mountingAdaptersPerChassis ?? automaticAdapters}
+              onChange={(n) => patch({ mountingAdaptersPerChassis: n })}
+              info={{
+                text: 'Automatic estimate: 1 adapter kit for 1U chassis, 2 for 2U and taller. Adjust this count to match the selected rail kit. The BOM multiplies it by physical chassis, including partially filled chassis, not by nodes. This setting applies to the whole server group.',
+              }}
+            />
+          </div>
+          <span className="mb-2 text-xs text-gray-600">
+            {group.mountingAdaptersPerChassis === undefined
+              ? `Automatic (${model.heightUnits ?? 1}U chassis)`
+              : 'Rail kit override'}
+          </span>
+          {group.mountingAdaptersPerChassis !== undefined && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => patch({ mountingAdaptersPerChassis: undefined })}
+            >
+              Use automatic ({automaticAdapters})
+            </button>
+          )}
+        </div>
+      )}
       <details className="mt-3">
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Node configuration{' '}

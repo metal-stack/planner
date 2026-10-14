@@ -505,6 +505,18 @@ export const catalog: Record<string, CatalogItem> = {
     heightUnits: 2,
     nodesPerChassis: 2,
   },
+  // Gigabyte lists EIA conversion shelves as ORv3 rack options:
+  // https://www.gigabyte.com/FileUpload/Global/WebPage/1052/OCP-ORV3-Solution.pdf
+  // Adapter quantities use a height estimate, overridable for the rail kit. The exact
+  // shelf/rail SKU depends on its height, depth and load, so no SKU is invented.
+  'rack-adapter-19-to-21': {
+    id: 'rack-adapter-19-to-21',
+    category: 'chassis',
+    model: '19″ to 21″ rack adapter kit',
+    description:
+      'EIA mounting kit for ORV3 (select shelf or rails for device height, depth and load)',
+    rackWidthInches: 21,
+  },
   // Management servers are not provisioned by metal-stack, so the
   // compatibility list does not apply and any current 1U dual-socket server
   // will do. The X11-generation 6019U is kept for plans that already name
@@ -1188,8 +1200,7 @@ export function serversForUsage(usage: ServerUsage, widthInches?: RackWidth): Ca
   return Object.values(catalog)
     .filter(
       (i) =>
-        i.serverUsages?.includes(usage) &&
-        (widthInches === undefined || (i.rackWidthInches ?? 19) === widthInches),
+        i.serverUsages?.includes(usage) && (widthInches === undefined || fitsRack(i, widthInches)),
     )
     .sort(byAvailability)
 }
@@ -1297,6 +1308,27 @@ export function driveOptions(): CatalogItem[] {
 export function itemLabel(id: string): string {
   const item = catalog[id]
   return item?.model ?? item?.partNumber ?? id
+}
+
+/** ORv3 racks accept EIA gear with an adapter; the reverse is not possible. */
+export function fitsRack(item: CatalogItem, widthInches: RackWidth): boolean {
+  return (item.rackWidthInches ?? 19) <= widthInches
+}
+
+/** Planning estimate, not a verified rail-kit requirement: 1 adapter for
+ * 1U equipment and 2 for chassis of 2U or taller. Server groups can override it. */
+export function defaultRackAdapterCount(item: CatalogItem): number {
+  return (item.heightUnits ?? 1) >= 2 ? 2 : 1
+}
+
+/** Mounting adapters for physical 19-inch devices in a 21-inch rack. Internal
+ * components and native ORv3 trays do not need separate mounting kits. */
+export function rackAdapterFor(item: CatalogItem, widthInches: RackWidth): string | undefined {
+  return widthInches === 21 &&
+    (item.rackWidthInches ?? 19) === 19 &&
+    ['server', 'switch', 'router', 'chassis'].includes(item.category)
+    ? 'rack-adapter-19-to-21'
+    : undefined
 }
 
 /** Native height unit label for a rack. */

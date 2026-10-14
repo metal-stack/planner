@@ -79,6 +79,23 @@ describe('imported server configurations', () => {
 })
 
 describe('rack format controls', () => {
+  it('shows automatic or overridden adapters per chassis only when mounting adapters are needed', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    expect(renderImportedRack(plan).html).not.toContain('Adapters per chassis')
+    rack.widthInches = 21
+    let html = renderImportedRack(plan).html
+    expect(html).toContain('Adapters per chassis')
+    expect(html).toContain('Automatic (3U chassis)')
+    expect(html).not.toContain('Use automatic (2)')
+    rack.servers[0].mountingAdaptersPerChassis = 1
+    html = renderImportedRack(plan).html
+    expect(html).toContain('Rail kit override')
+    expect(html).toContain('Use automatic (2)')
+    rack.servers[0].modelId = 'server-gigabyte-to25-s12'
+    expect(renderImportedRack(plan).html).not.toContain('Adapters per chassis')
+  })
+
   it('shows ORV3 choices, OU height, and preserves incompatible selections', () => {
     const plan = createEmptyPlan()
     expect(renderImportedRack(plan).html).not.toContain('TO25-S12-AA01')
@@ -88,7 +105,8 @@ describe('rack format controls', () => {
     expect(html).toContain('TO25-S12-AA01 (alpha)')
     expect(html).toContain('Height (OU)')
     expect(html.match(/<option value="21"/g)).toHaveLength(1)
-    expect(html).toContain('AS-3015MR-H8TNR (incompatible)')
+    expect(html).toContain('AS-3015MR-H8TNR</option>')
+    expect(html).not.toContain('AS-3015MR-H8TNR (incompatible)')
     rack.servers[0].modelId = 'server-gigabyte-to25-s12'
     rack.widthInches = 19
     expect(renderImportedRack(plan).html).toContain('TO25-S12-AA01 (incompatible)')
