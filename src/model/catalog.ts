@@ -141,8 +141,12 @@ export interface CatalogItem {
    *  (1600 W / 2200 W per full chassis); the rest are datasheet-based
    *  estimates. Partial chassis are scaled by their node count. */
   powerWatts?: number
-  /** Output capacity of a fully populated power shelf, not its consumption. */
+  /** Rated output capacity of a power shelf or PSU, not its consumption. */
   powerCapacityWatts?: number
+  /** Modular power shelf components; its controller is included in the shelf. */
+  psuSlots?: number
+  psuModelId?: string
+  psuBlankModelId?: string
   /** Rack space available before power shelves and mounting reservations. */
   usableHeightUnits?: number
   ports?: { speed: PortSpeed; count: number }[]
@@ -547,10 +551,43 @@ export const catalog: Record<string, CatalogItem> = {
     category: 'power',
     vendor: 'Delta',
     model: '33 kW ORV3 power shelf assembly',
+    referenceOnly: 'Legacy fully populated assembly retained for existing price books',
     description: '48V DC power shelf, 6× 5.5 kW PSUs, power management controller',
     rackWidthInches: 21,
     heightUnits: 1,
     powerCapacityWatts: 33000,
+  },
+  // Keep the fully populated assembly above for existing price books. The
+  // derived BOM now quotes the shelf/controller and fitted PSUs separately.
+  // Delta's 33 kW shelf has six 5.5 kW PSU slots:
+  // https://www.deltaww.com/en-US/products/power-solutions
+  'power-orv3-shelf': {
+    id: 'power-orv3-shelf',
+    category: 'power',
+    vendor: 'Delta',
+    model: 'ORV3 power shelf with controller',
+    description: '48V DC distribution, six PSU slots (PSUs and slot blanks ordered separately)',
+    rackWidthInches: 21,
+    heightUnits: 1,
+    psuSlots: 6,
+    psuModelId: 'power-orv3-psu-5500w',
+    psuBlankModelId: 'power-orv3-psu-blank',
+  },
+  'power-orv3-psu-5500w': {
+    id: 'power-orv3-psu-5500w',
+    category: 'power',
+    vendor: 'Delta',
+    model: 'ORV3 5.5 kW PSU module',
+    description: 'Hot-pluggable AC to 48V DC rectifier (confirm shelf-compatible ordering code)',
+    powerCapacityWatts: 5500,
+  },
+  // Empty PSU slots need airflow blanks: OCP power shelf specification §5.8.
+  // https://www.opencompute.org/documents/ocp-open-rack-v3-power-shelf-rev-1-0-1-pdf
+  'power-orv3-psu-blank': {
+    id: 'power-orv3-psu-blank',
+    category: 'power',
+    model: 'ORV3 PSU slot blank',
+    description: 'Airflow blanking panel for an unpopulated rectifier bay',
   },
   'power-orv3-input-cable-set': {
     id: 'power-orv3-input-cable-set',

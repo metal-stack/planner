@@ -59,19 +59,26 @@ consistent — you edit the plan, everything else follows from it.
   21-inch nodes in 19-inch racks remain incompatible. Existing saved plans default to 19-inch racks.
   The BOM includes one GIGABYTE DOA3-ST0 frame with its integrated 48V bus bar per physical
   ORV3 rack, including all three members of a rack group, central racks and separate on-prem
-  control-plane racks. Delta 33 kW shelf assemblies include six 5.5 kW PSUs and a power
-  management controller; the estimate is `2 × ceil(estimated equipment watts / 33000)` shelves per
-  physical rack for N+N feeds, plus one complete AC input cable set per shelf. The load uses
+  control-plane racks. Delta shelves have six slots for 5.5 kW PSU modules and include a power
+  management controller. Each feed gets `ceil(estimated equipment watts / 5500)` PSU modules
+  for N+N redundancy, with `ceil(modules per feed / 6)` shelves per feed. The BOM lists shelves,
+  fitted PSU modules, blanking panels for empty slots and one complete AC input cable set per shelf
+  separately. For example, a 3 kW load gets two shelves with one 5.5 kW PSU each and ten blanks.
+  Diagrams show fitted capacity per shelf; the rack power budget remains a separate limit. The load uses
   the rack elevation's server, GPU and switch estimates, including partial trays and each rack
   group's actual equipment distribution. Empty racks get a frame but no power shelves. Changing
   the rack power budget only changes validation, not shelf quantities. Shared rack
-  infrastructure belongs to the Production BOM scope. Supplier-specific assembly and cable
+  infrastructure belongs to the Production BOM scope. Prices for the previous fully populated
+  assembly are retained but do not apply to the new shelf and PSU lines. Supplier-specific component and cable
   ordering codes remain blank pending confirmation. Battery backup is optional and excluded.
   Hardware references: [GIGABYTE rack specifications](https://www.gigabyte.com/Enterprise/Data-Center/DOA3-ST0)
   and [Delta power solutions](https://www.deltaww.com/en-US/products/power-solutions).
-  Power shelves are included in the BOM but sit outside the equipment elevation: enter usable
-  rack height after reserving 1OU per shelf and any extra mounting space. The reference frame
-  provides 43OU before shelves (41OU with the usual pair); validation flags greater usable heights.
+  Rack diagrams show each power shelf as a 1OU slot labeled by feed A or B. The bus bar
+  remains included in the BOM but is hidden in the diagrams. Power shelves sit above switches
+  and servers as a schematic default. Used height
+  includes power shelves, so enter mounting height without subtracting shelf space manually.
+  The reference frame provides 43OU including shelves; validation flags greater mounting heights.
+  Allow separately for any extra space required by the selected mounting hardware.
   Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch
   devices with the supplier. TO25 power values are
   planning estimates. SP5 CPU/RAM parts for the Z12 and TO25 E1.S/boot-drive options are not

@@ -61,7 +61,8 @@ export { chassisCount } from './servers'
 // - Mounting: height-based adapter estimates per 19-inch chassis/device in
 //   an ORv3 rack. Adapters inherit the mounted device's network and location.
 // - ORv3 infrastructure: one frame with bus bar per physical rack, populated
-//   power shelves and their input cable sets. N+N shelves cover the rack's
+//   power shelves, fitted PSU modules, slot blanks and input cable sets. N+N
+//   PSU modules on independent feeds cover the rack's
 //   estimated equipment load on either feed, using the same physical rack
 //   distribution and power estimates as the elevations. Empty racks need no
 //   shelves. Shared infrastructure is assigned
@@ -436,8 +437,20 @@ const CENTRAL_RACK = 'Central rack'
 function addOrv3Infrastructure(bom: BomBuilder, rack: RackElevation): void {
   const infrastructure = orv3Infrastructure(rack)
   if (!infrastructure) return
-  const { frameId, shelfId, inputCableSetId, shelvesPerFeed, shelfCount, capacityWatts } =
-    infrastructure
+  const {
+    frameId,
+    shelfId,
+    inputCableSetId,
+    shelvesPerFeed,
+    shelfCount,
+    psuId,
+    blankId,
+    psuSlots,
+    psuCapacityWatts,
+    psusPerFeed,
+    psuCount,
+    blankCount,
+  } = infrastructure
   // Keep rack-group contributions together while identifying the physical
   // member whose equipment determines this quantity.
   const perRack = bom.on('production').at(rack.group?.name ?? rack.name, rack.widthInches)
@@ -446,7 +459,17 @@ function addOrv3Infrastructure(bom: BomBuilder, rack: RackElevation): void {
   perRack.add(
     shelfId,
     shelves,
-    `${rack.name}: ${shelvesPerFeed} shelves per feed × 2 feeds (N+N, ceil(${rack.powerWatts} W estimated equipment load / ${capacityWatts} W per shelf), PSUs and controller included)`,
+    `${rack.name}: ${shelvesPerFeed} shelves per feed × 2 feeds (N+N, ${psusPerFeed} PSUs per feed / ${psuSlots} slots per shelf, rounded up; controller included, PSUs ordered separately)`,
+  )
+  perRack.add(
+    psuId,
+    psuCount,
+    `${rack.name}: ${psusPerFeed} PSUs per feed × 2 feeds (N+N, ceil(${rack.powerWatts} W estimated equipment load / ${psuCapacityWatts} W per PSU))`,
+  )
+  perRack.add(
+    blankId,
+    blankCount,
+    `${rack.name}: ${shelves} shelves × ${psuSlots} PSU slots minus ${psuCount} fitted PSUs`,
   )
   perRack.add(
     inputCableSetId,

@@ -19,7 +19,9 @@ function orv3Plan(count = 3) {
 
 describe('ORV3 rack and power BOM', () => {
   const frameId = 'rack-gigabyte-doa3-st0'
-  const shelfId = 'power-orv3-shelf-33kw'
+  const shelfId = 'power-orv3-shelf'
+  const psuId = 'power-orv3-psu-5500w'
+  const blankId = 'power-orv3-psu-blank'
   const cableSetId = 'power-orv3-input-cable-set'
   const ids = [frameId, shelfId, cableSetId]
   const quantity = (plan: ReturnType<typeof createEmptyPlan>, id: string) =>
@@ -32,8 +34,11 @@ describe('ORV3 rack and power BOM', () => {
     expect(shelves.reasons).toHaveLength(1)
     expect(shelves.reasons[0].where).toBe(plan.partitions[0].racks[0].name)
     expect(shelves.reasons[0].detail).toContain('N+N')
-    expect(shelves.reasons[0].detail).toContain('PSUs and controller included')
-    expect(deriveBom(plan).filter((line) => line.category === 'power')).toHaveLength(2)
+    expect(shelves.reasons[0].detail).toContain('controller included, PSUs ordered separately')
+    expect(deriveBom(plan).filter((line) => line.category === 'power')).toHaveLength(4)
+    expect(quantity(plan, psuId)).toBe(2)
+    expect(quantity(plan, blankId)).toBe(10)
+    expect(quantity(plan, 'power-orv3-shelf-33kw')).toBe(0)
     expect(deriveBom(plan).some((line) => ids.some((id) => line.catalogId === `${id}#spare`))).toBe(
       false,
     )
@@ -64,6 +69,48 @@ describe('ORV3 rack and power BOM', () => {
   })
 
   it.each([
+    [0, 0, 0, 0, []],
+    [5500, 2, 2, 10, [1]],
+    [5501, 2, 4, 8, [2]],
+    [33000, 2, 12, 0, [6]],
+    [33001, 4, 14, 10, [6, 1]],
+  ])(
+    'fits PSU modules and blanks for %s W with enough capacity on either feed',
+    (powerWatts, shelves, psus, blanks, population) => {
+      const infrastructure = orv3Infrastructure({ widthInches: 21, powerWatts })!
+      expect(infrastructure.shelfCount).toBe(shelves)
+      expect(infrastructure.psuCount).toBe(psus)
+      expect(infrastructure.blankCount).toBe(blanks)
+      expect(infrastructure.psusPerShelf).toEqual(population)
+      expect(infrastructure.psusPerFeed * infrastructure.psuCapacityWatts).toBeGreaterThanOrEqual(
+        powerWatts,
+      )
+    },
+  )
+
+  it('changes fitted capacity and BOM PSU counts when server load changes', () => {
+    const plan = orv3Plan(12) // 4.8 kW of servers + 690 W of switches.
+    const rack = plan.partitions[0].racks[0]
+    const fitted = () =>
+      deriveRackLayout(plan)[0].racks[1].slots.filter((slot) => slot.kind === 'power')
+    expect(quantity(plan, psuId)).toBe(2)
+    expect(quantity(plan, blankId)).toBe(10)
+    expect(fitted().map((slot) => slot.sublabel)).toEqual(['5.5 kW fitted', '5.5 kW fitted'])
+    rack.servers[0].count = 13
+    expect(quantity(plan, psuId)).toBe(4)
+    expect(quantity(plan, blankId)).toBe(8)
+    expect(fitted().map((slot) => slot.sublabel)).toEqual(['11.0 kW fitted', '11.0 kW fitted'])
+    expect(fitted().every((slot) => slot.powerWatts === 0)).toBe(true)
+    expect(quantity(plan, shelfId)).toBe(2)
+    rack.maxPowerWatts = 100000
+    expect(quantity(plan, psuId)).toBe(4)
+    rack.servers = []
+    rack.leafCount = 0
+    plan.partitions[0].fabric.mgmt.leafPerRack = 0
+    for (const id of [shelfId, psuId, blankId, cableSetId]) expect(quantity(plan, id)).toBe(0)
+  })
+
+  it.each([
     [33000, 2],
     [33001, 4],
   ])('rounds up at the shelf capacity boundary: %s W', (powerWatts, shelfCount) => {
@@ -81,7 +128,9 @@ describe('ORV3 rack and power BOM', () => {
     expect(ids.map((id) => quantity(plan, id))).toEqual([3, 8, 8])
     const shelves = deriveBom(plan).find((line) => line.catalogId === shelfId)!
     expect(shelves.reasons.map((reason) => reason.quantity)).toEqual([2, 4, 2])
-    expect(shelves.reasons[1].detail).toContain('33490 W estimated equipment load')
+    expect(deriveBom(plan).find((line) => line.catalogId === psuId)!.reasons[1].detail).toContain(
+      '33490 W estimated equipment load',
+    )
     expect(deriveBom(plan).find((line) => line.catalogId === shelfId)?.reasons[0].where).toBe(
       partition.racks[0].name,
     )
@@ -165,32 +214,70 @@ describe('ORV3 rack and power BOM', () => {
     }
   })
 
-  it('reports shelf reservations without changing usable-height elevations', () => {
+  it('includes shelf space in elevation and height validation', () => {
     const plan = orv3Plan()
     const rack = plan.partitions[0].racks[0]
-    rack.heightUnits = 42
-    expect(
-      validatePlan(plan).some((issue) =>
-        issue.message.includes('41OU available after power shelves'),
-      ),
-    ).toBe(true)
-    rack.heightUnits = 41
+    rack.heightUnits = 9
+    expect(deriveRackLayout(plan)[0].racks[1].usedU).toBe(9)
+    expect(validatePlan(plan).some((issue) => issue.message.includes('Rack height exceeded'))).toBe(
+      false,
+    )
+    rack.heightUnits = 8
+    expect(validatePlan(plan).some((issue) => issue.message.includes('9OU of 8OU'))).toBe(true)
+    rack.heightUnits = 43
     expect(
       validatePlan(plan).some((issue) => issue.message.includes('exceeds the reference ORV3')),
     ).toBe(false)
-    expect(validatePlan(plan).some((issue) => issue.message.includes('Reserve 2OU'))).toBe(true)
-    rack.servers[0].count = 83
-    expect(validatePlan(plan).some((issue) => issue.message.includes('Reserve 4OU'))).toBe(true)
+    rack.heightUnits = 44
     expect(
-      validatePlan(plan).some((issue) =>
-        issue.message.includes('39OU available after power shelves'),
-      ),
+      validatePlan(plan).some((issue) => issue.message.includes('43OU mounting capacity')),
     ).toBe(true)
-    expect(deriveRackLayout(plan)[0].racks[1].usedU).toBe(87)
+    rack.servers[0].count = 83
+    expect(
+      validatePlan(plan).some((issue) => issue.message.includes('includes 4OU of power shelves')),
+    ).toBe(true)
+    expect(deriveRackLayout(plan)[0].racks[1].usedU).toBe(91)
   })
 })
 
 describe('ORV3 racks', () => {
+  it('shows bus bars and exactly the BOM shelf count across all physical rack types', () => {
+    const plan = orv3Plan(246)
+    const partition = plan.partitions[0]
+    partition.rackDefaults.widthInches = 21
+    partition.racks[0] = withRackKind(partition, partition.racks[0], 'rack-group')
+    plan.controlPlane.hosting = 'on-prem'
+    plan.controlPlane.placement = 'own-rack'
+    plan.controlPlane.rack.widthInches = 21
+    const racks = deriveRackLayout(plan)[0].racks
+    expect(racks.map((rack) => rack.slots.filter((slot) => slot.kind === 'power').length)).toEqual([
+      2, 2, 4, 2, 2,
+    ])
+    expect(racks.every((rack) => rack.busBar?.label.includes('bus bar'))).toBe(true)
+    const shelves = racks.flatMap((rack) => rack.slots.filter((slot) => slot.kind === 'power'))
+    expect(shelves).toHaveLength(
+      deriveBom(plan).find((line) => line.catalogId === 'power-orv3-shelf')!.quantity,
+    )
+    expect(shelves.every((slot) => slot.units === 1 && slot.powerWatts === 0)).toBe(true)
+    expect(racks[2].powerWatts).toBe(33490)
+    expect(
+      racks[2].slots.filter((slot) => slot.kind === 'power').map((slot) => slot.label),
+    ).toEqual(['Power shelf A1', 'Power shelf A2', 'Power shelf B1', 'Power shelf B2'])
+  })
+
+  it('keeps bus bars visible in empty ORV3 racks and omits infrastructure from EIA racks', () => {
+    const plan = orv3Plan(0)
+    const partition = plan.partitions[0]
+    partition.racks[0].leafCount = 0
+    partition.fabric.mgmt.leafPerRack = 0
+    const [central, empty] = deriveRackLayout(plan)[0].racks
+    expect(empty.busBar).toBeDefined()
+    expect(empty.slots).toEqual([])
+    expect(empty.usedU).toBe(0)
+    expect(central.busBar).toBeUndefined()
+    expect(central.slots.some((slot) => slot.kind === 'power')).toBe(false)
+  })
+
   it('orders sleds, partial trays, CPUs and BMC links independently', () => {
     const plan = orv3Plan()
     const rack = plan.partitions[0].racks[0]
@@ -221,7 +308,7 @@ describe('ORV3 racks', () => {
     expect(rack.slots.filter((slot) => slot.kind === 'server').map((slot) => slot.units)).toEqual([
       2, 2,
     ])
-    expect(rack.usedU).toBe(7) // 3 switch slots plus two 2OU trays
+    expect(rack.usedU).toBe(9) // 3 switch slots, two 2OU trays and two power shelves
     expect(
       rack.slots.filter((slot) => slot.kind === 'server').map((slot) => slot.powerWatts),
     ).toEqual([800, 400])
@@ -253,7 +340,7 @@ describe('ORV3 racks', () => {
     expect(rack.servers[0].modelId).toBe('server-gigabyte-to25-s12')
     rack.widthInches = 21
     rack.heightUnits = 6
-    expect(validatePlan(plan).some((issue) => issue.message.includes('7OU of 6OU'))).toBe(true)
+    expect(validatePlan(plan).some((issue) => issue.message.includes('9OU of 6OU'))).toBe(true)
   })
 
   it('counts each sled against management port capacity', () => {
@@ -346,7 +433,7 @@ describe('19-inch equipment in ORV3 racks', () => {
       false,
     )
     const used = deriveRackLayout(plan)[0].racks[1].usedU
-    expect(used).toBe(13) // 3 switch slots, 4OU of ORV3 trays, 6OU of EIA chassis
+    expect(used).toBe(15) // 3 switch slots, 4OU of ORV3 trays, 6OU of EIA chassis, 2OU power
     rack.servers = rack.servers.filter((group) => group.id === 'eia')
     rack.widthInches = 19
     expect(adapters(plan)).toBeUndefined()

@@ -153,6 +153,7 @@ export const CATEGORY_ICON: Record<CatalogCategory | 'spare', LucideIcon> = {
 }
 
 export const SLOT_ICON: Record<SlotKind, LucideIcon> = {
+  power: Cable,
   network: NetworkSwitch,
   mgmt: ServerCog,
   server: Server,

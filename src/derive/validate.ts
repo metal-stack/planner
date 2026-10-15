@@ -715,14 +715,14 @@ export function validatePlan(plan: Plan): Issue[] {
           issues,
           inAdvanced,
           'warning',
-          `The BOM includes an ORV3 frame with bus bar, ${infrastructure.shelfCount} populated power shelves (N+N, sized to ${rack.powerWatts} W estimated equipment load) and their AC input cable sets for this physical rack. Reserve ${infrastructure.reservedHeightUnits}OU for the shelves outside this equipment elevation; the reference frame has ${infrastructure.usableHeightUnits}OU left for equipment before mounting allowances. Enter usable rack height after these reservations. Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch devices with the supplier. Battery backup is optional and excluded. Shared rack infrastructure appears under Production in the BOM.`,
+          `The BOM includes an ORV3 frame with bus bar, ${infrastructure.shelfCount} power shelves with ${infrastructure.psuCount} fitted PSU modules (N+N, ${infrastructure.psusPerFeed} per feed, sized to ${rack.powerWatts} W estimated equipment load), ${infrastructure.blankCount} slot blanks and their AC input cable sets for this physical rack. The diagram includes ${infrastructure.reservedHeightUnits}OU of power shelves in used height. Enter mounting height including power shelves; do not subtract shelf space manually. Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch devices with the supplier. Battery backup is optional and excluded. Shared rack infrastructure appears under Production in the BOM.`,
         )
         if (rack.heightUnits > infrastructure.usableHeightUnits) {
           report(
             issues,
             inAdvanced,
             'warning',
-            `Configured usable height ${rack.heightUnits}OU exceeds the reference ORV3 frame's ${infrastructure.usableHeightUnits}OU available after power shelves. Reduce usable height or arrange a different rack configuration with the supplier.`,
+            `Configured usable height ${rack.heightUnits}OU exceeds the reference ORV3 frame's ${infrastructure.usableHeightUnits}OU mounting capacity. Reduce usable height or arrange a different rack configuration with the supplier.`,
           )
         }
       }
