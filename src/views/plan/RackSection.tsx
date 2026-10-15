@@ -83,7 +83,24 @@ function ServerGroupRow({
 }) {
   const patchServerGroup = usePlanStore((s) => s.patchServerGroup)
   const removeServerGroup = usePlanStore((s) => s.removeServerGroup)
-  const patch = (p: Partial<ServerGroup>) => patchServerGroup(partition.id, rack.id, group.id, p)
+  const patch = (p: Partial<ServerGroup>) => {
+    const switchesToOrv3 =
+      rack.widthInches !== 21 &&
+      p.modelId !== undefined &&
+      catalog[p.modelId]?.rackWidthInches === 21
+    if (
+      switchesToOrv3 &&
+      rack.servers.some(
+        (server) => server.count > 0 && (catalog[server.modelId]?.rackWidthInches ?? 19) === 19,
+      ) &&
+      !window.confirm(
+        `Selecting this ORV3 node will change ${rack.name}${rack.kind === 'rack-group' ? ' (all three racks)' : ''} to 21″ ORV3. Additional mounting adapter kits for 19″ equipment will be added to the BOM. Continue?`,
+      )
+    ) {
+      return
+    }
+    patchServerGroup(partition.id, rack.id, group.id, p)
+  }
 
   const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
   const multiNode = nodesPer > 1
@@ -237,7 +254,7 @@ function ServerGroupRow({
           ]}
           onChange={(v) => {
             const role = v as ServerGroup['role']
-            const compatible = serversForUsage(role, rack.widthInches)
+            const compatible = serversForUsage(role)
             patch(
               compatible.some((i) => i.id === group.modelId)
                 ? { role }
@@ -253,11 +270,11 @@ function ServerGroupRow({
         <SelectField
           label="Server model"
           info={{
-            text: 'Server choices match metal-stack compatibility for this role and fit the rack. ORV3 racks also accept 19-inch servers, with mounting adapter kits added to the BOM. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
+            text: 'Server choices match metal-stack compatibility for this role. Selecting an ORV3 node automatically changes this rack or rack group to 21-inch ORV3, with confirmation if 19-inch servers are already selected. ORV3 racks also accept 19-inch servers, with mounting adapter kits added to the BOM. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
             href: DOCS.hardware,
           }}
           value={group.modelId}
-          options={serverOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
+          options={serverOptions(serversForUsage(group.role), group.modelId)}
           onChange={(v) =>
             patch({
               modelId: v,

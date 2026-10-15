@@ -123,7 +123,7 @@ describe('rack format controls', () => {
         .sort(),
     )
     plan.partitions[0].racks[0].widthInches = 19
-    expect(renderImportedRack(plan).html).not.toContain('<optgroup label="ORV3">')
+    expect(renderImportedRack(plan).html).toContain('<optgroup label="ORV3">')
   })
 
   it('does not offer an adapter-count override for ORV3 racks', () => {
@@ -135,9 +135,9 @@ describe('rack format controls', () => {
     expect(html).not.toContain('Use automatic')
   })
 
-  it('shows ORV3 choices, OU height, and preserves incompatible selections', () => {
+  it('offers ORV3 choices in either format and shows OU height for ORV3 racks', () => {
     const plan = createEmptyPlan()
-    expect(renderImportedRack(plan).html).not.toContain('TO25-S12-AA01')
+    expect(renderImportedRack(plan).html).toContain('TO25-S12-AA01')
     const rack = plan.partitions[0].racks[0]
     rack.widthInches = 21
     const { html } = renderImportedRack(plan)
@@ -148,6 +148,10 @@ describe('rack format controls', () => {
     expect(html).not.toContain('AS-3015MR-H8TNR (incompatible)')
     rack.servers[0].modelId = 'server-gigabyte-to25-s12'
     rack.widthInches = 19
-    expect(renderImportedRack(plan).html).toContain('TO25-S12-AA01 (incompatible)')
+    const imported = renderImportedRack(plan)
+    expect(imported.html).toContain(
+      '<option value="server-gigabyte-to25-s12" selected="">TO25-S12-AA01 (alpha)</option>',
+    )
+    expect(imported.messages.some((message) => message.includes('requires a 21″ rack'))).toBe(true)
   })
 })
