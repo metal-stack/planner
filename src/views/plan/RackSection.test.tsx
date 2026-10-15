@@ -20,6 +20,36 @@ function renderImportedRack(plan: Plan) {
 }
 
 describe('imported server configurations', () => {
+  it('offers AMD sled CPU, RAM and compatible drives after import', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.widthInches = 21
+    rack.servers[0].modelId = 'server-gigabyte-to25-z12'
+    const { html } = renderImportedRack(plan)
+    expect(html).toContain('EPYC 9015')
+    expect(html).toContain('EPYC 9254')
+    expect(html).toContain('max="12"')
+    expect(html).toContain('value="drive-m2-480" selected=""')
+    expect(html).toContain('value="drive-e1s-1920" selected=""')
+    expect(html).not.toContain('value="drive-m2-sata-480"')
+    expect(html).not.toContain('value="drive-nvme-960"')
+  })
+
+  it('keeps an incompatible imported sled drive visible for replacement', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.widthInches = 21
+    rack.servers[0].modelId = 'server-gigabyte-to25-s12'
+    rack.servers[0].drives = [{ modelId: 'drive-m2-480', perNode: 1 }]
+    const { html, messages } = renderImportedRack(plan)
+    expect(html).toContain(
+      '<option value="drive-m2-480" selected="">480 GB M.2 NVMe (incompatible)</option>',
+    )
+    expect(html).toContain('value="drive-m2-sata-480"')
+    expect(html).toContain('value="drive-e1s-3840"')
+    expect(messages).toContain('480 GB M.2 NVMe does not fit TO25-S12-AA01 drive bays.')
+  })
+
   it('renders the CPU socket count and active RAM limit after import', () => {
     const plan = createEmptyPlan()
     const group = plan.partitions[0].racks[0].servers[0]

@@ -7,6 +7,7 @@ import {
   fitsRack,
   rackUnit,
   drivesForServer,
+  driveFitsServer,
   nicFitsServer,
   portCount,
   uplinkPortSpeed,
@@ -263,7 +264,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
           issues,
           scope,
           'warning',
-          `${itemLabel(group.modelId)}: no drives configured. Select compatible drives separately; the catalog does not yet model this sled's E1.S and boot-drive options.`,
+          `${itemLabel(group.modelId)}: no drives configured. Add a compatible M.2 or E1.S drive if local storage is required.`,
         )
       }
       const label = positionListLabel(bucket.positions)
@@ -271,7 +272,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
       checkGpu(issues, scope, group, bucket.config, prefix)
       checkCompute(issues, scope, group, bucket.config, prefix)
       checkNic(issues, scope, group, bucket.config, prefix)
-      checkDrives(issues, scope, bucket.config, prefix)
+      checkDrives(issues, scope, group.modelId, bucket.config, prefix)
     }
   }
 }
@@ -436,12 +437,41 @@ function checkCompute(
   }
 }
 
-/** Every configured drive must exist and be a drive. */
-function checkDrives(issues: Issue[], scope: Scope, config: NodeConfig, prefix: string): void {
-  for (const { modelId } of config.drives ?? []) {
+/** Check drive identity, physical fit and total occupancy across duplicate rows. */
+function checkDrives(
+  issues: Issue[],
+  scope: Scope,
+  serverModelId: string,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const drives = config.drives ?? drivesForServer(serverModelId)
+  for (const { modelId } of drives) {
     const drive = catalog[modelId]
     if (!drive || drive.category !== 'drive') {
       report(issues, scope, 'error', `${prefix}Unknown drive model "${modelId}".`)
+    } else if (!driveFitsServer(drive, serverModelId)) {
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${drive.description} does not fit ${itemLabel(serverModelId)} drive bays.`,
+      )
+    }
+  }
+  for (const bay of catalog[serverModelId]?.driveBays ?? []) {
+    const fitted = drives.reduce(
+      (sum, drive) => sum + (catalog[drive.modelId]?.driveType === bay.type ? drive.perNode : 0),
+      0,
+    )
+    if (fitted > bay.count) {
+      const label = bay.type === 'e1s-9.5-nvme' ? 'E1.S' : 'M.2'
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${itemLabel(serverModelId)} has ${bay.count} ${label} bays per node, but ${fitted} drives are configured.`,
+      )
     }
   }
 }

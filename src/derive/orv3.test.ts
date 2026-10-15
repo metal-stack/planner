@@ -288,7 +288,10 @@ describe('ORV3 racks', () => {
     expect(qty('cpu-xeon-4509y')).toBe(3)
     expect(qty('mem-ddr5r-16g')).toBe(6)
     expect(qty('nic-e810-xxvda2')).toBe(3)
-    expect(bom.filter((line) => line.category === 'drive')).toEqual([])
+    expect(qty('drive-m2-sata-480')).toBe(3)
+    expect(qty('drive-e1s-1920')).toBe(3)
+    expect(qty('drive-m2-480')).toBe(0)
+    expect(qty('drive-nvme-960')).toBe(0)
     expect(rackBmcPorts(rack)).toBe(3)
     const bmc = bom.find((line) => line.catalogId === 'cable-rj45')!
     expect(

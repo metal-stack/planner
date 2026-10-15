@@ -229,6 +229,7 @@ function ServerGroupRow({
   // pair is stored as "unset" so the configuration keeps following the
   // default.
   const defaultDrives = drivesForServer(group.modelId)
+  const compatibleDrives = driveOptions(group.modelId)
   const shownDrives = shown.drives ?? defaultDrives
   const patchDrives = (next: DriveConfig[]) => {
     patchShown({
@@ -498,12 +499,21 @@ function ServerGroupRow({
                   <SelectField
                     label={`Drive ${i + 1}`}
                     value={drive.modelId}
-                    options={driveOptions().map((item) => ({
-                      value: item.id,
-                      // Model names collide across capacities (7450 PRO),
-                      // so drives list their spec instead.
-                      label: item.description,
-                    }))}
+                    options={[
+                      ...compatibleDrives.map((item) => ({
+                        value: item.id,
+                        // Model names collide across capacities; show the spec.
+                        label: item.description,
+                      })),
+                      ...(!compatibleDrives.some((item) => item.id === drive.modelId)
+                        ? [
+                            {
+                              value: drive.modelId,
+                              label: `${catalog[drive.modelId]?.description ?? drive.modelId} (incompatible)`,
+                            },
+                          ]
+                        : []),
+                    ]}
                     onChange={(v) =>
                       patchDrives(shownDrives.map((d, n) => (n === i ? { ...d, modelId: v } : d)))
                     }
@@ -535,7 +545,7 @@ function ServerGroupRow({
           <button
             type="button"
             onClick={() =>
-              patchDrives([...shownDrives, { modelId: driveOptions()[0]?.id ?? '', perNode: 1 }])
+              patchDrives([...shownDrives, { modelId: compatibleDrives[0]?.id ?? '', perNode: 1 }])
             }
             className="btn-secondary mt-2"
           >
