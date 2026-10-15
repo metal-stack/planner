@@ -33,6 +33,7 @@ const CATEGORY_LABEL = {
   switch: 'Switches',
   server: 'Servers',
   chassis: 'Chassis, trays and adapters',
+  accessory: 'Internal accessories',
   rack: 'Racks and bus bars',
   power: 'Power infrastructure',
   router: 'Routers',

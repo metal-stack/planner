@@ -81,8 +81,19 @@ consistent — you edit the plan, everything else follows from it.
   Allow separately for any extra space required by the selected mounting hardware.
   Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch
   devices with the supplier. TO25 power values are
-  planning estimates. SP5 CPU/RAM parts for the Z12 and TO25 E1.S/boot-drive options are not
-  yet modeled; the planner flags those omissions instead of adding incompatible default parts.
+  planning estimates. TO25-Z12 CPU/RAM presets use SP5 EPYC 9015 (8 cores) or 9254 (24 cores)
+  with DDR5 RDIMMs and a 12-slot limit; EPYC 9005 requires a supporting BIOS.
+  Both sleds default to one 1.92 TB KIOXIA XD7P 9.5 mm E1.S data drive per node, with
+  3.84 TB also selectable. Intel TO25-S12 uses a 480 GB SATA M.2 boot drive; AMD TO25-Z12
+  uses a 480 GB NVMe M.2 boot drive and automatically adds its CMTP192 expansion card.
+  Drive choices and validation respect each sled's interface and bay counts (two E1.S bays
+  on S12, four on Z12, plus one M.2 each). Explicit empty drive lists remain empty.
+  Parts are representative interface-compatible choices; confirm supplier qualification.
+  Sources: [AMD EPYC 9015](https://www.amd.com/en/products/processors/server/epyc/9005-series/amd-epyc-9015.html),
+  [AMD EPYC 9254](https://www.amd.com/en/products/processors/server/epyc/4th-generation-9004-and-8004-series/amd-epyc-9254.html),
+  [GIGABYTE TO25-Z12](https://download.gigabyte.com/FileList/DataSheet/TO25-Z12_datasheet_v1.3.pdf),
+  [Micron SATA drives](https://www.micron.com/products/storage/ssd/data-center-ssd/5400-sata-ssd/part-catalog),
+  [KIOXIA XD7P](https://www.kioxia.com/en-jp/business/ssd/data-center-ssd/xd7p.html).
 - **CPU sockets and RAM** — modeled dual-socket servers offer a count selector for one or two identical CPUs,
   for the group or an individual chassis position. The BOM counts both CPUs, and RAM validation
   checks the DIMM slots enabled by the installed CPUs and at least one DIMM per CPU. Total RAM

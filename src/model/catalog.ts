@@ -58,6 +58,7 @@ export type CatalogCategory =
   | 'switch'
   | 'server'
   | 'chassis'
+  | 'accessory'
   | 'rack'
   | 'power'
   | 'router'
@@ -87,9 +88,11 @@ export type PortSpeed = '1G' | '10G' | '25G' | '100G'
  *  of the X11 MicroCloud: no orderable CPUs exist for it, but its memory is
  *  configurable like any other board's. */
 export type CpuSocket =
-  'AM5' | 'LGA-1700' | 'LGA-3647' | 'LGA-4189' | 'LGA-4677' | 'LGA-4710' | 'D-2100'
+  'AM5' | 'SP5' | 'LGA-1700' | 'LGA-3647' | 'LGA-4189' | 'LGA-4677' | 'LGA-4710' | 'D-2100'
 
 export type DimmType = 'ddr5-ecc-udimm' | 'ddr5-rdimm' | 'ddr4-rdimm'
+
+export type DriveType = 'm2-sata' | 'm2-nvme' | 'u3-nvme' | 'e1s-9.5-nvme'
 
 export type GpuWidth = 'single' | 'double'
 
@@ -99,6 +102,7 @@ export type NicFormFactor = 'siom' | 'micro-lp'
 // a specific DIMM speed rating, independently of their operating speed.
 export const dimmTypeForSocket: Record<CpuSocket, DimmType> = {
   AM5: 'ddr5-ecc-udimm',
+  SP5: 'ddr5-rdimm',
   'LGA-1700': 'ddr5-ecc-udimm',
   'LGA-3647': 'ddr4-rdimm',
   'LGA-4189': 'ddr4-rdimm',
@@ -132,8 +136,12 @@ export interface CatalogItem {
   trayModelId?: string
   /** ORv3 sleds each have their own BMC, unlike the legacy chassis model. */
   bmcPerNode?: boolean
-  /** Empty when the generic drive pair does not fit this platform. */
+  /** Platform-specific defaults; an empty list deliberately orders no drives. */
   defaultDrives?: DriveConfig[]
+  /** Physical interface and form factor of a drive. */
+  driveType?: DriveType
+  /** Verified bays per node, including any separately ordered adapter. */
+  driveBays?: { type: DriveType; count: number; adapterModelId?: string }[]
   /** For multi-node chassis (MicroCloud, BigTwin): server nodes per chassis. */
   nodesPerChassis?: number
   /** Typical power draw per chassis / device in watts, for rack power
@@ -480,8 +488,14 @@ export const catalog: Record<string, CatalogItem> = {
     dimmSlots: 8,
     gpuCapable: 1,
     gpuWidth: 'double',
-    // The catalog's default M.2 NVMe / U.2 pair does not fit this sled.
-    defaultDrives: [],
+    driveBays: [
+      { type: 'm2-sata', count: 1 },
+      { type: 'e1s-9.5-nvme', count: 2 },
+    ],
+    defaultDrives: [
+      { modelId: 'drive-m2-sata-480', perNode: 1 },
+      { modelId: 'drive-e1s-1920', perNode: 1 },
+    ],
   },
   'server-gigabyte-to25-z12': {
     id: 'server-gigabyte-to25-z12',
@@ -499,10 +513,28 @@ export const catalog: Record<string, CatalogItem> = {
     powerWatts: 800,
     status: 'alpha',
     serverUsages: ['worker', 'storage'],
-    // SP5 CPU and memory parts are not yet modeled; validation reports this.
+    socket: 'SP5',
+    dimmSlots: 12,
     gpuCapable: 1,
     gpuWidth: 'double',
-    defaultDrives: [],
+    // M.2 is optional and needs the CMTP192 card; count it with fitted drives.
+    // https://download.gigabyte.com/FileList/DataSheet/TO25-Z12_datasheet_v1.3.pdf
+    driveBays: [
+      { type: 'm2-nvme', count: 1, adapterModelId: 'adapter-gigabyte-cmtp192' },
+      { type: 'e1s-9.5-nvme', count: 4 },
+    ],
+    defaultDrives: [
+      { modelId: 'drive-m2-480', perNode: 1 },
+      { modelId: 'drive-e1s-1920', perNode: 1 },
+    ],
+  },
+  'adapter-gigabyte-cmtp192': {
+    id: 'adapter-gigabyte-cmtp192',
+    category: 'accessory',
+    vendor: 'GIGABYTE',
+    model: 'CMTP192',
+    partNumber: '9CMTP192NR-00',
+    description: 'Internal M.2 NVMe expansion card, PCIe Gen4 x4, 2280/22110',
   },
   'chassis-gigabyte-to25-bt0': {
     id: 'chassis-gigabyte-to25-bt0',
@@ -915,6 +947,35 @@ export const catalog: Record<string, CatalogItem> = {
     socket: 'AM5',
   },
 
+  // SP5 parts fit the TO25-Z12's 240 W CPU limit. EPYC 9005 requires
+  // a supporting BIOS; DDR5-4800 presets also work with the 9004 platform.
+  // https://www.amd.com/en/products/processors/server/epyc/9005-series/amd-epyc-9015.html
+  'cpu-epyc-9015': {
+    id: 'cpu-epyc-9015',
+    category: 'cpu',
+    vendor: 'AMD',
+    model: 'EPYC 9015',
+    partNumber: '100-000001553',
+    description: '8 cores, 16 threads, 3.6 GHz base',
+    cores: 8,
+    threads: 16,
+    powerWatts: 125,
+    socket: 'SP5',
+  },
+  // https://www.amd.com/en/products/processors/server/epyc/4th-generation-9004-and-8004-series/amd-epyc-9254.html
+  'cpu-epyc-9254': {
+    id: 'cpu-epyc-9254',
+    category: 'cpu',
+    vendor: 'AMD',
+    model: 'EPYC 9254',
+    partNumber: '100-000000480',
+    description: '24 cores, 48 threads, 2.9 GHz base',
+    cores: 24,
+    threads: 48,
+    powerWatts: 200,
+    socket: 'SP5',
+  },
+
   // --- Memory (representative public orderable parts) ---
   'mem-ddr5u-16g': {
     id: 'mem-ddr5u-16g',
@@ -1019,6 +1080,7 @@ export const catalog: Record<string, CatalogItem> = {
     model: '7450 PRO',
     partNumber: 'MTFDKBA480TFR-1BC1ZABYY',
     description: '480 GB M.2 NVMe',
+    driveType: 'm2-nvme',
   },
   'drive-nvme-960': {
     id: 'drive-nvme-960',
@@ -1027,6 +1089,39 @@ export const catalog: Record<string, CatalogItem> = {
     model: '7450 PRO',
     partNumber: 'MTFDKCB960TFR-1BC1ZABYY',
     description: '960 GB 2.5" U.3 NVMe',
+    driveType: 'u3-nvme',
+  },
+
+  // Intel TO25 uses SATA M.2, not NVMe.
+  // https://www.micron.com/products/storage/ssd/data-center-ssd/5400-sata-ssd/part-catalog
+  'drive-m2-sata-480': {
+    id: 'drive-m2-sata-480',
+    category: 'drive',
+    vendor: 'Micron',
+    model: '5400 PRO',
+    partNumber: 'MTFDDAV480TGA-1BC1ZTAYY',
+    description: '480 GB M.2 SATA',
+    driveType: 'm2-sata',
+  },
+  // Both TO25 sleds take 9.5 mm E1.S, not the 15 mm variant.
+  // https://www.kioxia.com/en-jp/business/ssd/data-center-ssd/xd7p.html
+  'drive-e1s-1920': {
+    id: 'drive-e1s-1920',
+    category: 'drive',
+    vendor: 'KIOXIA',
+    model: 'XD7P',
+    partNumber: 'KXDZ1RJJ1T92',
+    description: '1.92 TB E1.S 9.5 mm NVMe',
+    driveType: 'e1s-9.5-nvme',
+  },
+  'drive-e1s-3840': {
+    id: 'drive-e1s-3840',
+    category: 'drive',
+    vendor: 'KIOXIA',
+    model: 'XD7P',
+    partNumber: 'KXDZ1RJJ3T84',
+    description: '3.84 TB E1.S 9.5 mm NVMe',
+    driveType: 'e1s-9.5-nvme',
   },
 
   // --- GPUs (official metal-stack compatibility list) ---
@@ -1374,11 +1469,19 @@ export const defaultDrives: DriveConfig[] = [
   { modelId: 'drive-nvme-960', perNode: 1 },
 ]
 
-/** Drive models offerable for boot and data media, current hardware first.
- *  Drive fit is not board-specific, so every server offers the same list. */
-export function driveOptions(): CatalogItem[] {
+/** Check verified bay types where modeled; legacy servers retain their choices. */
+export function driveFitsServer(drive: CatalogItem, serverModelId: string): boolean {
+  const bays = catalog[serverModelId]?.driveBays
+  return !bays || bays.some((bay) => bay.type === drive.driveType)
+}
+
+/** Drive models offerable for boot and data media, current hardware first. */
+export function driveOptions(serverModelId?: string): CatalogItem[] {
   return Object.values(catalog)
-    .filter((item) => item.category === 'drive')
+    .filter(
+      (item) =>
+        item.category === 'drive' && (!serverModelId || driveFitsServer(item, serverModelId)),
+    )
     .sort(byAvailability)
 }
 
