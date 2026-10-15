@@ -89,6 +89,7 @@ describe('rack group', () => {
       modelId: 'server-superserver-tn12',
       count: 3,
       uplink: '2x25G',
+      sizeId: 'n1-medium-x86',
     })
     const layout = deriveRackLayout(plan)[0]
     for (const physical of layout.racks.slice(1)) {

@@ -1,11 +1,14 @@
 import {
   catalog,
+  cpuLabel,
   gpusForServer,
   itemLabel,
   serversForUsage,
   switchesForRole,
+  type CatalogItem,
 } from '../../model/catalog'
-import type { Partition, Rack, ServerGroup } from '../../model/plan'
+import type { NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
+import { nodeSizes, resolveNodeCompute } from '../../model/sizes'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
 import { issuesFor, leafPortsAvailable, leafPortsNeeded, type Issue } from '../../derive/validate'
@@ -17,6 +20,16 @@ import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
 import { optionLabel } from './options'
+
+/** Catalog choices with an optional default and any incompatible current selection. */
+function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string) {
+  const options = items.map((item) => ({ value: item.id, label: optionLabel(item) }))
+  if (defaultLabel) options.unshift({ value: '', label: defaultLabel })
+  if (id && !options.some((option) => option.value === id)) {
+    options.push({ value: id, label: `${itemLabel(id)} (incompatible)` })
+  }
+  return options
+}
 
 function ServerGroupRow({
   partition,
@@ -40,126 +53,175 @@ function ServerGroupRow({
   const maxNodes = group.uplink === '2x25G' ? freePorts * 2 : Math.floor(freePorts / 2)
   const fillCount = Math.floor(maxNodes / nodesPer) * nodesPer
 
-  const modelOptions = serversForUsage(group.role).map((i) => ({
-    value: i.id,
-    label: optionLabel(i),
-  }))
-  // Keep an out-of-role selection visible so the user can see and fix it.
-  if (!modelOptions.some((o) => o.value === group.modelId)) {
-    modelOptions.push({ value: group.modelId, label: `${group.modelId} (incompatible)` })
-  }
+  const socket = catalog[group.modelId]?.socket
 
-  // GPUs are only offered for server models that accept one; the model's
-  // gpuCapable caps how many go in each node.
-  const gpuOptions = gpusForServer(group.modelId).map((i) => ({
-    value: i.id,
-    label: optionLabel(i),
-  }))
-  if (group.gpu && !gpuOptions.some((option) => option.value === group.gpu?.modelId)) {
-    gpuOptions.push({
-      value: group.gpu.modelId,
-      label: `${itemLabel(group.gpu.modelId)} (incompatible)`,
-    })
-  }
-  const perNode = Math.min(group.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
+  const shown: NodeConfig = group
 
+  const gpuOptions = catalogOptions(gpusForServer(group.modelId), shown.gpu?.modelId)
+
+  const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
+  const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
+  // The preset stays the baseline; deviating fields mark it "customized".
+  const sizeOptions = nodeSizes.map((size) => {
+    const note =
+      !socket || !size.parts[socket]
+        ? ', not for this model'
+        : size.id === shown.sizeId && resolvedCompute.custom
+          ? ', customized'
+          : ''
+    return {
+      value: size.id,
+      label: `${size.id} (${size.cores} cores, ${size.memoryGiB} GiB${note})`,
+    }
+  })
+  // The collapsed summary always describes the group's shared configuration.
+  const groupResolved = resolveNodeCompute(group)
+  const nodeSummary = [
+    groupResolved.cpuModelId
+      ? catalog[groupResolved.cpuModelId]?.category === 'cpu'
+        ? cpuLabel(catalog[groupResolved.cpuModelId])
+        : itemLabel(groupResolved.cpuModelId)
+      : undefined,
+    groupResolved.dimmModelId && groupResolved.dimmsPerNode
+      ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
+      : undefined,
+    group.gpu ? itemLabel(group.gpu.modelId) : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ')
+
+  const patchShown = (change: Partial<NodeConfig>) => patch(change)
   return (
-    <div className="grid grid-cols-2 items-end gap-3 border-t border-gray-100 py-2 md:grid-cols-6">
-      <SelectField
-        label="Role"
-        value={group.role}
-        options={[
-          { value: 'worker', label: 'Worker' },
-          { value: 'storage', label: 'Storage' },
-        ]}
-        onChange={(v) => {
-          const role = v as ServerGroup['role']
-          const compatible = serversForUsage(role)
-          patch(
-            compatible.some((i) => i.id === group.modelId)
-              ? { role }
-              : { role, modelId: compatible[0]?.id ?? group.modelId },
-          )
-        }}
-      />
-      <SelectField
-        label="Server model"
-        info={{
-          text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
-          href: DOCS.hardware,
-        }}
-        value={group.modelId}
-        options={modelOptions}
-        onChange={(v) => patch({ modelId: v })}
-      />
-      <NumberField
-        label="Nodes"
-        value={group.count}
-        step={nodesPer}
-        onChange={(n) => patch({ count: n })}
-        action={
-          <HoverHint
-            interactive
-            hint={
-              fillCount === group.count
-                ? `Already filling the rack's leaf capacity (${fillCount} nodes).`
-                : `Fill to leaf capacity: set ${fillCount} nodes, what the rack's remaining leaf ports allow in whole chassis of ${nodesPer}.`
-            }
-          >
-            <button
-              type="button"
-              onClick={() => patch({ count: fillCount })}
-              disabled={fillCount === group.count}
-              aria-label={`Fill to leaf capacity (${fillCount} nodes)`}
-              className="text-gray-400 hover:text-brand-strong disabled:cursor-default disabled:text-gray-300"
-            >
-              <Icon icon={ACTION_ICON.fill} className="h-3.5 w-3.5" />
-            </button>
-          </HoverHint>
-        }
-      />
-      <SelectField
-        label="Uplink"
-        info={{
-          text: 'Every node is dual-attached to the leaf pair. 25G server ports terminate on 100G leaf ports through 4×25G breakout cables; 100G uses one leaf port per server port. This drives the leaf port check and the transceiver and cable counts.',
-          href: DOCS.networking,
-        }}
-        value={group.uplink}
-        options={[
-          { value: '2x25G', label: '2x 25G' },
-          { value: '2x100G', label: '2x 100G' },
-        ]}
-        onChange={(v) => patch({ uplink: v as ServerGroup['uplink'] })}
-      />
-      {gpuOptions.length > 0 && (
+    // Storage groups carry the racks view's storage color (sky), workers
+    // the brand tint.
+    <div
+      className={`mt-3 rounded-md border p-3 ${
+        group.role === 'storage' ? 'border-sky-300 bg-sky-100' : 'border-brand-soft bg-brand-tint'
+      }`}
+    >
+      <div className="grid grid-cols-2 items-end gap-3 md:grid-cols-6">
         <SelectField
-          label="GPU"
+          label="Role"
+          value={group.role}
+          options={[
+            { value: 'worker', label: 'Worker' },
+            { value: 'storage', label: 'Storage' },
+          ]}
+          onChange={(v) => {
+            const role = v as ServerGroup['role']
+            const compatible = serversForUsage(role)
+            patch(
+              compatible.some((i) => i.id === group.modelId)
+                ? { role }
+                : {
+                    role,
+                    modelId: compatible[0]?.id ?? group.modelId,
+                  },
+            )
+          }}
+        />
+        <SelectField
+          label="Server model"
           info={{
-            text: 'GPUs on the metal-stack hardware compatibility list, offered for server models that accept one. They add to the BOM and to the rack power estimate.',
+            text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
             href: DOCS.hardware,
           }}
-          value={group.gpu?.modelId ?? ''}
-          options={[{ value: '', label: 'None' }, ...gpuOptions]}
-          onChange={(v) => patch({ gpu: v ? { modelId: v, perNode: perNode } : undefined })}
+          value={group.modelId}
+          options={catalogOptions(serversForUsage(group.role), group.modelId)}
+          onChange={(v) => patch({ modelId: v })}
         />
-      )}
-      {group.gpu && (catalog[group.modelId]?.gpuCapable ?? 0) > 1 && (
         <NumberField
-          label="GPUs per node"
-          value={group.gpu.perNode}
-          min={1}
-          onChange={(v) =>
-            group.gpu && patch({ gpu: { modelId: group.gpu.modelId, perNode: v || 1 } })
+          label="Nodes"
+          value={group.count}
+          step={nodesPer}
+          onChange={(n) => patch({ count: n })}
+          action={
+            <HoverHint
+              interactive
+              hint={
+                fillCount === group.count
+                  ? `Already filling the rack's leaf capacity (${fillCount} nodes).`
+                  : `Fill to leaf capacity: set ${fillCount} nodes, what the rack's remaining leaf ports allow in whole chassis of ${nodesPer}.`
+              }
+            >
+              <button
+                type="button"
+                onClick={() => patch({ count: fillCount })}
+                disabled={fillCount === group.count}
+                aria-label={`Fill to leaf capacity (${fillCount} nodes)`}
+                className="text-gray-400 hover:text-brand-strong disabled:cursor-default disabled:text-gray-300"
+              >
+                <Icon icon={ACTION_ICON.fill} className="h-3.5 w-3.5" />
+              </button>
+            </HoverHint>
           }
         />
-      )}
-      <button
-        onClick={() => removeServerGroup(partition.id, rack.id, group.id)}
-        className="btn-secondary justify-self-start"
-      >
-        <Icon icon={ACTION_ICON.remove} />
-        Remove
-      </button>
+        <SelectField
+          label="Uplink"
+          info={{
+            text: 'Every node is dual-attached to the leaf pair. 25G server ports terminate on 100G leaf ports through 4×25G breakout cables; 100G uses one leaf port per server port. This drives the leaf port check and the transceiver and cable counts.',
+            href: DOCS.networking,
+          }}
+          value={group.uplink}
+          options={[
+            { value: '2x25G', label: '2x 25G' },
+            { value: '2x100G', label: '2x 100G' },
+          ]}
+          onChange={(v) =>
+            patch({
+              uplink: v as ServerGroup['uplink'],
+            })
+          }
+        />
+        <button
+          onClick={() => removeServerGroup(partition.id, rack.id, group.id)}
+          className="btn-secondary justify-self-start"
+        >
+          <Icon icon={ACTION_ICON.remove} />
+          Remove
+        </button>
+      </div>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+          Node configuration{' '}
+          {nodeSummary && <span className="font-normal text-gray-500">· {nodeSummary}</span>}
+        </summary>
+        <div className="mt-3 grid grid-cols-2 items-end gap-3 md:grid-cols-6">
+          <SelectField
+            label="Preset"
+            info={{
+              text: 'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset.',
+            }}
+            value={shown.sizeId}
+            options={sizeOptions}
+            onChange={(v) => patchShown({ sizeId: v })}
+          />
+          {gpuOptions.length > 0 && (
+            <SelectField
+              label="GPU"
+              info={{
+                text: 'GPUs on the metal-stack hardware compatibility list, offered for server models that accept one. They add to the BOM and to the rack power estimate.',
+                href: DOCS.hardware,
+              }}
+              value={shown.gpu?.modelId ?? ''}
+              options={[{ value: '', label: 'None' }, ...gpuOptions]}
+              onChange={(v) =>
+                patchShown({ gpu: v ? { modelId: v, perNode: perNode } : undefined })
+              }
+            />
+          )}
+          {shown.gpu && (catalog[group.modelId]?.gpuCapable ?? 0) > 1 && (
+            <NumberField
+              label="GPUs per node"
+              value={shown.gpu.perNode}
+              min={1}
+              onChange={(v) =>
+                shown.gpu && patchShown({ gpu: { modelId: shown.gpu.modelId, perNode: v || 1 } })
+              }
+            />
+          )}
+        </div>
+      </details>
     </div>
   )
 }

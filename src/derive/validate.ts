@@ -1,11 +1,13 @@
 import { catalog, gpuFits, itemLabel, portCount, type SwitchRole } from '../model/catalog'
 import {
   mgmtDeviceCount,
+  type NodeConfig,
   type Partition,
   type Plan,
   type Rack,
   type ServerGroup,
 } from '../model/plan'
+import { nodeSize, sizeLabel } from '../model/sizes'
 import {
   formatGbps,
   formatRatio,
@@ -217,18 +219,33 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
         `${itemLabel(group.modelId)}: metal-stack support status is alpha.`,
       )
     }
-    checkGpu(issues, scope, group)
+    if (!item.socket) {
+      report(
+        issues,
+        scope,
+        'warning',
+        `CPU and memory are not modeled for ${itemLabel(group.modelId)}, so the BOM has no CPU or DIMM lines for this group.`,
+      )
+    }
+    checkGpu(issues, scope, group, group, '')
+    checkCompute(issues, scope, group, group, '')
   }
 }
 
 /** GPUs must exist, be GPUs, and fit the server model's per-node limit. */
-function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
-  const { gpu } = group
+function checkGpu(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const { gpu } = config
   if (!gpu) return
   const server = catalog[group.modelId]
   const item = catalog[gpu.modelId]
   if (!item || item.category !== 'gpu') {
-    report(issues, scope, 'error', `Unknown GPU model "${gpu.modelId}".`)
+    report(issues, scope, 'error', `${prefix}Unknown GPU model "${gpu.modelId}".`)
     return
   }
   const capacity = server?.gpuCapable ?? 0
@@ -237,7 +254,7 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
       issues,
       scope,
       'error',
-      `${itemLabel(group.modelId)} takes no GPUs, but ${gpu.perNode} per node are configured. ` +
+      `${prefix}${itemLabel(group.modelId)} takes no GPUs, but ${gpu.perNode} per node are configured. ` +
         `Choose a GPU-capable server model or remove the GPUs.`,
     )
     return
@@ -247,7 +264,7 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
       issues,
       scope,
       'error',
-      `${itemLabel(item.id)} is a ${item.gpuWidth}-width GPU, but ` +
+      `${prefix}${itemLabel(item.id)} is a ${item.gpuWidth}-width GPU, but ` +
         `${itemLabel(group.modelId)} takes ${server.gpuWidth}-width cards.`,
     )
   }
@@ -256,8 +273,38 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
       issues,
       scope,
       'error',
-      `${itemLabel(group.modelId)} accepts ${capacity} GPU${capacity === 1 ? '' : 's'} per node, ` +
+      `${prefix}${itemLabel(group.modelId)} accepts ${capacity} GPU${capacity === 1 ? '' : 's'} per node, ` +
         `but ${gpu.perNode} are configured.`,
+    )
+  }
+}
+
+/** The selected size and any custom CPU or memory must resolve to parts
+ *  compatible with the server board. */
+function checkCompute(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const size = nodeSize(config.sizeId)
+  if (!size) {
+    report(issues, scope, 'error', `${prefix}Unknown node size "${config.sizeId}".`)
+    return
+  }
+
+  const server = catalog[group.modelId]
+  const socket = server?.socket
+  // Socketless boards get their single group-level warning in validateRack.
+  if (!socket) return
+
+  if (!size.parts[socket]) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${sizeLabel(size)} is not orderable for ${itemLabel(group.modelId)} (${socket}). Pick another size or server model.`,
     )
   }
 }
