@@ -3,7 +3,8 @@ import {
   catalog,
   cpuLabel,
   cpusForServer,
-  defaultDrives,
+  drivesForServer,
+  rackUnit,
   defaultNicId,
   dimmsForServer,
   driveOptions,
@@ -28,7 +29,8 @@ import { NumberField, SelectField } from './fields'
 import IssueBadges from './IssueBadges'
 import { rackAnchor } from './navigate'
 import { ACTION_ICON, Icon, SECTION_ICON } from '../icons'
-import { optionLabel } from './options'
+import RackWidthField from './RackWidthField'
+import { optionLabel, serverOptions } from './options'
 
 /** Catalog choices with an optional default and any incompatible current selection. */
 function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string) {
@@ -209,6 +211,7 @@ function ServerGroupRow({
   // Drives are a free list per configuration; a list matching the default
   // pair is stored as "unset" so the configuration keeps following the
   // default.
+  const defaultDrives = drivesForServer(group.modelId)
   const shownDrives = shown.drives ?? defaultDrives
   const patchDrives = (next: DriveConfig[]) => {
     patchShown({
@@ -234,7 +237,7 @@ function ServerGroupRow({
           ]}
           onChange={(v) => {
             const role = v as ServerGroup['role']
-            const compatible = serversForUsage(role)
+            const compatible = serversForUsage(role, rack.widthInches)
             patch(
               compatible.some((i) => i.id === group.modelId)
                 ? { role }
@@ -250,13 +253,17 @@ function ServerGroupRow({
         <SelectField
           label="Server model"
           info={{
-            text: 'Only server models on the metal-stack hardware compatibility list for this role are offered. Multi-node chassis (MicroCloud, BigTwin) count nodes here; the BOM derives the chassis.',
+            text: 'Server choices match metal-stack compatibility for this role and fit the rack. ORV3 racks also accept 19-inch servers, with mounting adapter kits added to the BOM. Counts are nodes; the BOM derives chassis and separately ordered ORV3 trays.',
             href: DOCS.hardware,
           }}
           value={group.modelId}
-          options={catalogOptions(serversForUsage(group.role), group.modelId)}
+          options={serverOptions(serversForUsage(group.role, rack.widthInches), group.modelId)}
           onChange={(v) =>
-            patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
+            patch({
+              modelId: v,
+              compute: undefined,
+              nodeConfigs: configsWithout('compute'),
+            })
           }
         />
         <NumberField
@@ -651,7 +658,8 @@ export default function RackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            · {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
+            · {rack.widthInches}″ {rack.widthInches === 21 ? 'ORV3' : 'EIA'}, rack format,{' '}
+            {rack.memberNames ? 'rack names, ' : ''}leaves, height and power budget
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -680,6 +688,12 @@ export default function RackSection({
             </div>
           )}
           <div className="flex flex-wrap items-end gap-3">
+            <div className="w-40">
+              <RackWidthField
+                value={rack.widthInches}
+                onChange={(widthInches) => patchRack(partition.id, rack.id, { widthInches })}
+              />
+            </div>
             <div className="w-44">
               <SelectField
                 label="Leaf model"
@@ -708,7 +722,7 @@ export default function RackSection({
             </div>
             <div className="w-28">
               <NumberField
-                label="Height (U)"
+                label={`Height (${rackUnit(rack.widthInches)})`}
                 value={rack.heightUnits}
                 min={1}
                 onChange={(n) => patchRack(partition.id, rack.id, { heightUnits: n })}

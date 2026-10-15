@@ -1,3 +1,5 @@
+import RackWidthField from './RackWidthField'
+import { rackUnit } from '../../model/catalog'
 import {
   itemLabel,
   nosOptions,
@@ -17,7 +19,7 @@ import InfoBubble from './InfoBubble'
 import IssueBadges from './IssueBadges'
 import { fabricAnchor } from './navigate'
 import { Icon, SECTION_ICON } from '../icons'
-import { nosOptionLabel, optionLabel } from './options'
+import { nosOptionLabel, optionLabel, serverOptions } from './options'
 
 function switchOptions(role: SwitchRole) {
   return switchesForRole(role).map((i) => ({
@@ -204,7 +206,9 @@ export default function CentralRackSection({
         <summary className="cursor-pointer text-sm font-semibold text-gray-700">
           Advanced{' '}
           <span className="font-normal text-gray-500">
-            · devices and models, network OS, fabric links and rack defaults
+            · {partition.rackDefaults.widthInches}″{' '}
+            {partition.rackDefaults.widthInches === 21 ? 'ORV3' : 'EIA'}, devices and models,
+            network OS, fabric links and rack defaults
           </span>
           {advancedIssues.length > 0 && (
             <span className="ml-2 inline-flex align-middle">
@@ -284,10 +288,7 @@ export default function CentralRackSection({
               href: DOCS.architecture,
             }}
             value={fabric.mgmt.serverModelId}
-            options={serversForUsage('management').map((i) => ({
-              value: i.id,
-              label: optionLabel(i),
-            }))}
+            options={serverOptions(serversForUsage('management'), fabric.mgmt.serverModelId)}
             onChange={(v) => patchMgmt({ serverModelId: v })}
           />
         </div>
@@ -342,9 +343,15 @@ export default function CentralRackSection({
         </p>
 
         <h5 className="mt-4 mb-2 text-xs font-semibold text-gray-500">Rack defaults</h5>
+        <div className="mb-3 w-40">
+          <RackWidthField
+            value={partition.rackDefaults.widthInches}
+            onChange={(widthInches) => patchRackDefaults(partition.id, { widthInches })}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <NumberField
-            label="Default rack height (U)"
+            label={`Default rack height (${rackUnit(partition.rackDefaults.widthInches)})`}
             value={partition.rackDefaults.heightUnits}
             min={1}
             onChange={(n) => patchRackDefaults(partition.id, { heightUnits: n })}

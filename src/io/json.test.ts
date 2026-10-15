@@ -4,6 +4,15 @@ import { SCHEMA_VERSION } from '../model/migrate'
 import { exportPlanJson, importPlanJson } from './json'
 
 describe('plan JSON round-trip', () => {
+  it.each([1, 2, 3])('discards a legacy adapter count of %s on import', (count) => {
+    const plan = createEmptyPlan()
+    const raw = JSON.parse(exportPlanJson(plan))
+    raw.partitions[0].racks[0].servers[0].mountingAdaptersPerChassis = count
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(imported).toEqual(plan)
+    expect(exportPlanJson(imported)).not.toContain('mountingAdaptersPerChassis')
+  })
+
   it('round-trips group and per-position CPU counts', () => {
     const plan = createEmptyPlan()
     const group = plan.partitions[0].racks[0].servers[0]
