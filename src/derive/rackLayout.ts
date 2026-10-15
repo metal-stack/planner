@@ -8,7 +8,7 @@ import {
   type Rack,
   type RackWidth,
 } from '../model/plan'
-import { chassisCount } from './bom'
+import { chassisCount } from './servers'
 import { hasOwnRack, inCentralRack } from './controlPlane'
 
 // Derives physical rack elevations (which device sits in which height

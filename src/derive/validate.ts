@@ -35,6 +35,7 @@ import { deriveBom, mgmtUplinkSpeed, rackBmcPorts, spinePortsPerSpine } from './
 import { controlPlaneLeafCount, controlPlaneSwitchPorts, inCentralRack } from './controlPlane'
 import { validateIpPlan } from './ip/validateIp'
 import { deriveRackLayout, formatPower } from './rackLayout'
+import { orv3Infrastructure } from './orv3'
 
 // Validates a Plan against physical switch limits and the official
 // metal-stack hardware compatibility list (encoded in catalog.ts).
@@ -708,13 +709,22 @@ export function validatePlan(plan: Plan): Issue[] {
       // Height, power and a group's member names are edited in the rack's
       // Advanced section; the central rack's budget is partition-level.
       const inAdvanced = { where, target: { ...target, ...(rack.rackId && { field: 'advanced' }) } }
-      if (rack.widthInches === 21) {
+      const infrastructure = orv3Infrastructure(rack)
+      if (infrastructure) {
         report(
           issues,
           inAdvanced,
           'warning',
-          'ORV3 power infrastructure is not included in the BOM or elevation: reserve space and budget for 48V DC bus bars and power shelves. The BOM includes mounting adapter kits for 19-inch equipment; reserve any extra space needed by the selected shelves or rails. Enter usable rack height after these reservations.',
+          `The BOM includes an ORV3 frame with bus bar, ${infrastructure.shelfCount} populated power shelves (N+N, sized to ${rack.powerWatts} W estimated equipment load) and their AC input cable sets for this physical rack. Reserve ${infrastructure.reservedHeightUnits}OU for the shelves outside this equipment elevation; the reference frame has ${infrastructure.usableHeightUnits}OU left for equipment before mounting allowances. Enter usable rack height after these reservations. Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch devices with the supplier. Battery backup is optional and excluded. Shared rack infrastructure appears under Production in the BOM.`,
         )
+        if (rack.heightUnits > infrastructure.usableHeightUnits) {
+          report(
+            issues,
+            inAdvanced,
+            'warning',
+            `Configured usable height ${rack.heightUnits}OU exceeds the reference ORV3 frame's ${infrastructure.usableHeightUnits}OU available after power shelves. Reduce usable height or arrange a different rack configuration with the supplier.`,
+          )
+        }
       }
       if (seen.has(rack.name)) {
         report(

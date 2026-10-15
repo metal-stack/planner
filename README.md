@@ -47,15 +47,33 @@ consistent — you edit the plan, everything else follows from it.
   physical racks sharing the middle rack's leaf pair and management leaf. Every physical rack
   gets its own number by default (a group takes three), and names stay editable.
 - **Rack formats** — switch each rack or rack group between 19-inch EIA (U) and 21-inch
-  ORV3 (OU) under Advanced, consistently across all rack types. Partition defaults seed new racks and set the central rack format. Gigabyte
+  ORV3 (OU) under Advanced, consistently across all rack types. Selecting an ORV3 node automatically
+  changes its compute rack or rack group to ORV3. If that rack already has 19-inch servers selected,
+  a confirmation warns about the format change and additional mounting adapters in the BOM;
+  cancelling keeps the plan unchanged. Partition defaults seed new racks and set the central rack format. Gigabyte
   TO25-S12 and TO25-Z12 sleds use separately counted TO25-BT0 two-node trays, with one BMC
   link per sled. ORV3 racks also accept 19-inch equipment: the BOM estimates one mounting
   adapter kit for 1U chassis/devices and two for 2U and taller. Counts use
   physical chassis, including partially filled ones, rather than nodes. Choose shelves or
   rails to match each device's height, depth and load. Switching keeps existing selections;
   21-inch nodes in 19-inch racks remain incompatible. Existing saved plans default to 19-inch racks.
-  ORV3 power shelves and bus bars are planned separately; enter usable rack height after
-  reserving space for them and any extra space required by the selected mounting hardware. TO25 power values are
+  The BOM includes one GIGABYTE DOA3-ST0 frame with its integrated 48V bus bar per physical
+  ORV3 rack, including all three members of a rack group, central racks and separate on-prem
+  control-plane racks. Delta 33 kW shelf assemblies include six 5.5 kW PSUs and a power
+  management controller; the estimate is `2 × ceil(estimated equipment watts / 33000)` shelves per
+  physical rack for N+N feeds, plus one complete AC input cable set per shelf. The load uses
+  the rack elevation's server, GPU and switch estimates, including partial trays and each rack
+  group's actual equipment distribution. Empty racks get a frame but no power shelves. Changing
+  the rack power budget only changes validation, not shelf quantities. Shared rack
+  infrastructure belongs to the Production BOM scope. Supplier-specific assembly and cable
+  ordering codes remain blank pending confirmation. Battery backup is optional and excluded.
+  Hardware references: [GIGABYTE rack specifications](https://www.gigabyte.com/Enterprise/Data-Center/DOA3-ST0)
+  and [Delta power solutions](https://www.deltaww.com/en-US/products/power-solutions).
+  Power shelves are included in the BOM but sit outside the equipment elevation: enter usable
+  rack height after reserving 1OU per shelf and any extra mounting space. The reference frame
+  provides 43OU before shelves (41OU with the usual pair); validation flags greater usable heights.
+  Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch
+  devices with the supplier. TO25 power values are
   planning estimates. SP5 CPU/RAM parts for the Z12 and TO25 E1.S/boot-drive options are not
   yet modeled; the planner flags those omissions instead of adding incompatible default parts.
 - **CPU sockets and RAM** — modeled dual-socket servers offer a count selector for one or two identical CPUs,

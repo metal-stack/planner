@@ -6,6 +6,7 @@ import { usePlanStore } from '../store/planStore'
 import { deriveBom, deriveBomByPartition, rackBmcPorts, type BomScope } from './bom'
 import { deriveRackLayout } from './rackLayout'
 import { validatePlan } from './validate'
+import { orv3Infrastructure } from './orv3'
 
 function orv3Plan(count = 3) {
   const plan = createEmptyPlan()
@@ -15,6 +16,179 @@ function orv3Plan(count = 3) {
   rack.servers[0].count = count
   return plan
 }
+
+describe('ORV3 rack and power BOM', () => {
+  const frameId = 'rack-gigabyte-doa3-st0'
+  const shelfId = 'power-orv3-shelf-33kw'
+  const cableSetId = 'power-orv3-input-cable-set'
+  const ids = [frameId, shelfId, cableSetId]
+  const quantity = (plan: ReturnType<typeof createEmptyPlan>, id: string) =>
+    deriveBom(plan).find((line) => line.catalogId === id)?.quantity ?? 0
+
+  it('adds a frame with bus bar, redundant populated shelves and input sets per ORV3 rack', () => {
+    const plan = orv3Plan()
+    expect(ids.map((id) => quantity(plan, id))).toEqual([1, 2, 2])
+    const shelves = deriveBom(plan).find((line) => line.catalogId === shelfId)!
+    expect(shelves.reasons).toHaveLength(1)
+    expect(shelves.reasons[0].where).toBe(plan.partitions[0].racks[0].name)
+    expect(shelves.reasons[0].detail).toContain('N+N')
+    expect(shelves.reasons[0].detail).toContain('PSUs and controller included')
+    expect(deriveBom(plan).filter((line) => line.category === 'power')).toHaveLength(2)
+    expect(deriveBom(plan).some((line) => ids.some((id) => line.catalogId === `${id}#spare`))).toBe(
+      false,
+    )
+    expect(ids.map((id) => quantity(createEmptyPlan(), id))).toEqual([0, 0, 0])
+  })
+
+  it('scales with server load, including partial trays, independently of the rack budget', () => {
+    const plan = orv3Plan()
+    const rack = plan.partitions[0].racks[0]
+    rack.leafCount = 0
+    plan.partitions[0].fabric.mgmt.leafPerRack = 0
+    for (const [nodes, shelves] of [
+      [0, 0],
+      [82, 2], // 32.8 kW
+      [83, 4], // 33.2 kW, including a half-populated tray
+      [165, 4], // Exactly 66 kW
+      [166, 6],
+    ]) {
+      rack.servers[0].count = nodes
+      expect(quantity(plan, shelfId)).toBe(shelves)
+      expect(quantity(plan, cableSetId)).toBe(shelves)
+      expect(quantity(plan, frameId)).toBe(1)
+    }
+    rack.maxPowerWatts = 100000
+    expect(quantity(plan, shelfId)).toBe(6)
+    rack.servers[0].count = 3
+    expect(quantity(plan, shelfId)).toBe(2)
+  })
+
+  it.each([
+    [33000, 2],
+    [33001, 4],
+  ])('rounds up at the shelf capacity boundary: %s W', (powerWatts, shelfCount) => {
+    expect(orv3Infrastructure({ widthInches: 21, powerWatts })?.shelfCount).toBe(shelfCount)
+  })
+
+  it('sizes rack-group members individually and leaves empty frames without shelves', () => {
+    const plan = orv3Plan(0)
+    const partition = plan.partitions[0]
+    partition.racks[0] = withRackKind(partition, partition.racks[0], 'rack-group')
+    // Only the middle rack has equipment (shared switches).
+    expect(ids.map((id) => quantity(plan, id))).toEqual([3, 2, 2])
+    partition.racks[0].servers[0].count = 246
+    // 32.8 kW of servers in each member, plus 690 W of switches in the middle.
+    expect(ids.map((id) => quantity(plan, id))).toEqual([3, 8, 8])
+    const shelves = deriveBom(plan).find((line) => line.catalogId === shelfId)!
+    expect(shelves.reasons.map((reason) => reason.quantity)).toEqual([2, 4, 2])
+    expect(shelves.reasons[1].detail).toContain('33490 W estimated equipment load')
+    expect(deriveBom(plan).find((line) => line.catalogId === shelfId)?.reasons[0].where).toBe(
+      partition.racks[0].name,
+    )
+  })
+
+  it('includes GPUs and per-position overrides in the equipment load', () => {
+    const plan = orv3Plan(44)
+    const group = plan.partitions[0].racks[0].servers[0]
+    expect(quantity(plan, shelfId)).toBe(2)
+    group.gpu = { modelId: 'gpu-h100-pcie', perNode: 1 }
+    // 17.6 kW servers + 15.4 kW GPUs + 690 W switches.
+    expect(quantity(plan, shelfId)).toBe(4)
+    group.nodeConfigs = { 0: { sizeId: group.sizeId } }
+    // Only half of the nodes now have a GPU.
+    expect(quantity(plan, shelfId)).toBe(2)
+  })
+
+  it('sizes central and separate control-plane shelves from their hosted equipment', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].rackDefaults.widthInches = 21
+    const cp = plan.controlPlane
+    cp.hosting = 'on-prem'
+    cp.nodeCount = 100
+    cp.rack.widthInches = 21
+    // The management server model draws 400 W per node.
+    expect(quantity(plan, shelfId)).toBe(4)
+    cp.placement = 'own-rack'
+    expect(quantity(plan, shelfId)).toBe(6) // Central pair plus four for the control plane.
+    cp.nodeCount = 3
+    expect(quantity(plan, shelfId)).toBe(4)
+    cp.hosting = 'kaas'
+    expect(quantity(plan, shelfId)).toBe(2)
+  })
+
+  it('includes central and hosted control-plane racks once in their host partition', () => {
+    const plan = createEmptyPlan()
+    plan.partitions.push(defaultPartition('Partition 2'))
+    const host = plan.partitions[1]
+    host.rackDefaults.widthInches = 21
+    plan.controlPlane.hosting = 'on-prem'
+    plan.controlPlane.partitionId = host.id
+    plan.controlPlane.rack.widthInches = 21
+    // Hosted nodes share the central frame and power infrastructure.
+    expect(ids.map((id) => quantity(plan, id))).toEqual([1, 2, 2])
+    plan.controlPlane.placement = 'own-rack'
+    expect(ids.map((id) => quantity(plan, id))).toEqual([2, 4, 4])
+    const partitionBoms = deriveBomByPartition(plan)
+    expect(partitionBoms[0].lines.some((line) => ids.includes(line.catalogId))).toBe(false)
+    for (const id of ids) {
+      expect(partitionBoms[1].lines.find((line) => line.catalogId === id)?.quantity).toBe(
+        quantity(plan, id),
+      )
+    }
+    expect(
+      deriveBom(plan)
+        .find((line) => line.catalogId === frameId)
+        ?.reasons.map((reason) => reason.where),
+    ).toEqual(['Partition 2 - Central rack', `Partition 2 - ${plan.controlPlane.rack.name}`])
+    plan.controlPlane.hosting = 'kaas'
+    expect(ids.map((id) => quantity(plan, id))).toEqual([1, 2, 2])
+  })
+
+  it('assigns shared infrastructure to production without duplicating it in management', () => {
+    const plan = orv3Plan()
+    plan.partitions[0].rackDefaults.widthInches = 21
+    for (const id of ids) {
+      expect(deriveBom(plan, 'production').find((line) => line.catalogId === id)?.quantity).toBe(
+        quantity(plan, id),
+      )
+      expect(deriveBom(plan, 'management').some((line) => line.catalogId === id)).toBe(false)
+    }
+    const all = deriveBom(plan).filter((line) => line.category !== 'spare')
+    for (const line of all) {
+      const split = (['production', 'management'] as const).reduce(
+        (sum, scope) =>
+          sum +
+          (deriveBom(plan, scope).find((item) => item.catalogId === line.catalogId)?.quantity ?? 0),
+        0,
+      )
+      expect(split, line.catalogId).toBe(line.quantity)
+    }
+  })
+
+  it('reports shelf reservations without changing usable-height elevations', () => {
+    const plan = orv3Plan()
+    const rack = plan.partitions[0].racks[0]
+    rack.heightUnits = 42
+    expect(
+      validatePlan(plan).some((issue) =>
+        issue.message.includes('41OU available after power shelves'),
+      ),
+    ).toBe(true)
+    rack.heightUnits = 41
+    expect(
+      validatePlan(plan).some((issue) => issue.message.includes('exceeds the reference ORV3')),
+    ).toBe(false)
+    expect(validatePlan(plan).some((issue) => issue.message.includes('Reserve 2OU'))).toBe(true)
+    rack.servers[0].count = 83
+    expect(validatePlan(plan).some((issue) => issue.message.includes('Reserve 4OU'))).toBe(true)
+    expect(
+      validatePlan(plan).some((issue) =>
+        issue.message.includes('39OU available after power shelves'),
+      ),
+    ).toBe(true)
+    expect(deriveRackLayout(plan)[0].racks[1].usedU).toBe(87)
+  })
+})
 
 describe('ORV3 racks', () => {
   it('orders sleds, partial trays, CPUs and BMC links independently', () => {

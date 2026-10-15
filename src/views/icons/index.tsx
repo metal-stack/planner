@@ -138,6 +138,8 @@ export const CATEGORY_ICON: Record<CatalogCategory | 'spare', LucideIcon> = {
   switch: NetworkSwitch,
   server: Server,
   chassis: Server,
+  rack: Rack,
+  power: Cable,
   router: Router,
   nic: CircuitBoard,
   gpu: Gpu,

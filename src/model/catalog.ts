@@ -58,6 +58,8 @@ export type CatalogCategory =
   | 'switch'
   | 'server'
   | 'chassis'
+  | 'rack'
+  | 'power'
   | 'router'
   | 'nic'
   | 'gpu'
@@ -139,6 +141,10 @@ export interface CatalogItem {
    *  (1600 W / 2200 W per full chassis); the rest are datasheet-based
    *  estimates. Partial chassis are scaled by their node count. */
   powerWatts?: number
+  /** Output capacity of a fully populated power shelf, not its consumption. */
+  powerCapacityWatts?: number
+  /** Rack space available before power shelves and mounting reservations. */
+  usableHeightUnits?: number
   ports?: { speed: PortSpeed; count: number }[]
   /** Board socket on servers, compatible socket on CPUs. */
   socket?: CpuSocket
@@ -515,6 +521,42 @@ export const catalog: Record<string, CatalogItem> = {
     model: '19″ to 21″ rack adapter kit',
     description:
       'EIA mounting kit for ORV3 (select shelf or rails for device height, depth and load)',
+    rackWidthInches: 21,
+  },
+  // Rack and included bus bar: https://www.gigabyte.com/Enterprise/Data-Center/DOA3-ST0
+  // 43 usable OU; the reinforced bar occupies the 23rd OU of the 44OU frame.
+  // The published ordering number has a configuration wildcard, so use the
+  // model until the supplier confirms an orderable configuration.
+  'rack-gigabyte-doa3-st0': {
+    id: 'rack-gigabyte-doa3-st0',
+    category: 'rack',
+    vendor: 'GIGABYTE',
+    model: 'DOA3-ST0',
+    description: 'ORV3 rack frame, integrated 48V DC bus bar',
+    rackWidthInches: 21,
+    heightUnits: 44,
+    usableHeightUnits: 43,
+  },
+  // Gigabyte lists Delta's 21-inch 33 kW shelf as an option for DOA3-ST0.
+  // Fully populated assembly: six 5.5 kW PSUs and a power management controller.
+  // https://www.deltaww.com/en-US/products/power-solutions
+  // https://www.gigabyte.com/FileUpload/Global/WebPage/1052/OCP-ORV3-Solution.pdf
+  // Quote as an assembly, not a bare shelf; no separate PSU/controller lines.
+  'power-orv3-shelf-33kw': {
+    id: 'power-orv3-shelf-33kw',
+    category: 'power',
+    vendor: 'Delta',
+    model: '33 kW ORV3 power shelf assembly',
+    description: '48V DC power shelf, 6× 5.5 kW PSUs, power management controller',
+    rackWidthInches: 21,
+    heightUnits: 1,
+    powerCapacityWatts: 33000,
+  },
+  'power-orv3-input-cable-set': {
+    id: 'power-orv3-input-cable-set',
+    category: 'power',
+    model: 'ORV3 power shelf input cable set',
+    description: 'Complete AC feed cable set per shelf (confirm site connectors and feed rating)',
     rackWidthInches: 21,
   },
   // Management servers are not provisioned by metal-stack, so the
