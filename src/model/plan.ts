@@ -40,6 +40,8 @@ export type GpuConfig = z.infer<typeof GpuConfigSchema>
  *  for the server board (see model/sizes.ts). */
 export const ComputeOverrideSchema = z.object({
   cpuModelId: z.string().optional(),
+  /** Installed identical CPUs per node. Absent = one, including older plans. */
+  cpuCount: z.union([z.literal(1), z.literal(2)]).optional(),
   dimmModelId: z.string().optional(),
   dimmsPerNode: z.number().int().min(1).optional(),
 })

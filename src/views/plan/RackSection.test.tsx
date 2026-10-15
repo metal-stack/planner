@@ -32,6 +32,24 @@ describe('imported server configurations', () => {
     expect(html).toContain('<option value="cpu-foo" selected="">cpu-foo (incompatible)</option>')
   })
 
+  it('renders the CPU socket count and active RAM limit after import', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.modelId = 'server-bigtwin-x12'
+    const single = renderImportedRack(plan).html
+    expect(single).toMatch(/CPU sockets<\/span><input type="number" min="1" max="2"[^>]*value="1"/)
+    expect(single).toContain('min="1" max="8"')
+    group.compute = { cpuCount: 2 }
+    const dual = renderImportedRack(plan).html
+    expect(dual).toMatch(/CPU sockets<\/span><input type="number" min="1" max="2"[^>]*value="2"/)
+    expect(dual).toContain('min="2" max="16"')
+    expect(dual).toContain('2× Xeon Silver 4309Y')
+    expect(dual).toContain('n1-medium-x86 (8 cores, 32 GiB, customized)')
+  })
+
+  it('does not offer dual CPUs on a single-socket server', () => {
+    expect(renderImportedRack(createEmptyPlan()).html).not.toContain('CPU sockets')
+  })
   it('renders an unknown CPU with its validation error and a selected replacement option', () => {
     const plan = createEmptyPlan()
     plan.partitions[0].racks[0].servers[0].compute = { cpuModelId: 'cpu-foo' }

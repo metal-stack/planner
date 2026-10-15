@@ -88,6 +88,23 @@ describe('deriveBom NIC rules', () => {
 })
 
 describe('deriveBom node size rules', () => {
+  it('counts identical CPUs per configuration without multiplying RAM, including partial chassis', () => {
+    const plan = planWithServer('server-bigtwin-x12', 6)
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.compute = { cpuCount: 2 }
+    group.nodeConfigs = { 1: { sizeId: group.sizeId } }
+    // Four dual-CPU nodes, two single-CPU nodes; all retain two DIMMs.
+    expect(quantity(plan, 'cpu-xeon-4309y')).toBe(10)
+    expect(quantity(plan, 'mem-ddr4r-16g')).toBe(12)
+    expect(
+      deriveBom(plan)
+        .find((line) => line.catalogId === 'cpu-xeon-4309y')
+        ?.reasons.map((r) => r.detail),
+    ).toEqual([
+      '4 worker nodes × 2 CPUs (n1-medium-x86, customized)',
+      '2 worker nodes at chassis position 2 × 1 CPU (n1-medium-x86)',
+    ])
+  })
   it.each([
     ['n1-medium-x86', 'mem-ddr5r-6400-16g', 2],
     ['c1-medium-x86', 'mem-ddr5r-6400-32g', 4],
