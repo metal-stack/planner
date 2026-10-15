@@ -2,9 +2,11 @@ import {
   catalog,
   cpuLabel,
   cpusForServer,
+  defaultNicId,
   dimmsForServer,
   gpusForServer,
   itemLabel,
+  nicsForServer,
   serversForUsage,
   switchesForRole,
   type CatalogItem,
@@ -80,6 +82,14 @@ function ServerGroupRow({
       label: `${size.id} (${size.cores} cores, ${size.memoryGiB} GiB${note})`,
     }
   })
+  const defaultNic = defaultNicId(group.uplink)
+  const nicOptions = catalogOptions(
+    nicsForServer(group.modelId, group.uplink).filter(
+      (item) => item.id !== defaultNic || item.id === shown.nicModelId,
+    ),
+    shown.nicModelId,
+    `${itemLabel(defaultNic)} (default)`,
+  )
   // The collapsed summary always describes the group's shared configuration.
   const groupResolved = resolveNodeCompute(group)
   const nodeSummary = [
@@ -91,6 +101,7 @@ function ServerGroupRow({
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
       ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
       : undefined,
+    itemLabel(group.nicModelId ?? defaultNic),
     group.gpu ? itemLabel(group.gpu.modelId) : undefined,
   ]
     .filter(Boolean)
@@ -189,6 +200,7 @@ function ServerGroupRow({
           onChange={(v) =>
             patch({
               uplink: v as ServerGroup['uplink'],
+              nicModelId: undefined,
             })
           }
         />
@@ -257,6 +269,16 @@ function ServerGroupRow({
               />
             </>
           )}
+          <SelectField
+            label="NIC"
+            info={{
+              text: "Dual-port NIC fitted to every node, filtered to the server's connector compatibility and the group's uplink speed. All options are on the metal-stack hardware compatibility list; the default is the Intel E810 the reference setups use.",
+              href: DOCS.hardware,
+            }}
+            value={shown.nicModelId ?? ''}
+            options={nicOptions}
+            onChange={(v) => patchShown({ nicModelId: v || undefined })}
+          />
           {gpuOptions.length > 0 && (
             <SelectField
               label="GPU"

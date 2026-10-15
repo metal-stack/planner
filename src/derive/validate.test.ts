@@ -153,6 +153,25 @@ describe('node compute and NIC configuration', () => {
       'AS-3015MR-H8TNR has 4 DIMM slots per node, but 6 DIMMs per node are configured.',
     )
   })
+
+  it('rejects an unknown NIC override', () => {
+    const plan = basePlan()
+    group(plan).nicModelId = 'nic-foo'
+    expect(errors(plan)).toContain('Unknown NIC model "nic-foo".')
+  })
+
+  it('accepts a SIOM NIC on the X11 BigTwin', () => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-bigtwin-x11'
+    group(plan).nicModelId = 'nic-aoc-mh25g'
+    expect(errors(plan)).toEqual([])
+  })
+
+  it('rejects a NIC without ports at the uplink speed', () => {
+    const plan = basePlan()
+    group(plan).nicModelId = 'nic-e810-cqda2'
+    expect(errors(plan)).toContain("E810-CQDA2 has no 25G ports, but the group's uplink is 2x25G.")
+  })
 })
 
 describe('fabric type', () => {
