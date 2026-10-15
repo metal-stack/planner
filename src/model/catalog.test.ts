@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { deriveBom } from '../derive/bom'
 import {
   catalog,
+  cpusForServer,
+  dimmsForServer,
   gpusForServer,
   itemLabel,
   legacyIdMap,
@@ -146,6 +148,31 @@ describe('category invariants', () => {
       expect(item.nodesPerChassis, `${id}.nodesPerChassis`).toBeGreaterThan(0)
       expect(item.serverUsages?.length, `${id}.serverUsages`).toBeGreaterThan(0)
       expect(item.vendor, `${id}.vendor`).toBeDefined()
+      if (item.socket) expect(item.dimmSlots, `${id}.dimmSlots`).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every CPU its orderable and compatibility facts', () => {
+    const cpus = entries.filter(([, item]) => item.category === 'cpu')
+    expect(cpus.length).toBeGreaterThan(0)
+    for (const [id, item] of cpus) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.socket, `${id}.socket`).toBeDefined()
+      expect(item.cores, `${id}.cores`).toBeGreaterThan(0)
+      expect(item.threads, `${id}.threads`).toBeGreaterThanOrEqual(item.cores ?? 0)
+      expect(item.powerWatts, `${id}.powerWatts`).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every memory module its orderable and capacity facts', () => {
+    const memory = entries.filter(([, item]) => item.category === 'memory')
+    expect(memory.length).toBeGreaterThan(0)
+    for (const [id, item] of memory) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.dimmType, `${id}.dimmType`).toBeDefined()
+      expect(item.dimmGiB, `${id}.dimmGiB`).toBeGreaterThan(0)
     }
   })
 
@@ -194,6 +221,11 @@ describe('reachability', () => {
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
       ...gpusForServer('server-superserver-tn12'),
+      // Every board's NIC, CPU and DIMM dropdowns, so a part reachable only
+      // through a newly annotated socket counts as offered.
+      ...Object.values(catalog)
+        .filter((item) => item.category === 'server')
+        .flatMap((server) => [...cpusForServer(server.id), ...dimmsForServer(server.id)]),
     ].map((i) => i.id),
   )
 

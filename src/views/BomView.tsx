@@ -35,6 +35,8 @@ const CATEGORY_LABEL = {
   router: 'Routers',
   nic: 'NICs',
   gpu: 'GPUs',
+  cpu: 'CPUs',
+  memory: 'Memory',
   transceiver: 'Transceivers',
   cable: 'Cables',
   license: 'Licenses',
