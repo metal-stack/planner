@@ -1,4 +1,11 @@
-import { catalog, itemLabel, nosLabel, nosLicenseId, portCount } from '../model/catalog'
+import {
+  catalog,
+  defaultNicId,
+  itemLabel,
+  nosLabel,
+  nosLicenseId,
+  portCount,
+} from '../model/catalog'
 import {
   mgmtDeviceCount,
   type Nos,
@@ -258,6 +265,8 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     }
   }
 
+  bom.add(config.nicModelId ?? defaultNicId(group.uplink), count, `${who} × 1 NIC`)
+
   addNodeUplinks(bom, group.count, group.uplink, role)
 }
 
@@ -267,7 +276,6 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
 function addNodeUplinks(bom: BomBuilder, nodes: number, uplink: UplinkSpeed, what: string): void {
   const uplinkPorts = 2 * nodes
   if (uplink === '2x25G') {
-    bom.add('nic-e810-xxvda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
     // 25G server ports terminate on 100G switch ports via 4x25G breakout:
     // server side gets a 25G-SR transceiver per port, the switch side one
     // 100G-SR4 per started group of four, joined by an MTP breakout cable.
@@ -284,7 +292,6 @@ function addNodeUplinks(bom: BomBuilder, nodes: number, uplink: UplinkSpeed, wha
       `${uplinkPorts} × 25G ${what} ports / 4 per breakout`,
     )
   } else {
-    bom.add('nic-e810-cqda2', nodes, `${nodes} ${what} nodes × 1 NIC`)
     // 100G point-to-point: a 100G-SR4 transceiver on each end plus an MTP
     // trunk cable per link.
     bom.add('sfp-100g-sr4', 2 * uplinkPorts, `${uplinkPorts} × 100G ${what} links × 2 ends`)
@@ -397,6 +404,7 @@ function addControlPlane(
   const mgmt = central ? mgmtCentral : bom.on('management').at(where)
 
   prod.add(cp.nodeModelId, nodes, `${nodes} control plane nodes`)
+  prod.add(defaultNicId(cp.uplink), nodes, `${nodes} control plane nodes × 1 NIC`)
   addNodeUplinks(prod, nodes, cp.uplink, 'control plane')
 
   if (ownRack) {

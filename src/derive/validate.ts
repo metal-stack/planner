@@ -3,7 +3,9 @@ import {
   dimmTypeForSocket,
   gpuFits,
   itemLabel,
+  nicFitsServer,
   portCount,
+  uplinkPortSpeed,
   type DimmType,
   type SwitchRole,
 } from '../model/catalog'
@@ -237,6 +239,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     }
     checkGpu(issues, scope, group, group, '')
     checkCompute(issues, scope, group, group, '')
+    checkNic(issues, scope, group, group, '')
   }
 }
 
@@ -374,6 +377,41 @@ function checkCompute(
       'error',
       `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
         `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
+    )
+  }
+}
+
+/** A custom NIC must fit the server and provide ports at the uplink speed. */
+function checkNic(
+  issues: Issue[],
+  scope: Scope,
+  group: ServerGroup,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  if (!config.nicModelId) return
+  const nic = catalog[config.nicModelId]
+  if (!nic || nic.category !== 'nic') {
+    report(issues, scope, 'error', `${prefix}Unknown NIC model "${config.nicModelId}".`)
+    return
+  }
+  const server = catalog[group.modelId]
+  if (server && !nicFitsServer(nic, server)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(nic.id)} requires a ${nic.nicFormFactor?.toUpperCase()} slot, ` +
+        `which ${itemLabel(group.modelId)} does not provide.`,
+    )
+  }
+  if (portCount(nic, uplinkPortSpeed(group.uplink)) === 0) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(nic.id)} has no ${uplinkPortSpeed(group.uplink)} ports, ` +
+        `but the group's uplink is ${group.uplink}.`,
     )
   }
 }

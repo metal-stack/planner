@@ -35,7 +35,7 @@ describe('plan JSON round-trip', () => {
     expect(() => importPlanJson(JSON.stringify(broken))).toThrow('not a valid plan')
   })
 
-  it('round-trips compute overrides', () => {
+  it('round-trips compute and NIC overrides', () => {
     const plan = createEmptyPlan()
     const group = plan.partitions[0].racks[0].servers[0]
     group.sizeId = 'c1-medium-x86'
@@ -44,6 +44,7 @@ describe('plan JSON round-trip', () => {
       dimmModelId: 'mem-ddr5u-32g',
       dimmsPerNode: 4,
     }
+    group.nicModelId = 'nic-connectx5'
     expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
   })
 })
@@ -56,9 +57,11 @@ describe('plans from before node configuration', () => {
     const group = raw.partitions[0].racks[0].servers[0]
     delete group.sizeId
     delete group.compute
+    delete group.nicModelId
     const imported = importPlanJson(JSON.stringify(raw)).partitions[0].racks[0].servers[0]
     expect(imported.sizeId).toBe('n1-medium-x86')
     expect(imported.compute).toBeUndefined()
+    expect(imported.nicModelId).toBeUndefined()
   })
 })
 
