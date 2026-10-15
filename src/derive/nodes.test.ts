@@ -12,6 +12,7 @@ describe('node tallies', () => {
       count: 4,
       uplink: '2x100G',
       sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     })
     plan.partitions.push(defaultPartition('Partition 2'))
 

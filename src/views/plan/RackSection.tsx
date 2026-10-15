@@ -13,6 +13,8 @@ import {
   switchesForRole,
   type CatalogItem,
 } from '../../model/catalog'
+import { useState } from 'react'
+import { chassisPositions, groupConfig, nodeConfig } from '../../model/nodeConfig'
 import type { DriveConfig, NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
 import { nodeSizes, resolveNodeCompute } from '../../model/sizes'
 import { formatTally, rackNodes } from '../../derive/nodes'
@@ -37,6 +39,36 @@ function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string
   return options
 }
 
+/** Node selector chip in the Node configuration menu: `custom` marks a node
+ *  carrying its own configuration. */
+function NodeButton({
+  active,
+  custom,
+  onClick,
+  children,
+}: {
+  active: boolean
+  custom?: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+        active
+          ? 'border-ink bg-ink text-white'
+          : custom
+            ? 'border-brand-strong bg-white font-semibold text-brand-strong hover:bg-white/60'
+            : 'border-gray-300 bg-white text-gray-700 hover:bg-white/60'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 function ServerGroupRow({
   partition,
   rack,
@@ -51,6 +83,7 @@ function ServerGroupRow({
   const patch = (p: Partial<ServerGroup>) => patchServerGroup(partition.id, rack.id, group.id, p)
 
   const nodesPer = catalog[group.modelId]?.nodesPerChassis ?? 1
+  const multiNode = nodesPer > 1
   // Nodes this group could grow to with the leaf ports the other groups
   // leave free: 25G needs half a 100G port per node (4x25G breakout, 2
   // ports per node), 100G two full ports — rounded down to whole chassis.
@@ -63,7 +96,24 @@ function ServerGroupRow({
   const cpuOptions = cpusForServer(group.modelId)
   const dimmOptions = dimmsForServer(group.modelId)
 
-  const shown: NodeConfig = group
+  // The chassis position whose configuration the fields edit: null = the
+  // group's shared configuration; a position applies to that node in every
+  // chassis and keeps its own complete copy once edited.
+  const positions = chassisPositions(group)
+  const [selectedNode, setSelectedNode] = useState<number | null>(null)
+  // Single-node servers edit their effective configuration directly, including
+  // a position-zero override from an imported plan or a previous model.
+  const sel = !multiNode
+    ? group.nodeConfigs[0] !== undefined
+      ? 0
+      : null
+    : selectedNode !== null && selectedNode < positions
+      ? selectedNode
+      : null
+  const shown: NodeConfig = sel === null ? groupConfig(group) : nodeConfig(group, sel)
+  const customPositions = Object.keys(group.nodeConfigs)
+    .map(Number)
+    .filter((i) => i >= 0 && i < positions)
 
   const gpuOptions = catalogOptions(gpusForServer(group.modelId), shown.gpu?.modelId)
 
@@ -92,8 +142,10 @@ function ServerGroupRow({
     shown.nicModelId,
     `${itemLabel(defaultNic)} (default)`,
   )
-  // The collapsed summary always describes the group's shared configuration.
-  const groupResolved = resolveNodeCompute(group)
+  // Multi-node summaries describe the shared configuration; single-node
+  // summaries describe the configuration being edited.
+  const summaryConfig = multiNode ? groupConfig(group) : shown
+  const groupResolved = resolveNodeCompute({ modelId: group.modelId, ...summaryConfig })
   const nodeSummary = [
     groupResolved.cpuModelId
       ? catalog[groupResolved.cpuModelId]?.category === 'cpu'
@@ -103,13 +155,22 @@ function ServerGroupRow({
     groupResolved.dimmModelId && groupResolved.dimmsPerNode
       ? `${groupResolved.dimmsPerNode}× ${catalog[groupResolved.dimmModelId]?.description ?? groupResolved.dimmModelId}`
       : undefined,
-    itemLabel(group.nicModelId ?? defaultNic),
-    group.gpu ? itemLabel(group.gpu.modelId) : undefined,
+    itemLabel(summaryConfig.nicModelId ?? defaultNic),
+    summaryConfig.gpu ? itemLabel(summaryConfig.gpu.modelId) : undefined,
+    multiNode && customPositions.length > 0
+      ? `${customPositions.length} chassis position${customPositions.length === 1 ? '' : 's'} customized`
+      : undefined,
   ]
     .filter(Boolean)
     .join(', ')
 
-  const patchShown = (change: Partial<NodeConfig>) => patch(change)
+  const patchShown = (change: Partial<NodeConfig>) => {
+    if (sel === null) {
+      patch(change)
+    } else {
+      patch({ nodeConfigs: { ...group.nodeConfigs, [sel]: { ...shown, ...change } } })
+    }
+  }
   const patchCompute = (change: NonNullable<ServerGroup['compute']>) => {
     const next = { ...shown.compute, ...change }
     const compute =
@@ -121,6 +182,26 @@ function ServerGroupRow({
           }
         : undefined
     patchShown({ compute })
+  }
+  // Board- or uplink-specific parts in per-node configurations reset along
+  // with the group's when the model or uplink changes.
+  const configsWithout = (field: 'compute' | 'nicModelId') =>
+    Object.fromEntries(
+      Object.entries(group.nodeConfigs).map(([node, config]) => [
+        node,
+        { ...config, [field]: undefined },
+      ]),
+    )
+  const configureAll = () => {
+    patch({
+      sizeId: shown.sizeId,
+      compute: shown.compute,
+      nicModelId: shown.nicModelId,
+      gpu: shown.gpu,
+      drives: shown.drives,
+      nodeConfigs: {},
+    })
+    setSelectedNode(null)
   }
   // Drives are a free list per configuration; a list matching the default
   // pair is stored as "unset" so the configuration keeps following the
@@ -158,6 +239,7 @@ function ServerGroupRow({
                     role,
                     modelId: compatible[0]?.id ?? group.modelId,
                     compute: undefined,
+                    nodeConfigs: configsWithout('compute'),
                   },
             )
           }}
@@ -170,7 +252,9 @@ function ServerGroupRow({
           }}
           value={group.modelId}
           options={catalogOptions(serversForUsage(group.role), group.modelId)}
-          onChange={(v) => patch({ modelId: v, compute: undefined })}
+          onChange={(v) =>
+            patch({ modelId: v, compute: undefined, nodeConfigs: configsWithout('compute') })
+          }
         />
         <NumberField
           label="Nodes"
@@ -213,6 +297,7 @@ function ServerGroupRow({
             patch({
               uplink: v as ServerGroup['uplink'],
               nicModelId: undefined,
+              nodeConfigs: configsWithout('nicModelId'),
             })
           }
         />
@@ -229,11 +314,52 @@ function ServerGroupRow({
           Node configuration{' '}
           {nodeSummary && <span className="font-normal text-gray-500">· {nodeSummary}</span>}
         </summary>
+        {multiNode && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <NodeButton active={sel === null} onClick={() => setSelectedNode(null)}>
+              All nodes
+            </NodeButton>
+            {Array.from({ length: positions }, (_, i) => (
+              <NodeButton
+                key={i}
+                active={sel === i}
+                custom={customPositions.includes(i)}
+                onClick={() => setSelectedNode(i)}
+              >
+                {i + 1}
+              </NodeButton>
+            ))}
+            <button
+              onClick={configureAll}
+              disabled={sel === null && customPositions.length === 0}
+              className="btn-secondary ml-auto"
+            >
+              Configure all nodes
+            </button>
+          </div>
+        )}
+        {multiNode && sel !== null && group.nodeConfigs[sel] !== undefined && (
+          <button
+            type="button"
+            onClick={() => {
+              const rest = { ...group.nodeConfigs }
+              delete rest[sel]
+              patch({ nodeConfigs: rest })
+            }}
+            className="mt-2 text-xs text-gray-600 underline hover:text-ink"
+          >
+            Reset chassis position {sel + 1} to the group configuration
+          </button>
+        )}
         <div className="mt-3 grid grid-cols-2 items-end gap-3 md:grid-cols-6">
           <SelectField
             label="Preset"
             info={{
-              text: 'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset.',
+              text:
+                'Presets mirror the metalstack.cloud machine types and resolve to orderable CPU and memory parts for the chosen server model; the BOM lists them per node. Storage groups use the same presets. Changing a field below deviates from the preset.' +
+                (multiNode
+                  ? ' Selecting a number above configures that node position in every chassis of the group.'
+                  : ''),
             }}
             value={shown.sizeId}
             options={sizeOptions}
