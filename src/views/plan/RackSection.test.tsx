@@ -50,6 +50,20 @@ describe('imported server configurations', () => {
     )
   })
 
+  it('keeps unsupported imported X14 memory visible', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.modelId = 'server-bigtwin-x14'
+    group.compute = { dimmModelId: 'mem-ddr5r-16g' }
+    const { html, messages } = renderImportedRack(plan)
+    expect(messages.some((message) => message.includes('requires 6400 MT/s-rated DIMMs'))).toBe(
+      true,
+    )
+    expect(html).toContain(
+      '<option value="mem-ddr5r-16g" selected="">MTC10F1084S1RC48BA1 (incompatible)</option>',
+    )
+  })
+
   it('does not mark an explicitly selected default NIC as incompatible', () => {
     const plan = createEmptyPlan()
     plan.partitions[0].racks[0].servers[0].nicModelId = 'nic-e810-xxvda2'

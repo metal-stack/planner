@@ -88,6 +88,18 @@ describe('deriveBom NIC rules', () => {
 })
 
 describe('deriveBom node size rules', () => {
+  it.each([
+    ['n1-medium-x86', 'mem-ddr5r-6400-16g', 2],
+    ['c1-medium-x86', 'mem-ddr5r-6400-32g', 4],
+    ['c1-large-x86', 'mem-ddr5r-6400-32g', 6],
+  ] as const)('orders 6400-rated X14 memory for %s', (sizeId, dimmId, dimmsPerNode) => {
+    const plan = planWithServer('server-bigtwin-x14', 4)
+    plan.partitions[0].racks[0].servers[0].sizeId = sizeId
+    const memory = deriveBom(plan).filter((line) => line.category === 'memory')
+    expect(memory).toHaveLength(1)
+    expect(memory[0]).toMatchObject({ catalogId: dimmId, quantity: 4 * dimmsPerNode })
+  })
+
   it('adds one board-specific CPU and the preset DIMMs per node', () => {
     const h13 = planWithServer('server-microcloud-h13', 8)
     expect(quantity(h13, 'cpu-epyc-4344p')).toBe(8)
@@ -113,6 +125,12 @@ describe('deriveBom node size rules', () => {
     const line = deriveBom(plan).find((item) => item.catalogId === 'mem-ddr5u-32g')
     expect(line?.quantity).toBe(16)
     expect(line?.reasons[0].detail).toBe('4 worker nodes × 4 DIMMs (n1-medium-x86, customized)')
+  })
+
+  it('adds DIMM but no CPU lines for the soldered X11 MicroCloud', () => {
+    const plan = planWithWorkers(8, '2x25G')
+    expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
+    expect(quantity(plan, 'mem-ddr4r-16g')).toBe(16)
   })
 
   it('does not add CPU or DIMM lines for a socketless board', () => {
