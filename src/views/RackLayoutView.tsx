@@ -26,6 +26,7 @@ const SLOT_STYLE: Record<SlotKind, { fill: string; stroke: string; text: string 
   mgmt: { fill: COLOR.brandTint, stroke: COLOR.brand, text: COLOR.ink },
   server: { fill: COLOR.page, stroke: COLOR.gray300, text: COLOR.ink },
   storage: { fill: COLOR.storageTint, stroke: COLOR.storageLine, text: COLOR.storageText },
+  power: { fill: COLOR.brandSoft, stroke: COLOR.brand, text: COLOR.ink },
   'control-plane': {
     fill: COLOR.controlPlaneTint,
     stroke: COLOR.controlPlaneLine,
@@ -69,7 +70,7 @@ function Meter(props: {
   )
 }
 
-function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) {
+export function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) {
   const slotW = (SLOT_W * rack.widthInches) / 19
   const unit = rackUnit(rack.widthInches)
   const overflowU = Math.max(0, rack.usedU - rack.heightUnits)
@@ -331,6 +332,15 @@ export default function RackLayoutView() {
           <Icon icon={SLOT_ICON.storage} className="h-3.5 w-3.5 text-gray-500" />
           Storage
         </span>
+        {partitions.some((partition) =>
+          partition.racks.some((rack) => rack.slots.some((slot) => slot.kind === 'power')),
+        ) && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-brand bg-brand-soft" />
+            <Icon icon={SLOT_ICON.power} className="h-3.5 w-3.5 text-gray-500" />
+            Power shelves (A/B feeds), schematic positions
+          </span>
+        )}
       </div>
     </div>
   )

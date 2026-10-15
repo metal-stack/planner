@@ -8,15 +8,16 @@ import {
   type Rack,
   type RackWidth,
 } from '../model/plan'
-import { chassisCount } from './bom'
+import { chassisCount } from './servers'
 import { hasOwnRack, inCentralRack } from './controlPlane'
+import { orv3Infrastructure } from './orv3'
 
 // Derives physical rack elevations (which device sits in which height
 // units) from the Plan. Like the BOM, the layout is always computed, never
 // stored. Devices fill each rack from the top: network gear first, then
 // server chassis — the classic ToR arrangement.
 
-export type SlotKind = 'network' | 'mgmt' | 'server' | 'storage' | 'control-plane'
+export type SlotKind = 'network' | 'mgmt' | 'server' | 'storage' | 'control-plane' | 'power'
 
 export interface RackSlot {
   label: string
@@ -45,6 +46,8 @@ export interface RackElevation {
   maxPowerWatts: number
   /** Set on the three physical racks of a rack group. */
   group?: { id: string; name: string }
+  /** Rear-mounted infrastructure, not shown in the diagram and consumes no OU. */
+  busBar?: { label: string }
 }
 
 export interface PartitionRackLayout {
@@ -190,6 +193,29 @@ function place(
   return { slots, usedU: offset, powerWatts: items.reduce((w, i) => w + i.powerWatts, 0) }
 }
 
+/** Power shelves use mounting space but supply the existing equipment load;
+ * their output capacity must not be added to the rack's power consumption.
+ * Positions are schematic, with power shelves above switches and servers. */
+function withPowerInfrastructure(rack: RackElevation): RackElevation {
+  const infrastructure = orv3Infrastructure(rack)
+  if (!infrastructure) return rack
+  const { shelfId, psusPerShelf, psuCapacityWatts } = infrastructure
+  const shelves: Item[] = ['A', 'B'].flatMap((feed) =>
+    psusPerShelf.map((psus, i) => ({
+      label: `Power shelf ${feed}${i + 1}`,
+      sublabel: `${formatPower(psus * psuCapacityWatts)} fitted`,
+      units: catalog[shelfId].heightUnits!,
+      kind: 'power',
+      powerWatts: 0,
+    })),
+  )
+  return {
+    ...rack,
+    busBar: { label: 'DC bus bar · rear' },
+    ...place([...shelves, ...rack.slots], rack.heightUnits),
+  }
+}
+
 /** "1.6 kW" / "450 W" for rack headers. */
 export function formatPower(watts: number): string {
   return watts >= 1000 ? `${(watts / 1000).toFixed(1)} kW` : `${watts} W`
@@ -303,7 +329,7 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
     return {
       partitionId: partition.id,
       partitionName: partition.name,
-      racks: [central, ...racks, ...controlPlaneRacks],
+      racks: [central, ...racks, ...controlPlaneRacks].map(withPowerInfrastructure),
     }
   })
 }
