@@ -4,6 +4,9 @@ import {
   dimmTypeForSocket,
   gpuFits,
   itemLabel,
+  fitsRack,
+  rackUnit,
+  drivesForServer,
   nicFitsServer,
   portCount,
   uplinkPortSpeed,
@@ -191,7 +194,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     )
   }
 
-  // Mgmt leaf port budget (1G copper): one BMC port per chassis plus one
+  // Mgmt leaf port budget (1G copper): BMC ports per chassis or ORv3 sled, plus one
   // management interface per leaf, against the rack's mgmt leaves.
   const mgmtLeaf = catalog[partition.fabric.mgmt.leafModelId]
   if (mgmtLeaf && nodes > 0) {
@@ -214,6 +217,14 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     if (!item) {
       report(issues, scope, 'error', `Unknown server model "${group.modelId}".`)
       continue
+    }
+    if (group.count > 0 && !fitsRack(item, rack.widthInches)) {
+      report(
+        issues,
+        inAdvanced,
+        'error',
+        `${itemLabel(group.modelId)} requires a ${item.rackWidthInches ?? 19}″ rack, but this rack is ${rack.widthInches}″. Change the rack format or server model.`,
+      )
     }
     if (!item.serverUsages?.includes(group.role)) {
       report(
@@ -242,6 +253,18 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
       )
     }
     for (const bucket of configBuckets(group)) {
+      if (
+        group.count > 0 &&
+        (bucket.config.drives ?? drivesForServer(group.modelId)).length === 0 &&
+        item.rackWidthInches === 21
+      ) {
+        report(
+          issues,
+          scope,
+          'warning',
+          `${itemLabel(group.modelId)}: no drives configured. Select compatible drives separately; the catalog does not yet model this sled's E1.S and boot-drive options.`,
+        )
+      }
       const label = positionListLabel(bucket.positions)
       const prefix = bucket.custom ? `${label[0].toUpperCase()}${label.slice(1)}: ` : ''
       checkGpu(issues, scope, group, bucket.config, prefix)
@@ -685,6 +708,14 @@ export function validatePlan(plan: Plan): Issue[] {
       // Height, power and a group's member names are edited in the rack's
       // Advanced section; the central rack's budget is partition-level.
       const inAdvanced = { where, target: { ...target, ...(rack.rackId && { field: 'advanced' }) } }
+      if (rack.widthInches === 21) {
+        report(
+          issues,
+          inAdvanced,
+          'warning',
+          'ORV3 power infrastructure is not included in the BOM or elevation: reserve space and budget for 48V DC bus bars and power shelves. The BOM includes mounting adapter kits for 19-inch equipment; reserve any extra space needed by the selected shelves or rails. Enter usable rack height after these reservations.',
+        )
+      }
       if (seen.has(rack.name)) {
         report(
           issues,
@@ -710,7 +741,7 @@ export function validatePlan(plan: Plan): Issue[] {
           issues,
           inAdvanced,
           'error',
-          `Rack height exceeded: ${rack.usedU}U of ${rack.heightUnits}U used.`,
+          `Rack height exceeded: ${rack.usedU}${rackUnit(rack.widthInches)} of ${rack.heightUnits}${rackUnit(rack.widthInches)} used.`,
         )
       }
     }

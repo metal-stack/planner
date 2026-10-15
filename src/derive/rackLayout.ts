@@ -1,4 +1,4 @@
-import { catalog, itemLabel } from '../model/catalog'
+import { catalog, heightInRack, itemLabel } from '../model/catalog'
 import { nodeConfig } from '../model/nodeConfig'
 import {
   mgmtDeviceCount,
@@ -6,6 +6,7 @@ import {
   type Partition,
   type Plan,
   type Rack,
+  type RackWidth,
 } from '../model/plan'
 import { chassisCount } from './bom'
 import { hasOwnRack, inCentralRack } from './controlPlane'
@@ -35,6 +36,7 @@ export interface RackElevation {
   rackId?: string
   name: string
   heightUnits: number
+  widthInches: RackWidth
   slots: RackSlot[]
   usedU: number
   /** Estimated total power draw of the rack, W (sum of its slots). */
@@ -84,8 +86,14 @@ export interface PhysicalRack {
  *  top of the rack, above the leaves. */
 export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] {
   const switches: Item[] = [
-    ...device('Mgmt leaf', fabric.mgmt.leafModelId, fabric.mgmt.leafPerRack, 'mgmt'),
-    ...device('Leaf', rack.leafModelId, rack.leafCount, 'network'),
+    ...device(
+      'Mgmt leaf',
+      fabric.mgmt.leafModelId,
+      fabric.mgmt.leafPerRack,
+      'mgmt',
+      rack.widthInches,
+    ),
+    ...device('Leaf', rack.leafModelId, rack.leafCount, 'network', rack.widthInches),
   ]
   const chassis: Item[] = rack.servers.flatMap((group) => {
     const count = chassisCount(group)
@@ -105,7 +113,7 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
       return {
         label: part(group.modelId),
         sublabel: `${nodes} × ${group.role}`,
-        units: units(group.modelId),
+        units: heightInRack(group.modelId, rack.widthInches),
         kind: group.role === 'storage' ? 'storage' : ('server' as SlotKind),
         // Partial chassis draw proportionally less.
         powerWatts:
@@ -144,10 +152,6 @@ export function physicalRacks(rack: Rack, fabric: FabricConfig): PhysicalRack[] 
   ]
 }
 
-function units(modelId: string): number {
-  return catalog[modelId]?.heightUnits ?? 1
-}
-
 /** Rack slots are labelled by model, not by ordering code. */
 function part(modelId: string): string {
   return itemLabel(modelId)
@@ -157,11 +161,17 @@ function repeat(n: number, make: (i: number) => Item): Item[] {
   return Array.from({ length: n }, (_, i) => make(i))
 }
 
-function device(labelPrefix: string, modelId: string, count: number, kind: SlotKind): Item[] {
+function device(
+  labelPrefix: string,
+  modelId: string,
+  count: number,
+  kind: SlotKind,
+  widthInches: RackWidth = 19,
+): Item[] {
   return repeat(count, (i) => ({
     label: count > 1 ? `${labelPrefix} ${i + 1}` : labelPrefix,
     sublabel: part(modelId),
-    units: units(modelId),
+    units: heightInRack(modelId, widthInches),
     kind,
     powerWatts: catalog[modelId]?.powerWatts ?? 0,
   }))
@@ -198,19 +208,26 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
     const { fabric } = partition
     const mgmtCount = mgmtDeviceCount(fabric.mgmt)
 
+    const centralDevice = (label: string, modelId: string, count: number, kind: SlotKind) =>
+      device(label, modelId, count, kind, partition.rackDefaults.widthInches)
     const centralItems: Item[] = [
-      ...device('Router', 'router-internet', fabric.routerCount, 'network'),
-      ...device('Exit', fabric.exitModelId, fabric.exitSwitchCount, 'network'),
+      ...centralDevice('Router', 'router-internet', fabric.routerCount, 'network'),
+      ...centralDevice('Exit', fabric.exitModelId, fabric.exitSwitchCount, 'network'),
       ...(fabric.fabricType === 'leaf-spine-superspine'
-        ? device('Superspine', fabric.superspineModelId, fabric.superspineCount, 'network')
+        ? centralDevice('Superspine', fabric.superspineModelId, fabric.superspineCount, 'network')
         : []),
-      ...device('Spine', fabric.spineModelId, fabric.spineCount, 'network'),
-      ...device('Storage leaf', fabric.storageLeafModelId, fabric.storageLeafCount, 'storage'),
-      ...device('Mgmt spine', fabric.mgmt.spineModelId, mgmtCount, 'mgmt'),
-      ...device('Mgmt server', fabric.mgmt.serverModelId, mgmtCount, 'mgmt'),
+      ...centralDevice('Spine', fabric.spineModelId, fabric.spineCount, 'network'),
+      ...centralDevice(
+        'Storage leaf',
+        fabric.storageLeafModelId,
+        fabric.storageLeafCount,
+        'storage',
+      ),
+      ...centralDevice('Mgmt spine', fabric.mgmt.spineModelId, mgmtCount, 'mgmt'),
+      ...centralDevice('Mgmt server', fabric.mgmt.serverModelId, mgmtCount, 'mgmt'),
       // On-prem control-plane nodes, when they share the central rack.
       ...(inCentralRack(plan, partition)
-        ? device(
+        ? centralDevice(
             'Control plane node',
             plan.controlPlane.nodeModelId,
             plan.controlPlane.nodeCount,
@@ -221,6 +238,7 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
     const central: RackElevation = {
       id: `${partition.id}/central`,
       name: 'Central rack',
+      widthInches: partition.rackDefaults.widthInches,
       heightUnits: partition.rackDefaults.heightUnits,
       maxPowerWatts: partition.rackDefaults.maxPowerWatts,
       ...place(centralItems, partition.rackDefaults.heightUnits),
@@ -234,6 +252,7 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
         rackId: rack.id,
         name: phys.name,
         ...(phys.position && { group: { id: rack.id, name: rack.name } }),
+        widthInches: rack.widthInches,
         heightUnits: rack.heightUnits,
         maxPowerWatts: rack.maxPowerWatts,
         ...place([...phys.switches, ...phys.chassis], rack.heightUnits),
@@ -248,13 +267,32 @@ export function deriveRackLayout(plan: Plan): PartitionRackLayout[] {
           {
             id: `${partition.id}/control-plane`,
             name: cp.rack.name,
+            widthInches: cp.rack.widthInches,
             heightUnits: cp.rack.heightUnits,
             maxPowerWatts: cp.rack.maxPowerWatts,
             ...place(
               [
-                ...device('Mgmt leaf', fabric.mgmt.leafModelId, fabric.mgmt.leafPerRack, 'mgmt'),
-                ...device('Leaf', cp.rack.leafModelId, cp.rack.leafCount, 'network'),
-                ...device('Control plane node', cp.nodeModelId, cp.nodeCount, 'control-plane'),
+                ...device(
+                  'Mgmt leaf',
+                  fabric.mgmt.leafModelId,
+                  fabric.mgmt.leafPerRack,
+                  'mgmt',
+                  cp.rack.widthInches,
+                ),
+                ...device(
+                  'Leaf',
+                  cp.rack.leafModelId,
+                  cp.rack.leafCount,
+                  'network',
+                  cp.rack.widthInches,
+                ),
+                ...device(
+                  'Control plane node',
+                  cp.nodeModelId,
+                  cp.nodeCount,
+                  'control-plane',
+                  cp.rack.widthInches,
+                ),
               ],
               cp.rack.heightUnits,
             ),

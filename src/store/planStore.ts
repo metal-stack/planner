@@ -212,7 +212,8 @@ export const usePlanStore = create<PlannerState>()(
                 {
                   id: crypto.randomUUID(),
                   role: 'worker',
-                  modelId: 'server-microcloud-h13',
+                  modelId:
+                    r.widthInches === 21 ? 'server-gigabyte-to25-s12' : 'server-microcloud-h13',
                   count: 8,
                   uplink: '2x25G',
                   sizeId: DEFAULT_SIZE_ID,

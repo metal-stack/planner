@@ -261,6 +261,7 @@ describe('reachability', () => {
     partition.fabric.mgmt.leafModelId = mgmtModelId
     partition.fabric.mgmt.spineModelId = mgmtModelId
     const rack = partition.racks[0]
+    rack.widthInches = 21
     rack.servers[0].uplink = '2x25G'
     rack.servers[0].modelId = 'server-microcloud-x13'
     rack.servers[0].gpu = { modelId: 'gpu-rtx-6000-ada', perNode: 1 }
@@ -272,6 +273,12 @@ describe('reachability', () => {
       uplink: '2x100G',
       sizeId: 'n1-medium-x86',
       nodeConfigs: {},
+    })
+    rack.servers.push({
+      ...rack.servers[0],
+      id: 'orv3',
+      modelId: 'server-gigabyte-to25-s12',
+      count: 3,
     })
     return plan
   }

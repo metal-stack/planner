@@ -387,7 +387,7 @@ describe('deriveBom reasons, spares and partition scope', () => {
     const plan = createEmptyPlan()
     const rj45 = deriveBom(plan).find((l) => l.catalogId === 'cable-rj45')!
     const text = formatReasons(rj45.reasons)
-    expect(text).toContain('Rack 1: 1 (1 server chassis × 1 BMC port to the mgmt leaf)')
+    expect(text).toContain('Rack 1: 1 (1 × server BMC connection to the mgmt leaf)')
     expect(text).not.toMatch(/[—–]/)
   })
 

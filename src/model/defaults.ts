@@ -37,7 +37,11 @@ export function defaultFabric(): FabricConfig {
 // 12 kW per rack: five 3U eight-node MicroCloud chassis at ~2 kW each plus
 // a leaf pair no longer fit in 10 kW, and that is the density these
 // templates are built around.
-export const DEFAULT_RACK_DEFAULTS: RackDefaults = { heightUnits: 42, maxPowerWatts: 12000 }
+export const DEFAULT_RACK_DEFAULTS: RackDefaults = {
+  widthInches: 19,
+  heightUnits: 42,
+  maxPowerWatts: 12000,
+}
 
 export function defaultRack(
   name: string,
@@ -52,6 +56,7 @@ export function defaultRack(
     ...(kind === 'rack-group' && {
       memberNames: memberNames ?? [`${name} (left)`, `${name} (middle)`, `${name} (right)`],
     }),
+    widthInches: defaults.widthInches,
     heightUnits: defaults.heightUnits,
     maxPowerWatts: defaults.maxPowerWatts,
     leafModelId: 'switch-as7726',
@@ -60,7 +65,7 @@ export function defaultRack(
       {
         id: id(),
         role: 'worker',
-        modelId: 'server-microcloud-h13',
+        modelId: defaults.widthInches === 21 ? 'server-gigabyte-to25-s12' : 'server-microcloud-h13',
         count: 8,
         uplink: '2x25G',
         sizeId: DEFAULT_SIZE_ID,
