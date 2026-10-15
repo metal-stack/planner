@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { defaultIpPlan, IpPlanSchema } from './ipPlan'
 import { SCHEMA_VERSION } from './migrate'
+import { DEFAULT_SIZE_ID } from './sizes'
 
 // The Plan is the single document the whole app operates on. These Zod
 // schemas are the source of truth — all TypeScript types are inferred from
@@ -34,7 +35,16 @@ export const GpuConfigSchema = z.object({
 })
 export type GpuConfig = z.infer<typeof GpuConfigSchema>
 
-export const ServerGroupSchema = z.object({
+/** A complete node configuration, the same fields the group itself carries:
+ *  a node with an entry uses it in place of the group's, with the same
+ *  defaults for absent sub-fields (preset parts, the uplink's NIC, no GPU). */
+export const NodeConfigSchema = z.object({
+  sizeId: z.string(),
+  gpu: GpuConfigSchema.optional(),
+})
+export type NodeConfig = z.infer<typeof NodeConfigSchema>
+
+export const ServerGroupSchema = NodeConfigSchema.extend({
   id: z.string(),
   role: ServerRoleSchema,
   /** Catalog id of the server model (nodes, not chassis — chassis count is derived). */
@@ -42,7 +52,7 @@ export const ServerGroupSchema = z.object({
   /** Number of server nodes in this group. */
   count: z.number().int().min(0),
   uplink: UplinkSpeedSchema,
-  gpu: GpuConfigSchema.optional(),
+  sizeId: NodeConfigSchema.shape.sizeId.default(DEFAULT_SIZE_ID),
 })
 export type ServerGroup = z.infer<typeof ServerGroupSchema>
 
