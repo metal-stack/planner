@@ -375,6 +375,49 @@ describe('helpers', () => {
     expect(defaultNicId('2x100G')).toBe('nic-e810-cqda2')
   })
 
+  it('offers SIOM NICs only for a server with a SIOM connector', () => {
+    expect(nicsForServer('server-microcloud-h13', '2x25G').map((item) => item.id)).not.toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('server-bigtwin-x14', '2x25G').map((item) => item.id)).not.toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('server-bigtwin-x11', '2x25G').map((item) => item.id)).toContain(
+      'nic-aoc-mh25g',
+    )
+    expect(nicsForServer('unknown-server', '2x25G')).toEqual([])
+  })
+
+  it('offers only 6400-rated DIMMs for the X14 BigTwin', () => {
+    const dimms = dimmsForServer('server-bigtwin-x14')
+    expect(dimms.map((item) => item.dimmGiB)).toEqual([16, 32])
+    expect(dimms.every((item) => item.dimmRatedSpeed === 6400)).toBe(true)
+    expect(dimmsForServer('server-superserver-tn12').map((item) => item.id)).toContain(
+      'mem-ddr5r-16g',
+    )
+  })
+
+  it('offers CPU and memory parts matching the server socket', () => {
+    expect(cpusForServer('server-microcloud-h13').map((item) => item.socket)).toEqual([
+      'AM5',
+      'AM5',
+    ])
+    // The soldered X11 MicroCloud offers memory but no CPUs.
+    expect(cpusForServer('server-microcloud-x11')).toEqual([])
+    expect(dimmsForServer('server-microcloud-x11').map((item) => item.dimmType)).toEqual([
+      'ddr4-rdimm',
+      'ddr4-rdimm',
+    ])
+    expect(dimmsForServer('server-microcloud-h13').map((item) => item.dimmType)).toEqual([
+      'ddr5-ecc-udimm',
+      'ddr5-ecc-udimm',
+    ])
+    expect(dimmsForServer('server-bigtwin-x12').map((item) => item.dimmType)).toEqual([
+      'ddr4-rdimm',
+      'ddr4-rdimm',
+    ])
+  })
+
   it('picks the license by NOS and platform tier', () => {
     expect(nosLicenseId('broadcom-sonic', 'switch-as7726')).toBe('lic-sonic-eb-100g')
     expect(nosLicenseId('broadcom-sonic', 'switch-as4630')).toBe('lic-sonic-eb-10g')

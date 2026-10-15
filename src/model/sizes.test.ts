@@ -31,6 +31,17 @@ describe('node size catalog references', () => {
       }
     }
   })
+
+  it('orders memory without a CPU on the soldered X11 MicroCloud', () => {
+    expect(
+      resolveNodeCompute({ modelId: 'server-microcloud-x11', sizeId: 'n1-medium-x86' }),
+    ).toMatchObject({
+      cpuModelId: undefined,
+      dimmModelId: 'mem-ddr4r-16g',
+      dimmsPerNode: 2,
+      custom: false,
+    })
+  })
 })
 
 describe('resolveNodeCompute', () => {
