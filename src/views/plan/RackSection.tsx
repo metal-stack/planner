@@ -1,6 +1,8 @@
 import {
   catalog,
   cpuLabel,
+  cpusForServer,
+  dimmsForServer,
   gpusForServer,
   itemLabel,
   serversForUsage,
@@ -54,6 +56,8 @@ function ServerGroupRow({
   const fillCount = Math.floor(maxNodes / nodesPer) * nodesPer
 
   const socket = catalog[group.modelId]?.socket
+  const cpuOptions = cpusForServer(group.modelId)
+  const dimmOptions = dimmsForServer(group.modelId)
 
   const shown: NodeConfig = group
 
@@ -61,6 +65,8 @@ function ServerGroupRow({
 
   const perNode = Math.min(shown.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
   const resolvedCompute = resolveNodeCompute({ modelId: group.modelId, ...shown })
+  // The preset's own parts, for naming what "Preset default" resolves to.
+  const presetParts = resolveNodeCompute({ modelId: group.modelId, sizeId: shown.sizeId })
   // The preset stays the baseline; deviating fields mark it "customized".
   const sizeOptions = nodeSizes.map((size) => {
     const note =
@@ -91,6 +97,18 @@ function ServerGroupRow({
     .join(', ')
 
   const patchShown = (change: Partial<NodeConfig>) => patch(change)
+  const patchCompute = (change: NonNullable<ServerGroup['compute']>) => {
+    const next = { ...shown.compute, ...change }
+    const compute =
+      next.cpuModelId || next.dimmModelId || next.dimmsPerNode
+        ? {
+            ...(next.cpuModelId && { cpuModelId: next.cpuModelId }),
+            ...(next.dimmModelId && { dimmModelId: next.dimmModelId }),
+            ...(next.dimmsPerNode && { dimmsPerNode: next.dimmsPerNode }),
+          }
+        : undefined
+    patchShown({ compute })
+  }
   return (
     // Storage groups carry the racks view's storage color (sky), workers
     // the brand tint.
@@ -116,6 +134,7 @@ function ServerGroupRow({
                 : {
                     role,
                     modelId: compatible[0]?.id ?? group.modelId,
+                    compute: undefined,
                   },
             )
           }}
@@ -128,7 +147,7 @@ function ServerGroupRow({
           }}
           value={group.modelId}
           options={catalogOptions(serversForUsage(group.role), group.modelId)}
-          onChange={(v) => patch({ modelId: v })}
+          onChange={(v) => patch({ modelId: v, compute: undefined })}
         />
         <NumberField
           label="Nodes"
@@ -194,8 +213,50 @@ function ServerGroupRow({
             }}
             value={shown.sizeId}
             options={sizeOptions}
-            onChange={(v) => patchShown({ sizeId: v })}
+            onChange={(v) => patchShown({ sizeId: v, compute: undefined })}
           />
+          {/* Boards with a soldered CPU (X11 MicroCloud) configure memory
+              only, so the CPU select needs offerable CPUs but the memory
+              fields just a DIMM type. */}
+          {(cpuOptions.length > 0 || dimmOptions.length > 0) && (
+            <>
+              {cpuOptions.length > 0 && (
+                <SelectField
+                  label="CPU"
+                  value={shown.compute?.cpuModelId ?? ''}
+                  options={catalogOptions(
+                    cpuOptions,
+                    shown.compute?.cpuModelId,
+                    presetParts.cpuModelId
+                      ? cpuLabel(catalog[presetParts.cpuModelId], 'preset')
+                      : 'Preset default',
+                  )}
+                  onChange={(v) => patchCompute({ cpuModelId: v || undefined })}
+                />
+              )}
+              <SelectField
+                label="DIMM model"
+                value={shown.compute?.dimmModelId ?? ''}
+                options={catalogOptions(
+                  dimmOptions,
+                  shown.compute?.dimmModelId,
+                  presetParts.dimmModelId
+                    ? `${catalog[presetParts.dimmModelId]?.description ?? presetParts.dimmModelId} (preset)`
+                    : 'Preset default',
+                )}
+                onChange={(v) => patchCompute({ dimmModelId: v || undefined })}
+              />
+              <NumberField
+                label="DIMMs per node"
+                value={shown.compute?.dimmsPerNode ?? resolvedCompute.dimmsPerNode ?? 0}
+                onChange={(value) =>
+                  patchCompute({
+                    dimmsPerNode: value && value !== presetParts.dimmsPerNode ? value : undefined,
+                  })
+                }
+              />
+            </>
+          )}
           {gpuOptions.length > 0 && (
             <SelectField
               label="GPU"

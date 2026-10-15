@@ -34,6 +34,18 @@ describe('plan JSON round-trip', () => {
     const broken = { ...createEmptyPlan(), partitions: 'nope' }
     expect(() => importPlanJson(JSON.stringify(broken))).toThrow('not a valid plan')
   })
+
+  it('round-trips compute overrides', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.sizeId = 'c1-medium-x86'
+    group.compute = {
+      cpuModelId: 'cpu-epyc-4344p',
+      dimmModelId: 'mem-ddr5u-32g',
+      dimmsPerNode: 4,
+    }
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
 })
 
 describe('plans from before node configuration', () => {
@@ -43,8 +55,10 @@ describe('plans from before node configuration', () => {
     }
     const group = raw.partitions[0].racks[0].servers[0]
     delete group.sizeId
+    delete group.compute
     const imported = importPlanJson(JSON.stringify(raw)).partitions[0].racks[0].servers[0]
     expect(imported.sizeId).toBe('n1-medium-x86')
+    expect(imported.compute).toBeUndefined()
   })
 })
 

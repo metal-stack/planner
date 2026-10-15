@@ -35,11 +35,22 @@ export const GpuConfigSchema = z.object({
 })
 export type GpuConfig = z.infer<typeof GpuConfigSchema>
 
+/** Custom deviations from the group's node size. Each field overrides one
+ *  part of the size resolution; absent fields keep the size's preset part
+ *  for the server board (see model/sizes.ts). */
+export const ComputeOverrideSchema = z.object({
+  cpuModelId: z.string().optional(),
+  dimmModelId: z.string().optional(),
+  dimmsPerNode: z.number().int().min(1).optional(),
+})
+export type ComputeOverride = z.infer<typeof ComputeOverrideSchema>
+
 /** A complete node configuration, the same fields the group itself carries:
  *  a node with an entry uses it in place of the group's, with the same
  *  defaults for absent sub-fields (preset parts, the uplink's NIC, no GPU). */
 export const NodeConfigSchema = z.object({
   sizeId: z.string(),
+  compute: ComputeOverrideSchema.optional(),
   gpu: GpuConfigSchema.optional(),
 })
 export type NodeConfig = z.infer<typeof NodeConfigSchema>

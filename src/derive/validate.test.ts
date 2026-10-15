@@ -110,11 +110,11 @@ describe('node compute and NIC configuration', () => {
     expect(errors(plan)).toContain('Unknown node size "x1-huge".')
   })
 
-  it('rejects a size unavailable for the board for preset selection', () => {
+  it('rejects a size unavailable for the board without full overrides', () => {
     const plan = basePlan()
     group(plan).sizeId = 'c1-large-x86'
     expect(errors(plan)).toContain(
-      'c1-large-x86 (24 cores, 192 GiB) is not orderable for AS-3015MR-H8TNR (AM5). Pick another size or server model.',
+      'c1-large-x86 (24 cores, 192 GiB) is not orderable for AS-3015MR-H8TNR (AM5). Pick another size or server model, or set a custom CPU and memory.',
     )
   })
 
@@ -123,6 +123,34 @@ describe('node compute and NIC configuration', () => {
     group(plan).modelId = 'server-superserver-tn20'
     expect(validatePlan(plan).map((issue) => issue.message)).toContain(
       'CPU and memory are not modeled for SYS-2029UZ-TN20R25M, so the BOM has no CPU or DIMM lines for this group.',
+    )
+  })
+
+  it('rejects an unknown CPU override', () => {
+    const plan = basePlan()
+    group(plan).compute = { cpuModelId: 'cpu-foo' }
+    expect(errors(plan)).toContain('Unknown CPU model "cpu-foo".')
+  })
+
+  it('rejects a CPU from the wrong socket', () => {
+    const plan = basePlan()
+    group(plan).compute = { cpuModelId: 'cpu-xeon-e2488' }
+    expect(errors(plan)).toContain('Xeon E-2488 (LGA-1700) does not fit AS-3015MR-H8TNR (AM5).')
+  })
+
+  it('rejects a DIMM with the wrong memory type', () => {
+    const plan = basePlan()
+    group(plan).compute = { dimmModelId: 'mem-ddr4r-32g' }
+    expect(errors(plan)).toContain(
+      'MTA36ASF4G72PZ-3G2R is DDR4 RDIMM, but AS-3015MR-H8TNR takes DDR5 ECC UDIMM.',
+    )
+  })
+
+  it('rejects more DIMMs than the board has slots', () => {
+    const plan = basePlan()
+    group(plan).compute = { dimmsPerNode: 6 }
+    expect(errors(plan)).toContain(
+      'AS-3015MR-H8TNR has 4 DIMM slots per node, but 6 DIMMs per node are configured.',
     )
   })
 })

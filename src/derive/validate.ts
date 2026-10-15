@@ -1,4 +1,12 @@
-import { catalog, gpuFits, itemLabel, portCount, type SwitchRole } from '../model/catalog'
+import {
+  catalog,
+  dimmTypeForSocket,
+  gpuFits,
+  itemLabel,
+  portCount,
+  type DimmType,
+  type SwitchRole,
+} from '../model/catalog'
 import {
   mgmtDeviceCount,
   type NodeConfig,
@@ -7,7 +15,7 @@ import {
   type Rack,
   type ServerGroup,
 } from '../model/plan'
-import { nodeSize, sizeLabel } from '../model/sizes'
+import { nodeSize, resolveNodeCompute, sizeLabel } from '../model/sizes'
 import {
   formatGbps,
   formatRatio,
@@ -279,6 +287,12 @@ function checkGpu(
   }
 }
 
+const DIMM_TYPE_LABEL: Record<DimmType, string> = {
+  'ddr5-ecc-udimm': 'DDR5 ECC UDIMM',
+  'ddr5-rdimm': 'DDR5 RDIMM',
+  'ddr4-rdimm': 'DDR4 RDIMM',
+}
+
 /** The selected size and any custom CPU or memory must resolve to parts
  *  compatible with the server board. */
 function checkCompute(
@@ -299,12 +313,67 @@ function checkCompute(
   // Socketless boards get their single group-level warning in validateRack.
   if (!socket) return
 
-  if (!size.parts[socket]) {
+  const compute = resolveNodeCompute({ modelId: group.modelId, ...config })
+  if (!size.parts[socket] && !(compute.cpuModelId && compute.dimmModelId && compute.dimmsPerNode)) {
     report(
       issues,
       scope,
       'error',
-      `${prefix}${sizeLabel(size)} is not orderable for ${itemLabel(group.modelId)} (${socket}). Pick another size or server model.`,
+      `${prefix}${sizeLabel(size)} is not orderable for ${itemLabel(group.modelId)} (${socket}). ` +
+        `Pick another size or server model, or set a custom CPU and memory.`,
+    )
+  }
+
+  if (compute.cpuModelId) {
+    const cpu = catalog[compute.cpuModelId]
+    if (!cpu || cpu.category !== 'cpu') {
+      report(issues, scope, 'error', `${prefix}Unknown CPU model "${compute.cpuModelId}".`)
+    } else if (cpu.socket !== socket) {
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${itemLabel(cpu.id)} (${cpu.socket}) does not fit ${itemLabel(group.modelId)} (${socket}).`,
+      )
+    }
+  }
+
+  if (compute.dimmModelId) {
+    const dimm = catalog[compute.dimmModelId]
+    if (!dimm || dimm.category !== 'memory') {
+      report(issues, scope, 'error', `${prefix}Unknown DIMM model "${compute.dimmModelId}".`)
+    } else {
+      const expected = dimmTypeForSocket[socket]
+      if (dimm.dimmType !== expected) {
+        report(
+          issues,
+          scope,
+          'error',
+          `${prefix}${itemLabel(dimm.id)} is ${DIMM_TYPE_LABEL[dimm.dimmType!]}, but ` +
+            `${itemLabel(group.modelId)} takes ${DIMM_TYPE_LABEL[expected]}.`,
+        )
+      } else if (
+        server.requiredDimmRatedSpeed &&
+        dimm.dimmRatedSpeed !== server.requiredDimmRatedSpeed
+      ) {
+        report(
+          issues,
+          scope,
+          'error',
+          `${prefix}${itemLabel(group.modelId)} requires ${server.requiredDimmRatedSpeed} MT/s-rated DIMMs, ` +
+            `but ${itemLabel(dimm.id)} is rated ${dimm.dimmRatedSpeed ?? 'unknown'} MT/s.`,
+        )
+      }
+    }
+  }
+
+  if (compute.dimmsPerNode && server.dimmSlots && compute.dimmsPerNode > server.dimmSlots) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
+        `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
     )
   }
 }
