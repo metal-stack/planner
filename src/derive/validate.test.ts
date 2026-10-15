@@ -244,6 +244,7 @@ describe('validatePlan GPUs and vendor availability', () => {
         modelId: serverModelId,
         count: 8,
         uplink: '2x25G',
+
         gpu: { modelId, perNode },
       },
     ]
@@ -251,15 +252,22 @@ describe('validatePlan GPUs and vendor availability', () => {
   }
 
   it('accepts a GPU within the per-node limit', () => {
-    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 1, 'server-microcloud-x13'))
+    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 1, 'server-superserver-tn12'))
     expect(issues.filter((i) => i.message.includes('GPU'))).toEqual([])
   })
 
-  it('rejects more GPUs than a node accepts', () => {
-    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 2, 'server-microcloud-x13'))
-    expect(issues.some((i) => i.severity === 'error' && i.message.includes('1 GPU per node'))).toBe(
-      true,
+  it('rejects a GPU too wide for the node', () => {
+    const issues = validatePlan(planWithGpu('gpu-h100-pcie', 1, 'server-microcloud-x13'))
+    expect(issues.map((i) => i.message)).toContain(
+      'H100 PCIe is a double-width GPU, but SYS-531MC-H8TNR takes single-width cards.',
     )
+  })
+
+  it('rejects more GPUs than a node accepts', () => {
+    const issues = validatePlan(planWithGpu('gpu-rtx-6000-ada', 3, 'server-superserver-tn12'))
+    expect(
+      issues.some((i) => i.severity === 'error' && i.message.includes('2 GPUs per node')),
+    ).toBe(true)
   })
 
   it('rejects GPUs on a server model that takes none', () => {

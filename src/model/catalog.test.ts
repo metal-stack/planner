@@ -149,12 +149,20 @@ describe('category invariants', () => {
     }
   })
 
-  it('gives every GPU a power draw and a part number', () => {
+  it('gives every GPU a power draw, a part number and a slot width', () => {
     const gpus = entries.filter(([, i]) => i.category === 'gpu')
     expect(gpus.length).toBeGreaterThan(0)
     for (const [id, item] of gpus) {
       expect(item.powerWatts, `${id}.powerWatts`).toBeGreaterThan(0)
       expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+      expect(item.gpuWidth, `${id}.gpuWidth`).toBeDefined()
+    }
+  })
+
+  it('gives every GPU-capable server a bay width', () => {
+    for (const [id, item] of entries) {
+      if (item.category !== 'server' || !item.gpuCapable) continue
+      expect(item.gpuWidth, `${id}.gpuWidth`).toBeDefined()
     }
   })
 
@@ -185,7 +193,7 @@ describe('reachability', () => {
       ...serversForUsage('worker'),
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
-      ...gpusForServer('server-microcloud-x13'),
+      ...gpusForServer('server-superserver-tn12'),
     ].map((i) => i.id),
   )
 
@@ -295,8 +303,10 @@ describe('helpers', () => {
     }
   })
 
-  it('offers GPUs only for GPU-capable servers', () => {
-    expect(gpusForServer('server-microcloud-x13').length).toBeGreaterThan(0)
+  it('offers GPUs only for GPU-capable servers, filtered by bay width', () => {
+    expect(gpusForServer('server-superserver-tn12').length).toBeGreaterThan(0)
+    // The MicroCloud bays are single-width; no cataloged GPU fits.
+    expect(gpusForServer('server-microcloud-x13')).toEqual([])
     expect(gpusForServer('server-bigtwin-x11')).toEqual([])
     expect(gpusForServer('nope')).toEqual([])
   })

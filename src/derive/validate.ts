@@ -1,4 +1,4 @@
-import { catalog, itemLabel, portCount, type SwitchRole } from '../model/catalog'
+import { catalog, gpuFits, itemLabel, portCount, type SwitchRole } from '../model/catalog'
 import {
   mgmtDeviceCount,
   type Partition,
@@ -241,6 +241,15 @@ function checkGpu(issues: Issue[], scope: Scope, group: ServerGroup): void {
         `Choose a GPU-capable server model or remove the GPUs.`,
     )
     return
+  }
+  if (server && !gpuFits(item, server)) {
+    report(
+      issues,
+      scope,
+      'error',
+      `${itemLabel(item.id)} is a ${item.gpuWidth}-width GPU, but ` +
+        `${itemLabel(group.modelId)} takes ${server.gpuWidth}-width cards.`,
+    )
   }
   if (gpu.perNode > capacity) {
     report(

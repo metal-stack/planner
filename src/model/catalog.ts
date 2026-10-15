@@ -67,6 +67,8 @@ export type ServerUsage = 'worker' | 'management' | 'storage'
 
 export type PortSpeed = '1G' | '10G' | '25G' | '100G'
 
+export type GpuWidth = 'single' | 'double'
+
 /** Platform tier a NOS support license is priced by. The vendors name the
  *  tiers differently — Edgecore sells "40/100G" and "10/25G", Broadcom
  *  "100G" and "10G" — so the license table maps this per NOS. */
@@ -105,6 +107,8 @@ export interface CatalogItem {
   serverUsages?: ServerUsage[]
   /** Max GPUs a single server node of this model accepts; absent = none. */
   gpuCapable?: number
+  /** Card width on GPUs; maximum bay width on servers. */
+  gpuWidth?: GpuWidth
   /** No plan can select this item, so it never reaches a BOM: it is kept
    *  because the official compatibility list names it. Say why. Every
    *  otherwise-unreachable entry must set this (catalog.test.ts), so that
@@ -212,6 +216,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     gpuCapable: 1,
+    gpuWidth: 'single',
   },
   'server-microcloud-h13': {
     id: 'server-microcloud-h13',
@@ -226,6 +231,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     gpuCapable: 1,
+    gpuWidth: 'single',
   },
   'server-bigtwin-x11': {
     id: 'server-bigtwin-x11',
@@ -280,6 +286,8 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 1,
     status: 'stable',
     serverUsages: ['worker', 'storage'],
+    gpuCapable: 2,
+    gpuWidth: 'double',
   },
   'server-superserver-tr12p': {
     id: 'server-superserver-tr12p',
@@ -409,6 +417,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '48 GB GDDR6 ECC, PCIe 4.0 ×16, dual slot',
     powerWatts: 300,
     status: 'stable',
+    gpuWidth: 'double',
   },
   'gpu-h100-pcie': {
     id: 'gpu-h100-pcie',
@@ -419,6 +428,7 @@ export const catalog: Record<string, CatalogItem> = {
     description: '80 GB HBM2e, PCIe 5.0 ×16, dual slot',
     powerWatts: 350,
     status: 'stable',
+    gpuWidth: 'double',
   },
 
   // --- Transceivers ---
@@ -646,11 +656,20 @@ export function serversForUsage(usage: ServerUsage): CatalogItem[] {
     .sort(byAvailability)
 }
 
-/** GPU models offerable for a server model — empty unless it accepts any. */
+/** Whether a GPU card physically fits a server node's GPU bay: a
+ *  double-width bay takes any card, a single-width bay only single-width
+ *  cards. */
+export function gpuFits(gpu: CatalogItem, server: CatalogItem): boolean {
+  return server.gpuWidth === 'double' || gpu.gpuWidth === 'single'
+}
+
+/** GPU models offerable for a server model — empty unless it accepts any,
+ *  and only cards that fit its GPU bay width. */
 export function gpusForServer(serverModelId: string): CatalogItem[] {
-  if (!catalog[serverModelId]?.gpuCapable) return []
+  const server = catalog[serverModelId]
+  if (!server?.gpuCapable) return []
   return Object.values(catalog)
-    .filter((i) => i.category === 'gpu')
+    .filter((i) => i.category === 'gpu' && gpuFits(i, server))
     .sort(byAvailability)
 }
 
