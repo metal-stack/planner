@@ -52,7 +52,7 @@
 // Edgecore's site lists ET4202-RJ45 where the orders show ET4201-RJ45. The
 // sample BOMs outrank both — they are what was actually bought.
 
-import type { Nos, UplinkSpeed } from './plan'
+import type { DriveConfig, Nos, UplinkSpeed } from './plan'
 
 export type CatalogCategory =
   | 'switch'
@@ -62,6 +62,7 @@ export type CatalogCategory =
   | 'gpu'
   | 'cpu'
   | 'memory'
+  | 'drive'
   | 'transceiver'
   | 'cable'
   | 'license'
@@ -658,6 +659,22 @@ export const catalog: Record<string, CatalogItem> = {
   },
 
   // --- Drives (representative public orderable parts) ---
+  'drive-m2-480': {
+    id: 'drive-m2-480',
+    category: 'drive',
+    vendor: 'Micron',
+    model: '7450 PRO',
+    partNumber: 'MTFDKBA480TFR-1BC1ZABYY',
+    description: '480 GB M.2 NVMe',
+  },
+  'drive-nvme-960': {
+    id: 'drive-nvme-960',
+    category: 'drive',
+    vendor: 'Micron',
+    model: '7450 PRO',
+    partNumber: 'MTFDKCB960TFR-1BC1ZABYY',
+    description: '960 GB 2.5" U.3 NVMe',
+  },
 
   // --- GPUs (official metal-stack compatibility list) ---
   // The list names "RTX 6000" without a generation; the Ada Generation is
@@ -979,6 +996,21 @@ export function dimmsForServer(serverModelId: string): CatalogItem[] {
         item.dimmType === dimmType &&
         (!server.requiredDimmRatedSpeed || item.dimmRatedSpeed === server.requiredDimmRatedSpeed),
     )
+    .sort(byAvailability)
+}
+
+/** The drives a node carries when a configuration names none: one M.2 boot
+ *  drive and one data drive. */
+export const defaultDrives: DriveConfig[] = [
+  { modelId: 'drive-m2-480', perNode: 1 },
+  { modelId: 'drive-nvme-960', perNode: 1 },
+]
+
+/** Drive models offerable for boot and data media, current hardware first.
+ *  Drive fit is not board-specific, so every server offers the same list. */
+export function driveOptions(): CatalogItem[] {
+  return Object.values(catalog)
+    .filter((item) => item.category === 'drive')
     .sort(byAvailability)
 }
 
