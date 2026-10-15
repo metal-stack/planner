@@ -122,13 +122,19 @@ describe('node compute and NIC configuration', () => {
     expect(errors(plan)).toEqual([])
     g.compute.dimmsPerNode = perCpu + 1
     expect(
-      errors(plan).some((m) => m.includes(`has ${perCpu} DIMM slots per node with 1 CPU`)),
+      errors(plan).some((m) =>
+        m.includes(`${perCpu} DIMM slots per CPU: ${perCpu} available, ${perCpu + 1} configured`),
+      ),
     ).toBe(true)
     g.compute = { cpuCount: 2, dimmsPerNode: perCpu * 2 }
     expect(errors(plan)).toEqual([])
     g.compute.dimmsPerNode = perCpu * 2 + 1
     expect(
-      errors(plan).some((m) => m.includes(`has ${perCpu * 2} DIMM slots per node with 2 CPUs`)),
+      errors(plan).some((m) =>
+        m.includes(
+          `${perCpu} DIMM slots per CPU: ${perCpu * 2} available, ${perCpu * 2 + 1} configured`,
+        ),
+      ),
     ).toBe(true)
   })
 
@@ -158,7 +164,7 @@ describe('node compute and NIC configuration', () => {
     g.compute = { cpuCount: 2, dimmsPerNode: 16 }
     g.nodeConfigs = { 1: { sizeId: g.sizeId, compute: { dimmsPerNode: 16 } } }
     expect(errors(plan)).toEqual([
-      'Chassis position 2: SYS-220BT-HNTR has 8 DIMM slots per node with 1 CPU installed, but 16 DIMMs per node are configured.',
+      'Chassis position 2: SYS-220BT-HNTR supports 8 DIMM slots per CPU: 8 available, 16 configured.',
     ])
     g.nodeConfigs[1].compute!.cpuCount = 2
     expect(errors(plan)).toEqual([])
@@ -210,7 +216,7 @@ describe('node compute and NIC configuration', () => {
     const plan = basePlan()
     group(plan).compute = { dimmsPerNode: 6 }
     expect(errors(plan)).toContain(
-      'AS-3015MR-H8TNR has 4 DIMM slots per node, but 6 DIMMs per node are configured.',
+      'AS-3015MR-H8TNR supports 4 DIMM slots per CPU: 4 available, 6 configured.',
     )
   })
 

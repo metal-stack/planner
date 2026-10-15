@@ -234,9 +234,10 @@ describe('ORV3 rack and power BOM', () => {
     ).toBe(true)
     rack.servers[0].count = 83
     expect(
-      validatePlan(plan).some((issue) => issue.message.includes('includes 4OU of power shelves')),
+      validatePlan(plan).some((issue) =>
+        issue.message.includes('Rack height exceeded: 91OU of 44OU used.'),
+      ),
     ).toBe(true)
-    expect(deriveRackLayout(plan)[0].racks[1].usedU).toBe(91)
   })
 })
 
@@ -288,7 +289,10 @@ describe('ORV3 racks', () => {
     expect(qty('cpu-xeon-4509y')).toBe(3)
     expect(qty('mem-ddr5r-16g')).toBe(6)
     expect(qty('nic-e810-xxvda2')).toBe(3)
-    expect(bom.filter((line) => line.category === 'drive')).toEqual([])
+    expect(qty('drive-m2-sata-480')).toBe(3)
+    expect(qty('drive-e1s-1920')).toBe(3)
+    expect(qty('drive-m2-480')).toBe(0)
+    expect(qty('drive-nvme-960')).toBe(0)
     expect(rackBmcPorts(rack)).toBe(3)
     const bmc = bom.find((line) => line.catalogId === 'cable-rj45')!
     expect(

@@ -20,6 +20,31 @@ function renderImportedRack(plan: Plan) {
 }
 
 describe('imported server configurations', () => {
+  it('shows AMD drive defaults and compatible choices after import', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.widthInches = 21
+    rack.servers[0].modelId = 'server-gigabyte-to25-z12'
+    const { html } = renderImportedRack(plan)
+    expect(html).toContain('value="drive-m2-480" selected=""')
+    expect(html).toContain('value="drive-e1s-1920" selected=""')
+    expect(html).not.toContain('value="drive-m2-sata-480"')
+    expect(html).not.toContain('value="drive-nvme-960"')
+  })
+
+  it('keeps an incompatible imported sled drive visible for replacement', () => {
+    const plan = createEmptyPlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.widthInches = 21
+    rack.servers[0].modelId = 'server-gigabyte-to25-s12'
+    rack.servers[0].drives = [{ modelId: 'drive-m2-480', perNode: 1 }]
+    const { html } = renderImportedRack(plan)
+    expect(html).toContain(
+      '<option value="drive-m2-480" selected="">480 GB M.2 NVMe (incompatible)</option>',
+    )
+    expect(html).toContain('value="drive-m2-sata-480"')
+  })
+
   it('renders the CPU socket count and active RAM limit after import', () => {
     const plan = createEmptyPlan()
     const group = plan.partitions[0].racks[0].servers[0]
@@ -79,7 +104,7 @@ describe('imported server configurations', () => {
       true,
     )
     expect(html).toContain(
-      '<option value="mem-ddr5r-16g" selected="">MTC10F1084S1RC48BA1 (incompatible)</option>',
+      '<option value="mem-ddr5r-16g" selected="">16 GB DDR5-4800 RDIMM · MTC10F1084S1RC48BA1 (incompatible)</option>',
     )
   })
 

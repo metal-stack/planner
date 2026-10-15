@@ -280,6 +280,12 @@ describe('reachability', () => {
       modelId: 'server-gigabyte-to25-s12',
       count: 3,
     })
+    rack.servers.push({
+      ...rack.servers[0],
+      id: 'orv3-amd',
+      modelId: 'server-gigabyte-to25-z12',
+      count: 1,
+    })
     return plan
   }
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { catalog, dimmsForServer, dimmTypeForSocket, type CpuSocket } from './catalog'
+import {
+  catalog,
+  cpusForServer,
+  dimmsForServer,
+  dimmTypeForSocket,
+  type CpuSocket,
+} from './catalog'
 import { nodeSizes, resolveNodeCompute } from './sizes'
 
 describe('node size catalog references', () => {
@@ -23,6 +29,12 @@ describe('node size catalog references', () => {
         )
         for (const server of Object.values(catalog)) {
           if (server.category !== 'server' || server.socket !== socket) continue
+          if (parts.cpuModelId) {
+            expect(
+              cpusForServer(server.id).map((item) => item.id),
+              `${size.id} ${server.id} CPU compatibility`,
+            ).toContain(parts.cpuModelId)
+          }
           expect(
             dimmsForServer(server.id).map((item) => item.id),
             `${size.id} ${server.id} memory compatibility`,
