@@ -135,7 +135,9 @@ export interface CatalogItem {
   cores?: number
   /** Hardware threads on CPUs. */
   threads?: number
-  /** DIMM slots available per server node. */
+  /** CPU sockets on servers with modeled multi-CPU configuration. */
+  cpuSockets?: 2
+  /** Total ordinary DIMM slots per server node, across all CPU sockets. */
   dimmSlots?: number
   /** Memory module technology and capacity. */
   dimmType?: DimmType
@@ -311,7 +313,8 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     availability: 'eol',
     socket: 'LGA-3647',
-    dimmSlots: 12,
+    cpuSockets: 2,
+    dimmSlots: 24,
     // https://www.supermicro.com/datasheet/datasheet_BigTwin.pdf
     nicFormFactors: ['siom'],
   },
@@ -328,6 +331,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     socket: 'LGA-4189',
+    cpuSockets: 2,
     dimmSlots: 16,
   },
   'server-bigtwin-x14': {
@@ -344,6 +348,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'alpha',
     serverUsages: ['worker'],
     socket: 'LGA-4710',
+    cpuSockets: 2,
     dimmSlots: 16,
     // X14DBT-B requires 6400-rated RDIMMs even at lower operating speeds:
     // https://www.supermicro.com/manuals/motherboard/X14/MNL-2674.pdf
@@ -364,7 +369,8 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker', 'storage'],
     availability: 'eol',
     socket: 'LGA-3647',
-    dimmSlots: 12,
+    cpuSockets: 2,
+    dimmSlots: 24,
   },
   'server-superserver-tn20': {
     id: 'server-superserver-tn20',
@@ -395,6 +401,7 @@ export const catalog: Record<string, CatalogItem> = {
     gpuCapable: 2,
     gpuWidth: 'double',
     socket: 'LGA-4677',
+    cpuSockets: 2,
     dimmSlots: 16,
   },
   'server-superserver-tr12p': {
@@ -1167,6 +1174,18 @@ export function cpusForServer(serverModelId: string): CatalogItem[] {
   return Object.values(catalog)
     .filter((item) => item.category === 'cpu' && item.socket === socket)
     .sort(byAvailability)
+}
+
+/** Each installed CPU enables its own memory slots. Sources: X11DPT-B /
+ * X11DPU (12 per CPU), X12DPT-B6 / X14DBT-B / X13DDW-A (8 per CPU).
+ * X12 persistent-memory-only slots are excluded from dimmSlots.
+ * https://www.supermicro.com/manuals/motherboard/X13/MNL-2434.pdf
+ * https://www.supermicro.com/manuals/motherboard/X12/MNL-2317.pdf */
+export function availableDimmSlots(serverModelId: string, cpuCount = 1): number | undefined {
+  const server = catalog[serverModelId]
+  if (!server?.dimmSlots) return undefined
+  const sockets = server.cpuSockets ?? 1
+  return (server.dimmSlots / sockets) * Math.min(cpuCount, sockets)
 }
 
 export function dimmsForServer(serverModelId: string): CatalogItem[] {

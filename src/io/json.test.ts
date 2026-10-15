@@ -4,6 +4,20 @@ import { SCHEMA_VERSION } from '../model/migrate'
 import { exportPlanJson, importPlanJson } from './json'
 
 describe('plan JSON round-trip', () => {
+  it('round-trips group and per-position CPU counts', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.modelId = 'server-bigtwin-x12'
+    group.compute = { cpuCount: 2, dimmsPerNode: 16 }
+    group.nodeConfigs = { 1: { sizeId: group.sizeId, compute: { cpuCount: 1 } } }
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
+
+  it.each([0, 3, 1.5])('rejects an invalid CPU count: %s', (cpuCount) => {
+    const raw = JSON.parse(exportPlanJson(createEmptyPlan()))
+    raw.partitions[0].racks[0].servers[0].compute = { cpuCount }
+    expect(() => importPlanJson(JSON.stringify(raw))).toThrow('not a valid plan')
+  })
   it('exports and re-imports a plan unchanged', () => {
     const plan = createEmptyPlan()
     expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
