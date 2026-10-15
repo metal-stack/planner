@@ -19,6 +19,19 @@ function renderImportedRack(plan: Plan) {
 }
 
 describe('imported server configurations', () => {
+  it('edits the effective single-node configuration without a position selector', () => {
+    const plan = createEmptyPlan()
+    const group = plan.partitions[0].racks[0].servers[0]
+    group.modelId = 'server-superserver-tn12'
+    group.nodeConfigs = { 0: { sizeId: group.sizeId, compute: { cpuModelId: 'cpu-foo' } } }
+    const { html } = renderImportedRack(plan)
+    expect(html).not.toContain('All nodes')
+    expect(html).not.toContain('Configure all nodes')
+    expect(html).not.toContain('Reset chassis position')
+    expect(html).not.toContain('Selecting a number above')
+    expect(html).toContain('<option value="cpu-foo" selected="">cpu-foo (incompatible)</option>')
+  })
+
   it('renders an unknown CPU with its validation error and a selected replacement option', () => {
     const plan = createEmptyPlan()
     plan.partitions[0].racks[0].servers[0].compute = { cpuModelId: 'cpu-foo' }
