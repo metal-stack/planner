@@ -157,6 +157,46 @@ describe('node compute and NIC configuration', () => {
     )
   })
 
+  it('accepts the integration environment configurations', () => {
+    // Headline configurations from the integration environment proposal:
+    // memory-only X11 MicroCloud, c1-large on 8× 24 GB RDIMMs and the
+    // CloudDC box with two H100s per node.
+    const plan = basePlan()
+    const rack = plan.partitions[0].racks[0]
+    rack.servers = [
+      {
+        id: 'x11',
+        role: 'worker',
+        modelId: 'server-microcloud-x11',
+        count: 8,
+        uplink: '2x25G',
+        sizeId: 'c1-medium-x86',
+        nodeConfigs: {},
+      },
+      {
+        id: 'tn12-24g',
+        role: 'worker',
+        modelId: 'server-superserver-tn12',
+        count: 1,
+        uplink: '2x25G',
+        sizeId: 'c1-large-x86',
+        compute: { dimmModelId: 'mem-ddr5r-24g', dimmsPerNode: 8 },
+        nodeConfigs: {},
+      },
+      {
+        id: 'g1-large',
+        role: 'worker',
+        modelId: 'server-superserver-tn12',
+        count: 1,
+        uplink: '2x25G',
+        sizeId: 'c1-large-x86',
+        gpu: { modelId: 'gpu-h100-pcie', perNode: 2 },
+        nodeConfigs: {},
+      },
+    ]
+    expect(errors(plan)).toEqual([])
+  })
+
   it('rejects an unknown drive override', () => {
     const plan = basePlan()
     group(plan).drives = [{ modelId: 'drive-foo', perNode: 1 }]
@@ -184,6 +224,17 @@ describe('node compute and NIC configuration', () => {
     group(plan).modelId = 'server-bigtwin-x11'
     group(plan).nicModelId = 'nic-aoc-mh25g'
     expect(errors(plan)).toEqual([])
+  })
+
+  it.each([false, true])('rejects 4800-rated X14 memory, per-position: %s', (perPosition) => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-bigtwin-x14'
+    const compute = { dimmModelId: 'mem-ddr5r-16g' }
+    if (perPosition) group(plan).nodeConfigs = { 1: { sizeId: 'n1-medium-x86', compute } }
+    else group(plan).compute = compute
+    expect(errors(plan)).toContain(
+      `${perPosition ? 'Chassis position 2: ' : ''}SYS-222BT-HNR requires 6400 MT/s-rated DIMMs, but MTC10F1084S1RC48BA1 is rated 4800 MT/s.`,
+    )
   })
 
   it('prefixes issues from per-position configurations with the chassis position', () => {
