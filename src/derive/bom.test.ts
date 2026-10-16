@@ -423,6 +423,30 @@ describe('deriveBom GPUs', () => {
   })
 })
 
+describe('deriveBom per-position node configurations', () => {
+  it('orders one boot and one data drive per node by default', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    expect(quantity(plan, 'drive-m2-480')).toBe(8)
+    expect(quantity(plan, 'drive-nvme-960')).toBe(8)
+  })
+
+  it('orders the drive list a configuration chooses, counts per node', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    plan.partitions[0].racks[0].servers[0].drives = [
+      { modelId: 'drive-m2-480', perNode: 1 },
+      { modelId: 'drive-nvme-960', perNode: 3 },
+    ]
+    expect(quantity(plan, 'drive-m2-480')).toBe(8)
+    expect(quantity(plan, 'drive-nvme-960')).toBe(24)
+  })
+
+  it('orders no drives for an explicitly empty list', () => {
+    const plan = planWithServer('server-microcloud-h13', 8)
+    plan.partitions[0].racks[0].servers[0].drives = []
+    expect(deriveBom(plan).some((line) => line.category === 'drive')).toBe(false)
+  })
+})
+
 describe('deriveBom scope', () => {
   function ids(plan: Plan, scope: Parameters<typeof deriveBom>[1]): string[] {
     return deriveBom(plan, scope).map((l) => l.catalogId)

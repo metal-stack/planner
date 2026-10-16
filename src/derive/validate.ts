@@ -240,6 +240,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
     checkGpu(issues, scope, group, group, '')
     checkCompute(issues, scope, group, group, '')
     checkNic(issues, scope, group, group, '')
+    checkDrives(issues, scope, group, '')
   }
 }
 
@@ -378,6 +379,16 @@ function checkCompute(
       `${prefix}${itemLabel(group.modelId)} has ${server.dimmSlots} DIMM slots per node, ` +
         `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
     )
+  }
+}
+
+/** Every configured drive must exist and be a drive. */
+function checkDrives(issues: Issue[], scope: Scope, config: NodeConfig, prefix: string): void {
+  for (const { modelId } of config.drives ?? []) {
+    const drive = catalog[modelId]
+    if (!drive || drive.category !== 'drive') {
+      report(issues, scope, 'error', `${prefix}Unknown drive model "${modelId}".`)
+    }
   }
 }
 
