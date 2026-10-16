@@ -33,6 +33,8 @@ const CATEGORY_LABEL = {
   switch: 'Switches',
   server: 'Servers',
   chassis: 'Chassis, trays and adapters',
+  rack: 'Racks and bus bars',
+  power: 'Power infrastructure',
   router: 'Routers',
   nic: 'NICs',
   gpu: 'GPUs',
@@ -50,7 +52,7 @@ const scopes: { scope: BomScope; label: string; hint: string }[] = [
   {
     scope: 'production',
     label: 'Production',
-    hint: 'Fabric switches, routers, servers and their optics and cables',
+    hint: 'Fabric switches, routers, servers, rack infrastructure and their optics and cables',
   },
   {
     scope: 'management',

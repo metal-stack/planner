@@ -2,6 +2,7 @@ import { create, useStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
 import { temporal } from 'zundo'
+import { catalog } from '../model/catalog'
 import { createEmptyPlan, defaultPartition, newRack, withRackKind } from '../model/defaults'
 import { ipPresets, type IpFamily, type IpFamilyKey, type IpInfra } from '../model/ipPlan'
 import { migrateRawPlan, SCHEMA_VERSION } from '../model/migrate'
@@ -233,6 +234,13 @@ export const usePlanStore = create<PlannerState>()(
           set((s) => ({
             plan: mapRack(s.plan, partitionId, rackId, (r) => ({
               ...r,
+              // Keep the model and its required rack format in one undoable edit.
+              widthInches:
+                patch.modelId &&
+                catalog[patch.modelId]?.rackWidthInches === 21 &&
+                r.servers.some((g) => g.id === groupId)
+                  ? 21
+                  : r.widthInches,
               servers: r.servers.map((g) => (g.id === groupId ? { ...g, ...patch } : g)),
             })),
           })),
