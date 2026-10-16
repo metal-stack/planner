@@ -8,6 +8,7 @@ import {
   type ServerGroup,
   type UplinkSpeed,
 } from '../model/plan'
+import { resolveNodeCompute } from '../model/sizes'
 import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane'
 
 // The BOM is always derived from the Plan, never stored. Every quantity rule
@@ -23,7 +24,9 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   `leafSpineLinks` 100G links; every exit, superspine and storage leaf
 //   connects once to every spine. Each link is an MTP trunk cable with a
 //   100G-SR4 transceiver on both ends.
-// - Server uplinks: see addServerGroup (25G breakout or 100G point-to-point).
+// - Server nodes: the selected size resolves to one CPU and a number of
+//   DIMMs per node. The selected dual-port NIC supplies the configured
+//   uplink; cabling is 25G breakout or 100G point-to-point.
 // - Management network, copper (RJ45 1G, native ports, no transceivers):
 //   one BMC/OOB port per server chassis to the rack's mgmt leaf (the sample
 //   BOMs count per chassis, not per node), the single management interface
@@ -231,21 +234,37 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     `${group.count} ${role} nodes / ${nodesPer} per chassis`,
   )
 
-  // GPUs, when fitted: one line per group, every node equipped alike.
-  if (group.gpu && group.gpu.perNode > 0) {
-    const gpus = group.count * group.gpu.perNode
-    bom.add(group.gpu.modelId, gpus, `${group.count} ${role} nodes × ${group.gpu.perNode} GPU`)
+  const config = group
+  const count = group.count
+  const who = `${count} ${role} nodes`
+
+  if (config.gpu && config.gpu.perNode > 0) {
+    bom.add(config.gpu.modelId, count * config.gpu.perNode, `${who} × ${config.gpu.perNode} GPU`)
+  }
+
+  // Socketless legacy boards deliberately get no CPU or memory lines.
+  if (catalog[group.modelId]?.socket) {
+    const compute = resolveNodeCompute(group)
+    const sizeNote = compute.custom ? `${config.sizeId}, customized` : config.sizeId
+    if (compute.cpuModelId) {
+      bom.add(compute.cpuModelId, count, `${who} × 1 CPU (${sizeNote})`)
+    }
+    if (compute.dimmModelId && compute.dimmsPerNode) {
+      bom.add(
+        compute.dimmModelId,
+        count * compute.dimmsPerNode,
+        `${who} × ${compute.dimmsPerNode} DIMMs (${sizeNote})`,
+      )
+    }
   }
 
   addNodeUplinks(bom, group.count, group.uplink, role)
 }
 
-/** NIC, transceivers and cables for dual-attached nodes, whatever they are:
- *  server groups on their rack's leaves and the control-plane nodes on the
- *  switch they hang off. `what` names them in the reasons ("worker",
- *  "control plane"). */
+/** Transceivers and cables for dual-attached server and control-plane nodes.
+ *  Cabling follows uplink speed, independent of the selected NIC model.
+ *  `what` names the nodes in the reasons ("worker", "control plane"). */
 function addNodeUplinks(bom: BomBuilder, nodes: number, uplink: UplinkSpeed, what: string): void {
-  // Every node carries one dual-port NIC matching its uplink speed.
   const uplinkPorts = 2 * nodes
   if (uplink === '2x25G') {
     bom.add('nic-e810-xxvda2', nodes, `${nodes} ${what} nodes × 1 NIC`)

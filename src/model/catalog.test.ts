@@ -252,6 +252,7 @@ describe('reachability', () => {
       modelId: 'server-bigtwin-x12',
       count: 4,
       uplink: '2x100G',
+      sizeId: 'n1-medium-x86',
     })
     return plan
   }
