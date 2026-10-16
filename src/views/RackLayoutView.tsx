@@ -1,3 +1,4 @@
+import { rackUnit } from '../model/catalog'
 import {
   deriveRackLayout,
   formatPower,
@@ -69,12 +70,14 @@ function Meter(props: {
 }
 
 function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) {
+  const slotW = (SLOT_W * rack.widthInches) / 19
+  const unit = rackUnit(rack.widthInches)
   const overflowU = Math.max(0, rack.usedU - rack.heightUnits)
   const bodyH = (rack.heightUnits + overflowU) * U_PX
-  const width = RAIL_W + SLOT_W + 8
+  const width = RAIL_W + slotW + 8
   const height = HEAD_H + bodyH + 10
   const yOfTopU = (topU: number) => HEAD_H + (rack.heightUnits - topU) * U_PX
-  const meterW = SLOT_W / 2 - 8
+  const meterW = slotW / 2 - 8
 
   return (
     <svg
@@ -87,7 +90,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
     >
       {onClick && <title>Edit {rack.name} in the plan</title>}
       <text x={RAIL_W} y={16} fontSize={14} fontWeight={700} fill={COLOR.ink}>
-        {rack.name}
+        {rack.name} · {rack.widthInches}″
       </text>
       <Meter
         x={RAIL_W}
@@ -95,10 +98,10 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
         w={meterW}
         used={rack.usedU}
         max={rack.heightUnits}
-        label={`${rack.usedU} of ${rack.heightUnits} U${overflowU > 0 ? `, ${overflowU} over` : ''}`}
+        label={`${rack.usedU} of ${rack.heightUnits} ${unit}${overflowU > 0 ? `, ${overflowU} over` : ''}`}
       />
       <Meter
-        x={RAIL_W + SLOT_W / 2 + 8}
+        x={RAIL_W + slotW / 2 + 8}
         y={34}
         w={meterW}
         used={rack.powerWatts}
@@ -133,7 +136,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
       <rect
         x={RAIL_W}
         y={HEAD_H}
-        width={SLOT_W}
+        width={slotW}
         height={rack.heightUnits * U_PX}
         fill={COLOR.gray50}
         stroke={COLOR.gray400}
@@ -143,7 +146,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
           key={i}
           x1={RAIL_W}
           y1={HEAD_H + (i + 1) * U_PX}
-          x2={RAIL_W + SLOT_W}
+          x2={RAIL_W + slotW}
           y2={HEAD_H + (i + 1) * U_PX}
           stroke={COLOR.gray100}
         />
@@ -156,20 +159,20 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
         const h = slot.units * U_PX
         const centerY = y + h / 2
         const bottomU = slot.topU - slot.units + 1
-        const uRange = slot.units > 1 ? `U${bottomU}–${slot.topU}` : `U${slot.topU}`
+        const uRange = slot.units > 1 ? `${unit}${bottomU}–${slot.topU}` : `${unit}${slot.topU}`
         return (
           <g key={i}>
             <rect
               x={RAIL_W + 1}
               y={y + 1}
-              width={SLOT_W - 2}
+              width={slotW - 2}
               height={h - 2}
               rx={2}
               fill={overflowing ? COLOR.dangerTint : style.fill}
               stroke={overflowing ? COLOR.danger : style.stroke}
               strokeWidth={1}
             />
-            <title>{`${slot.label}: ${slot.sublabel ?? ''} (${uRange}, ${slot.units}U)`}</title>
+            <title>{`${slot.label}: ${slot.sublabel ?? ''} (${uRange}, ${slot.units}${unit})`}</title>
             {slot.units === 1 ? (
               <>
                 <text
@@ -182,7 +185,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                   {slot.label}
                 </text>
                 <text
-                  x={RAIL_W + SLOT_W - 8}
+                  x={RAIL_W + slotW - 8}
                   y={centerY + 3.5}
                   textAnchor="end"
                   fontSize={10}
@@ -207,7 +210,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                   )
                 })()}
                 <text
-                  x={RAIL_W + SLOT_W / 2}
+                  x={RAIL_W + slotW / 2}
                   y={centerY - 2}
                   textAnchor="middle"
                   fontSize={12}
@@ -217,7 +220,7 @@ function Rack({ rack, onClick }: { rack: RackElevation; onClick?: () => void }) 
                   {slot.label}
                 </text>
                 <text
-                  x={RAIL_W + SLOT_W / 2}
+                  x={RAIL_W + slotW / 2}
                   y={centerY + 12}
                   textAnchor="middle"
                   fontSize={10.5}

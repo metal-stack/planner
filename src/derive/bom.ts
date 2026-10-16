@@ -1,11 +1,13 @@
 import {
   catalog,
-  defaultDrives,
+  drivesForServer,
   defaultNicId,
   itemLabel,
   nosLabel,
   nosLicenseId,
   portCount,
+  rackAdapterFor,
+  defaultRackAdapterCount,
 } from '../model/catalog'
 import {
   mgmtDeviceCount,
@@ -13,6 +15,7 @@ import {
   type Partition,
   type Plan,
   type Rack,
+  type RackWidth,
   type ServerGroup,
   type UplinkSpeed,
 } from '../model/plan'
@@ -38,7 +41,7 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   uplink; cabling is 25G breakout or 100G point-to-point.
 // - Management network, copper (RJ45 1G, native ports, no transceivers):
 //   one BMC/OOB port per server chassis to the rack's mgmt leaf (the sample
-//   BOMs count per chassis, not per node), the single management interface
+//   BOMs count per chassis, not per node; ORv3 sleds use one per node), the single management interface
 //   of every leaf to the rack's mgmt leaf, the single management interface
 //   of every central-rack switch and router to the mgmt spines, and every
 //   mgmt server to every mgmt spine.
@@ -50,6 +53,8 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   2x 100G-SR4 per link — plus one OOB copper port each.
 // - Licenses: one NOS support license per switch, chosen by the partition's
 //   `nos` and the switch's `licenseClass` (catalog `nosLicenseId`).
+// - Mounting: height-based adapter estimates per 19-inch chassis/device in
+//   an ORv3 rack. Adapters inherit the mounted device's network and location.
 // - Spares: a fixed number (Plan.sparesPerLine) of spares per transceiver
 //   and cable line, added to the plan-wide BOM only (not per partition).
 
@@ -129,6 +134,7 @@ class BomBuilder {
     private partition = '',
     private location = '',
     private network: BomNetwork = 'production',
+    private widthInches: RackWidth = 19,
   ) {}
 
   /** A view whose rules belong to a named partition. Left empty for a
@@ -141,9 +147,10 @@ class BomBuilder {
 
   /** A view whose rules belong to a place within the partition, e.g. a rack
    *  name or "Central rack". */
-  at(location: string): BomBuilder {
+  at(location: string, widthInches: RackWidth = 19): BomBuilder {
     const view = Object.create(this) as BomBuilder
     view.location = location
+    view.widthInches = widthInches
     return view
   }
 
@@ -161,6 +168,18 @@ class BomBuilder {
   add(catalogId: string, quantity: number, detail: string): void {
     if (quantity <= 0) return
     if (this.scope !== 'all' && this.scope !== this.network) return
+    // Unknown ids are skipped here; validatePlan reports them to the user.
+    const item = catalog[catalogId]
+    if (!item) return
+    const adapterId = rackAdapterFor(item, this.widthInches)
+    if (adapterId) {
+      const perDevice = defaultRackAdapterCount(item)
+      this.add(
+        adapterId,
+        quantity * perDevice,
+        `${quantity} × ${part(catalogId)} (${item.heightUnits ?? 1}U) × ${perDevice} mounting adapter${perDevice === 1 ? '' : 's'} per device (height estimate)`,
+      )
+    }
     const entry: BomReason = { quantity, detail, where: this.where() }
     const existing = this.lines.get(catalogId)
     if (existing) {
@@ -168,9 +187,6 @@ class BomBuilder {
       existing.reasons.push(entry)
       return
     }
-    // Unknown ids are skipped here; validatePlan reports them to the user.
-    const item = catalog[catalogId]
-    if (!item) return
     this.lines.set(catalogId, {
       category: item.category,
       catalogId,
@@ -196,9 +212,12 @@ export function chassisCount(group: ServerGroup): number {
   return Math.ceil(group.count / nodesPerChassis)
 }
 
-/** BMC/OOB copper ports a rack's servers need: one per chassis. */
+/** BMC ports: per chassis by default, per sled on ORv3 platforms. */
 export function rackBmcPorts(rack: Rack): number {
-  return rack.servers.reduce((n, g) => n + chassisCount(g), 0)
+  return rack.servers.reduce(
+    (n, g) => n + (catalog[g.modelId]?.bmcPerNode ? g.count : chassisCount(g)),
+    0,
+  )
 }
 
 /** Fiber speed between mgmt leaf and mgmt spine: 25G if both have 25G
@@ -237,11 +256,17 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
   // The rack is the reason's section now, so the detail only has to say
   // which group within the rack it is.
   const role = group.role
+  const trayModelId = catalog[group.modelId]?.trayModelId
   bom.add(
     group.modelId,
-    chassisCount(group),
-    `${group.count} ${role} nodes / ${nodesPer} per chassis`,
+    trayModelId ? group.count : chassisCount(group),
+    trayModelId
+      ? `${group.count} ${role} compute sleds`
+      : `${group.count} ${role} nodes / ${nodesPer} per chassis`,
   )
+  if (trayModelId) {
+    bom.add(trayModelId, chassisCount(group), `${group.count} ${role} nodes / ${nodesPer} per tray`)
+  }
 
   // Chassis positions may deviate from the group's configuration, so GPU,
   // CPU, memory and NIC lines are emitted per distinct configuration;
@@ -280,7 +305,7 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
 
     // Drives per node: the configuration's list, or the default pair; an
     // explicitly empty list orders none.
-    for (const drive of config.drives ?? defaultDrives) {
+    for (const drive of config.drives ?? drivesForServer(group.modelId)) {
       bom.add(
         drive.modelId,
         count * drive.perNode,
@@ -386,8 +411,8 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
   // uplinks to every mgmt spine.
   for (const rack of partition.racks) {
     const perRack = bom.at(rack.name)
-    const chassis = rackBmcPorts(rack)
-    perRack.add('cable-rj45', chassis, `${chassis} server chassis × 1 BMC port to the mgmt leaf`)
+    const bmcPorts = rackBmcPorts(rack)
+    perRack.add('cable-rj45', bmcPorts, `${bmcPorts} × server BMC connection to the mgmt leaf`)
     perRack.add(
       'cable-rj45',
       rack.leafCount,
@@ -422,8 +447,8 @@ function addControlPlane(
   const { fabric } = partition
   const nodes = cp.nodeCount
   const where = central ? CENTRAL_RACK : cp.rack.name
-  const prod = central ? prodCentral : bom.on('production').at(where)
-  const mgmt = central ? mgmtCentral : bom.on('management').at(where)
+  const prod = central ? prodCentral : bom.on('production').at(where, cp.rack.widthInches)
+  const mgmt = central ? mgmtCentral : bom.on('management').at(where, cp.rack.widthInches)
 
   prod.add(cp.nodeModelId, nodes, `${nodes} control plane nodes`)
   prod.add(defaultNicId(cp.uplink), nodes, `${nodes} control plane nodes × 1 NIC`)
@@ -477,8 +502,8 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
   const { fabric } = partition
   // Network and location are tagged once here, so every rule below inherits
   // the network it belongs to and the section it is reported under.
-  const prodCentral = bom.on('production').at(CENTRAL_RACK)
-  const mgmtCentral = bom.on('management').at(CENTRAL_RACK)
+  const prodCentral = bom.on('production').at(CENTRAL_RACK, partition.rackDefaults.widthInches)
+  const mgmtCentral = bom.on('management').at(CENTRAL_RACK, partition.rackDefaults.widthInches)
 
   addSwitch(
     prodCentral,
@@ -534,21 +559,21 @@ function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
 
   for (const rack of partition.racks) {
     addSwitch(
-      bom.on('production').at(rack.name),
+      bom.on('production').at(rack.name, rack.widthInches),
       fabric.nos,
       rack.leafModelId,
       rack.leafCount,
       `${rack.leafCount} leaves`,
     )
     addSwitch(
-      bom.on('management').at(rack.name),
+      bom.on('management').at(rack.name, rack.widthInches),
       fabric.nos,
       fabric.mgmt.leafModelId,
       fabric.mgmt.leafPerRack,
       `${fabric.mgmt.leafPerRack} mgmt leaves`,
     )
     for (const group of rack.servers) {
-      addServerGroup(bom.on('production').at(rack.name), group)
+      addServerGroup(bom.on('production').at(rack.name, rack.widthInches), group)
     }
   }
 }
