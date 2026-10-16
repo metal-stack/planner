@@ -5,6 +5,7 @@
 // CPU TDP and memory are not added to rack power estimates.
 
 import { catalog, type CpuSocket } from './catalog'
+import type { ServerGroup } from './plan'
 
 export interface SizeParts {
   /** Absent on platforms with a soldered CPU (X11 MicroCloud): the size's
@@ -107,11 +108,9 @@ export interface ResolvedCompute {
   custom: boolean
 }
 
-export function resolveNodeCompute(group: {
-  modelId: string
-  sizeId: string
-  compute?: { cpuModelId?: string; dimmModelId?: string; dimmsPerNode?: number }
-}): ResolvedCompute {
+export function resolveNodeCompute(
+  group: Pick<ServerGroup, 'modelId' | 'sizeId' | 'compute'>,
+): ResolvedCompute {
   const size = nodeSize(group.sizeId)
   const socket = catalog[group.modelId]?.socket
   const preset = socket ? size?.parts[socket] : undefined
