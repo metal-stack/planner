@@ -3,10 +3,12 @@ import { deriveBom } from '../derive/bom'
 import {
   catalog,
   cpusForServer,
+  defaultNicId,
   dimmsForServer,
   gpusForServer,
   itemLabel,
   legacyIdMap,
+  nicsForServer,
   nosLabel,
   nosLicenseId,
   nosOptions,
@@ -225,7 +227,12 @@ describe('reachability', () => {
       // through a newly annotated socket counts as offered.
       ...Object.values(catalog)
         .filter((item) => item.category === 'server')
-        .flatMap((server) => [...cpusForServer(server.id), ...dimmsForServer(server.id)]),
+        .flatMap((server) => [
+          ...nicsForServer(server.id, '2x25G'),
+          ...nicsForServer(server.id, '2x100G'),
+          ...cpusForServer(server.id),
+          ...dimmsForServer(server.id),
+        ]),
     ].map((i) => i.id),
   )
 
@@ -342,6 +349,18 @@ describe('helpers', () => {
     expect(gpusForServer('server-microcloud-x13')).toEqual([])
     expect(gpusForServer('server-bigtwin-x11')).toEqual([])
     expect(gpusForServer('nope')).toEqual([])
+  })
+
+  it('offers NICs by uplink speed and picks the E810 defaults', () => {
+    const twentyFive = nicsForServer('server-microcloud-h13', '2x25G').map((item) => item.id)
+    expect(twentyFive).toContain('nic-xxv710-da2')
+    expect(twentyFive).toContain('nic-connectx5')
+    expect(twentyFive).not.toContain('nic-e810-cqda2')
+    expect(nicsForServer('server-microcloud-h13', '2x100G').map((item) => item.id)).toEqual([
+      'nic-e810-cqda2',
+    ])
+    expect(defaultNicId('2x25G')).toBe('nic-e810-xxvda2')
+    expect(defaultNicId('2x100G')).toBe('nic-e810-cqda2')
   })
 
   it('picks the license by NOS and platform tier', () => {

@@ -51,6 +51,7 @@ export type ComputeOverride = z.infer<typeof ComputeOverrideSchema>
 export const NodeConfigSchema = z.object({
   sizeId: z.string(),
   compute: ComputeOverrideSchema.optional(),
+  nicModelId: z.string().optional(),
   gpu: GpuConfigSchema.optional(),
 })
 export type NodeConfig = z.infer<typeof NodeConfigSchema>
