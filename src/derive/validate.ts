@@ -9,6 +9,7 @@ import {
   type DimmType,
   type SwitchRole,
 } from '../model/catalog'
+import { configBuckets, positionListLabel } from '../model/nodeConfig'
 import {
   mgmtDeviceCount,
   type NodeConfig,
@@ -229,6 +230,8 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
         `${itemLabel(group.modelId)}: metal-stack support status is alpha.`,
       )
     }
+    // The shared configuration and every per-position deviation are checked
+    // alike; a deviating bucket's messages name its chassis positions.
     if (!item.socket) {
       report(
         issues,
@@ -237,10 +240,14 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
         `CPU and memory are not modeled for ${itemLabel(group.modelId)}, so the BOM has no CPU or DIMM lines for this group.`,
       )
     }
-    checkGpu(issues, scope, group, group, '')
-    checkCompute(issues, scope, group, group, '')
-    checkNic(issues, scope, group, group, '')
-    checkDrives(issues, scope, group, '')
+    for (const bucket of configBuckets(group)) {
+      const label = positionListLabel(bucket.positions)
+      const prefix = bucket.custom ? `${label[0].toUpperCase()}${label.slice(1)}: ` : ''
+      checkGpu(issues, scope, group, bucket.config, prefix)
+      checkCompute(issues, scope, group, bucket.config, prefix)
+      checkNic(issues, scope, group, bucket.config, prefix)
+      checkDrives(issues, scope, bucket.config, prefix)
+    }
   }
 }
 

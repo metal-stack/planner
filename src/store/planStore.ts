@@ -216,6 +216,7 @@ export const usePlanStore = create<PlannerState>()(
                   count: 8,
                   uplink: '2x25G',
                   sizeId: DEFAULT_SIZE_ID,
+                  nodeConfigs: {},
                 },
               ],
             })),

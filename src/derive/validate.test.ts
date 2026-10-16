@@ -41,6 +41,7 @@ describe('leaf port capacity', () => {
         count: 30,
         uplink: '2x25G',
         sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
       },
       {
         id: 'b',
@@ -49,6 +50,7 @@ describe('leaf port capacity', () => {
         count: 2,
         uplink: '2x100G',
         sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
       },
     ]
     // 30 nodes x 2 = 60 x25G -> ceil(60/4)=15 ports; 2 nodes x 2 = 4 x100G ports
@@ -66,6 +68,7 @@ describe('leaf port capacity', () => {
         count: 120,
         uplink: '2x100G',
         sizeId: 'n1-medium-x86',
+        nodeConfigs: {},
       },
     ]
     expect(errors(plan).some((m) => m.includes('Leaf capacity exceeded'))).toBe(true)
@@ -166,11 +169,31 @@ describe('node compute and NIC configuration', () => {
     expect(errors(plan)).toContain('Unknown NIC model "nic-foo".')
   })
 
+  it.each([false, true])('rejects an incompatible NIC, per-position: %s', (perPosition) => {
+    const plan = basePlan()
+    const config = { sizeId: 'n1-medium-x86', nicModelId: 'nic-aoc-mh25g' }
+    if (perPosition) group(plan).nodeConfigs = { 1: config }
+    else group(plan).nicModelId = config.nicModelId
+    expect(errors(plan)).toContain(
+      `${perPosition ? 'Chassis position 2: ' : ''}AOC-MH25G-m2S2T requires a SIOM slot, which AS-3015MR-H8TNR does not provide.`,
+    )
+  })
+
   it('accepts a SIOM NIC on the X11 BigTwin', () => {
     const plan = basePlan()
     group(plan).modelId = 'server-bigtwin-x11'
     group(plan).nicModelId = 'nic-aoc-mh25g'
     expect(errors(plan)).toEqual([])
+  })
+
+  it('prefixes issues from per-position configurations with the chassis position', () => {
+    const plan = basePlan()
+    group(plan).nodeConfigs = {
+      1: { sizeId: 'n1-medium-x86', nicModelId: 'nic-e810-cqda2' },
+    }
+    expect(errors(plan)).toContain(
+      "Chassis position 2: E810-CQDA2 has no 25G ports, but the group's uplink is 2x25G.",
+    )
   })
 
   it('rejects a NIC without ports at the uplink speed', () => {
@@ -347,7 +370,7 @@ describe('validatePlan GPUs and vendor availability', () => {
         count: 8,
         uplink: '2x25G',
         sizeId: 'n1-medium-x86',
-
+        nodeConfigs: {},
         gpu: { modelId, perNode },
       },
     ]

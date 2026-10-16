@@ -54,6 +54,12 @@ export function normalizePlan(plan: Plan): Plan {
         servers: rack.servers.map((group) => ({
           ...normalizeConfig(group),
           modelId: currentCatalogId(group.modelId),
+          nodeConfigs: Object.fromEntries(
+            Object.entries(group.nodeConfigs).map(([node, config]) => [
+              node,
+              normalizeConfig(config),
+            ]),
+          ),
         })),
       })),
     })),
