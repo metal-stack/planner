@@ -107,6 +107,63 @@ describe('node compute and NIC configuration', () => {
     return plan.partitions[0].racks[0].servers[0]
   }
 
+  it.each([
+    ['server-bigtwin-x11', 12],
+    ['server-bigtwin-x12', 8],
+    ['server-bigtwin-x14', 8],
+    ['server-ultra-2029u', 12],
+    ['server-superserver-tn12', 8],
+  ] as const)('checks active DIMM slots for one or two CPUs on %s', (modelId, perCpu) => {
+    const plan = basePlan()
+    const g = group(plan)
+    g.modelId = modelId
+    g.count = 1
+    g.compute = { dimmsPerNode: perCpu }
+    expect(errors(plan)).toEqual([])
+    g.compute.dimmsPerNode = perCpu + 1
+    expect(
+      errors(plan).some((m) => m.includes(`has ${perCpu} DIMM slots per node with 1 CPU`)),
+    ).toBe(true)
+    g.compute = { cpuCount: 2, dimmsPerNode: perCpu * 2 }
+    expect(errors(plan)).toEqual([])
+    g.compute.dimmsPerNode = perCpu * 2 + 1
+    expect(
+      errors(plan).some((m) => m.includes(`has ${perCpu * 2} DIMM slots per node with 2 CPUs`)),
+    ).toBe(true)
+  })
+
+  it('requires memory for both installed CPUs', () => {
+    const plan = basePlan()
+    group(plan).modelId = 'server-bigtwin-x12'
+    group(plan).compute = { cpuCount: 2, dimmsPerNode: 1 }
+    expect(errors(plan).some((m) => m.includes('at least one DIMM per installed CPU'))).toBe(true)
+  })
+
+  it.each(['server-microcloud-h13', 'server-microcloud-x11', 'server-superserver-tn20'])(
+    'rejects imported dual CPUs where configuration is unsupported: %s',
+    (modelId) => {
+      const plan = basePlan()
+      group(plan).modelId = modelId
+      group(plan).compute = { cpuCount: 2 }
+      expect(
+        errors(plan).some((m) => m.includes('does not support a dual-socket configuration')),
+      ).toBe(true)
+    },
+  )
+
+  it('checks the CPU count of each chassis position independently', () => {
+    const plan = basePlan()
+    const g = group(plan)
+    g.modelId = 'server-bigtwin-x12'
+    g.compute = { cpuCount: 2, dimmsPerNode: 16 }
+    g.nodeConfigs = { 1: { sizeId: g.sizeId, compute: { dimmsPerNode: 16 } } }
+    expect(errors(plan)).toEqual([
+      'Chassis position 2: SYS-220BT-HNTR has 8 DIMM slots per node with 1 CPU installed, but 16 DIMMs per node are configured.',
+    ])
+    g.nodeConfigs[1].compute!.cpuCount = 2
+    expect(errors(plan)).toEqual([])
+  })
+
   it('rejects an unknown node size', () => {
     const plan = basePlan()
     group(plan).sizeId = 'x1-huge'
