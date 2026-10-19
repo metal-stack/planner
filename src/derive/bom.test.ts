@@ -93,6 +93,17 @@ describe('deriveBom node size rules', () => {
     expect(quantity(x13, 'mem-ddr5u-16g')).toBe(6)
   })
 
+  it('marks custom parts in the reason and applies their quantity', () => {
+    const plan = planWithServer('server-microcloud-h13', 4)
+    plan.partitions[0].racks[0].servers[0].compute = {
+      dimmModelId: 'mem-ddr5u-32g',
+      dimmsPerNode: 4,
+    }
+    const line = deriveBom(plan).find((item) => item.catalogId === 'mem-ddr5u-32g')
+    expect(line?.quantity).toBe(16)
+    expect(line?.reasons[0].detail).toBe('4 worker nodes × 4 DIMMs (n1-medium-x86, customized)')
+  })
+
   it('does not add CPU or DIMM lines for a socketless board', () => {
     const plan = planWithServer('server-superserver-tn20', 2)
     expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
