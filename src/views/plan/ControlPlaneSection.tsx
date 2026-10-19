@@ -1,3 +1,5 @@
+import RackWidthField from './RackWidthField'
+import { rackUnit } from '../../model/catalog'
 import { itemLabel, serversForUsage, switchesForRole } from '../../model/catalog'
 import type { ControlPlane, Plan } from '../../model/plan'
 import { controlPlaneFootprint } from '../../derive/controlPlane'
@@ -10,7 +12,7 @@ import InfoBubble from './InfoBubble'
 import IssueBadges from './IssueBadges'
 import { CONTROL_PLANE_ANCHOR } from './navigate'
 import { Icon, SECTION_ICON } from '../icons'
-import { optionLabel } from './options'
+import { optionLabel, serverOptions } from './options'
 
 /** Where the metal-stack control plane runs. The deployment guide leaves
  *  the location open and asks only that the partitions can reach it, so
@@ -104,10 +106,7 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
                 href: DOCS.deploymentGuide,
               }}
               value={cp.nodeModelId}
-              options={serversForUsage('management').map((i) => ({
-                value: i.id,
-                label: optionLabel(i),
-              }))}
+              options={serverOptions(serversForUsage('management'), cp.nodeModelId)}
               onChange={(v) => patch({ nodeModelId: v })}
             />
             <NumberField
@@ -137,7 +136,11 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
       {ownRack && (
         <details data-advanced className="mt-3 border-t border-gray-100 pt-3">
           <summary className="cursor-pointer text-sm font-medium text-gray-700">
-            Advanced <span className="font-normal text-gray-500">· the control plane rack</span>
+            Advanced{' '}
+            <span className="font-normal text-gray-500">
+              · {cp.rack.widthInches}″ {cp.rack.widthInches === 21 ? 'ORV3' : 'EIA'}, rack format,
+              height and power budget
+            </span>
           </summary>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
             <label className="block text-sm">
@@ -163,8 +166,12 @@ export default function ControlPlaneSection({ plan, issues }: { plan: Plan; issu
               value={cp.rack.leafCount}
               onChange={(n) => patchRack({ leafCount: n })}
             />
+            <RackWidthField
+              value={cp.rack.widthInches}
+              onChange={(widthInches) => patchRack({ widthInches })}
+            />
             <NumberField
-              label="Height (U)"
+              label={`Height (${rackUnit(cp.rack.widthInches)})`}
               value={cp.rack.heightUnits}
               onChange={(n) => patchRack({ heightUnits: n })}
             />
