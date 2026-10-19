@@ -22,6 +22,11 @@ import {
 import { configBuckets, positionListLabel } from '../model/nodeConfig'
 import { resolveNodeCompute } from '../model/sizes'
 import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane'
+import { orv3Infrastructure } from './orv3'
+import { deriveRackLayout, type RackElevation } from './rackLayout'
+import { chassisCount } from './servers'
+
+export { chassisCount } from './servers'
 
 // The BOM is always derived from the Plan, never stored. Every quantity rule
 // lives here and gets a unit test in bom.test.ts. Every rule also records a
@@ -55,6 +60,13 @@ import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane
 //   `nos` and the switch's `licenseClass` (catalog `nosLicenseId`).
 // - Mounting: height-based adapter estimates per 19-inch chassis/device in
 //   an ORv3 rack. Adapters inherit the mounted device's network and location.
+// - ORv3 infrastructure: one frame with bus bar per physical rack, populated
+//   power shelves, fitted PSU modules, slot blanks and input cable sets. N+N
+//   PSU modules on independent feeds cover the rack's
+//   estimated equipment load on either feed, using the same physical rack
+//   distribution and power estimates as the elevations. Empty racks need no
+//   shelves. Shared infrastructure is assigned
+//   to production so the two network scopes remain additive.
 // - Spares: a fixed number (Plan.sparesPerLine) of spares per transceiver
 //   and cable line, added to the plan-wide BOM only (not per partition).
 
@@ -204,12 +216,6 @@ class BomBuilder {
       (a, b) => a.category.localeCompare(b.category) || a.catalogId.localeCompare(b.catalogId),
     )
   }
-}
-
-/** Server chassis needed for a group: nodes divided by nodes-per-chassis. */
-export function chassisCount(group: ServerGroup): number {
-  const nodesPerChassis = catalog[group.modelId]?.nodesPerChassis ?? 1
-  return Math.ceil(group.count / nodesPerChassis)
 }
 
 /** BMC ports: per chassis by default, per sled on ORv3 platforms. */
@@ -428,6 +434,50 @@ function addMgmtLinks(bom: BomBuilder, partition: Partition, central: BomBuilder
 /** Section the central-rack rules are reported under. */
 const CENTRAL_RACK = 'Central rack'
 
+function addOrv3Infrastructure(bom: BomBuilder, rack: RackElevation): void {
+  const infrastructure = orv3Infrastructure(rack)
+  if (!infrastructure) return
+  const {
+    frameId,
+    shelfId,
+    inputCableSetId,
+    shelvesPerFeed,
+    shelfCount,
+    psuId,
+    blankId,
+    psuSlots,
+    psuCapacityWatts,
+    psusPerFeed,
+    psuCount,
+    blankCount,
+  } = infrastructure
+  // Keep rack-group contributions together while identifying the physical
+  // member whose equipment determines this quantity.
+  const perRack = bom.on('production').at(rack.group?.name ?? rack.name, rack.widthInches)
+  perRack.add(frameId, 1, `${rack.name}: 1 physical ORV3 rack × 1 frame with bus bar`)
+  const shelves = shelfCount
+  perRack.add(
+    shelfId,
+    shelves,
+    `${rack.name}: ${shelvesPerFeed} shelves per feed × 2 feeds (N+N, ${psusPerFeed} PSUs per feed / ${psuSlots} slots per shelf, rounded up; controller included, PSUs ordered separately)`,
+  )
+  perRack.add(
+    psuId,
+    psuCount,
+    `${rack.name}: ${psusPerFeed} PSUs per feed × 2 feeds (N+N, ceil(${rack.powerWatts} W estimated equipment load / ${psuCapacityWatts} W per PSU))`,
+  )
+  perRack.add(
+    blankId,
+    blankCount,
+    `${rack.name}: ${shelves} shelves × ${psuSlots} PSU slots minus ${psuCount} fitted PSUs`,
+  )
+  perRack.add(
+    inputCableSetId,
+    shelves,
+    `${rack.name}: ${shelves} power shelves × 1 complete AC input cable set`,
+  )
+}
+
 /** The on-prem control-plane cluster: its nodes, their uplinks and, for a
  *  control-plane rack of its own, the leaf pair and mgmt leaf that serve
  *  them. A KaaS control plane orders nothing. Emitted inside the host
@@ -498,8 +548,14 @@ function addControlPlane(
   }
 }
 
-function addPartition(bom: BomBuilder, plan: Plan, partition: Partition): void {
+function addPartition(
+  bom: BomBuilder,
+  plan: Plan,
+  partition: Partition,
+  racks: RackElevation[],
+): void {
   const { fabric } = partition
+  for (const rack of racks) addOrv3Infrastructure(bom, rack)
   // Network and location are tagged once here, so every rule below inherits
   // the network it belongs to and the section it is reported under.
   const prodCentral = bom.on('production').at(CENTRAL_RACK, partition.rackDefaults.widthInches)
@@ -604,8 +660,14 @@ function spareLines(lines: BomLine[], perLine: number): BomLine[] {
 export function deriveBom(plan: Plan, scope: BomScope = 'all'): BomLine[] {
   const multi = plan.partitions.length > 1
   const bom = new BomBuilder(scope)
-  for (const partition of plan.partitions) {
-    addPartition(multi ? bom.inPartition(partition.name) : bom, plan, partition)
+  const layouts = deriveRackLayout(plan)
+  for (const [index, partition] of plan.partitions.entries()) {
+    addPartition(
+      multi ? bom.inPartition(partition.name) : bom,
+      plan,
+      partition,
+      layouts[index].racks,
+    )
   }
   const lines = bom.build()
   return [...lines, ...spareLines(lines, plan.sparesPerLine)]
@@ -616,9 +678,10 @@ export function deriveBomByPartition(
   plan: Plan,
   scope: BomScope = 'all',
 ): { partition: Partition; lines: BomLine[] }[] {
-  return plan.partitions.map((partition) => {
+  const layouts = deriveRackLayout(plan)
+  return plan.partitions.map((partition, index) => {
     const bom = new BomBuilder(scope)
-    addPartition(bom, plan, partition)
+    addPartition(bom, plan, partition, layouts[index].racks)
     return { partition, lines: bom.build() }
   })
 }
