@@ -55,6 +55,12 @@ function ServerGroupRow({
     value: i.id,
     label: optionLabel(i),
   }))
+  if (group.gpu && !gpuOptions.some((option) => option.value === group.gpu?.modelId)) {
+    gpuOptions.push({
+      value: group.gpu.modelId,
+      label: `${itemLabel(group.gpu.modelId)} (incompatible)`,
+    })
+  }
   const perNode = Math.min(group.gpu?.perNode ?? 1, catalog[group.modelId]?.gpuCapable ?? 1)
 
   return (
@@ -135,6 +141,16 @@ function ServerGroupRow({
           value={group.gpu?.modelId ?? ''}
           options={[{ value: '', label: 'None' }, ...gpuOptions]}
           onChange={(v) => patch({ gpu: v ? { modelId: v, perNode: perNode } : undefined })}
+        />
+      )}
+      {group.gpu && (catalog[group.modelId]?.gpuCapable ?? 0) > 1 && (
+        <NumberField
+          label="GPUs per node"
+          value={group.gpu.perNode}
+          min={1}
+          onChange={(v) =>
+            group.gpu && patch({ gpu: { modelId: group.gpu.modelId, perNode: v || 1 } })
+          }
         />
       )}
       <button
