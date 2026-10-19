@@ -52,7 +52,7 @@
 // Edgecore's site lists ET4202-RJ45 where the orders show ET4201-RJ45. The
 // sample BOMs outrank both — they are what was actually bought.
 
-import type { Nos } from './plan'
+import type { Nos, UplinkSpeed } from './plan'
 
 export type CatalogCategory =
   | 'switch'
@@ -88,6 +88,8 @@ export type CpuSocket =
 export type DimmType = 'ddr5-ecc-udimm' | 'ddr5-rdimm' | 'ddr4-rdimm'
 
 export type GpuWidth = 'single' | 'double'
+
+export type NicFormFactor = 'siom' | 'micro-lp'
 
 // Memory technology follows the socket. Individual boards may also require
 // a specific DIMM speed rating, independently of their operating speed.
@@ -141,6 +143,10 @@ export interface CatalogItem {
   dimmRatedSpeed?: number
   /** Required module rating on boards that restrict it. */
   requiredDimmRatedSpeed?: number
+  /** Proprietary NIC connector; absent means a standard PCIe card. */
+  nicFormFactor?: NicFormFactor
+  /** Proprietary NIC connectors available on a server. */
+  nicFormFactors?: NicFormFactor[]
   /** metal-stack support status; absent = not applicable (mgmt gear, cables…). */
   status?: SupportStatus
   /** Vendor lifecycle; absent = current. */
@@ -250,6 +256,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     availability: 'eol',
     serverUsages: ['worker'],
+    nicFormFactors: ['micro-lp'],
   },
   'server-microcloud-x13': {
     id: 'server-microcloud-x13',
@@ -267,6 +274,7 @@ export const catalog: Record<string, CatalogItem> = {
     gpuWidth: 'single',
     socket: 'LGA-1700',
     dimmSlots: 4,
+    nicFormFactors: ['micro-lp'],
   },
   'server-microcloud-h13': {
     id: 'server-microcloud-h13',
@@ -284,6 +292,7 @@ export const catalog: Record<string, CatalogItem> = {
     gpuWidth: 'single',
     socket: 'AM5',
     dimmSlots: 4,
+    nicFormFactors: ['micro-lp'],
   },
   'server-bigtwin-x11': {
     id: 'server-bigtwin-x11',
@@ -299,6 +308,7 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     availability: 'eol',
     // https://www.supermicro.com/datasheet/datasheet_BigTwin.pdf
+    nicFormFactors: ['siom'],
   },
   'server-bigtwin-x12': {
     id: 'server-bigtwin-x12',
@@ -429,6 +439,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'E810XXVDA2',
     description: 'Dual-port 2× 25G SFP28',
     status: 'stable',
+    ports: [{ speed: '25G', count: 2 }],
   },
   'nic-e810-cqda2': {
     id: 'nic-e810-cqda2',
@@ -439,6 +450,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'E810CQDA2',
     description: 'Dual-port 2× 100G QSFP28',
     status: 'stable',
+    ports: [{ speed: '100G', count: 2 }],
   },
   'nic-xxv710-da2': {
     id: 'nic-xxv710-da2',
@@ -448,7 +460,7 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'XXV710DA2',
     description: 'Dual-port 2× 25G SFP28',
     status: 'stable',
-    referenceOnly: 'NIC choice follows ServerGroup.uplink, so only the E810 pair is used',
+    ports: [{ speed: '25G', count: 2 }],
   },
   'nic-connectx5': {
     id: 'nic-connectx5',
@@ -458,7 +470,55 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: 'MCX512A-ACAT',
     description: 'ConnectX-5, dual-port 2× 25G SFP28',
     status: 'stable',
-    referenceOnly: 'NIC choice follows ServerGroup.uplink, so only the E810 pair is used',
+    ports: [{ speed: '25G', count: 2 }],
+  },
+  'nic-connectx6lx': {
+    id: 'nic-connectx6lx',
+    category: 'nic',
+    vendor: 'NVIDIA',
+    model: 'MCX631102AN-ADAT',
+    partNumber: 'MCX631102AN-ADAT',
+    description: 'ConnectX-6 Lx, dual-port 2× 25G SFP28',
+    status: 'stable',
+    ports: [{ speed: '25G', count: 2 }],
+  },
+  'nic-aoc-mh25g': {
+    id: 'nic-aoc-mh25g',
+    category: 'nic',
+    vendor: 'Supermicro',
+    model: 'AOC-MH25G-m2S2T',
+    partNumber: 'AOC-MH25G-m2S2T',
+    // https://www.supermicro.com/en/products/accessories/addon/AOC-MH25G-m2S2T.php
+    nicFormFactor: 'siom',
+    description: 'ConnectX-4 Lx, 2× 25G SFP28, 2× 10G RJ45',
+    status: 'stable',
+    ports: [
+      { speed: '25G', count: 2 },
+      { speed: '10G', count: 2 },
+    ],
+  },
+  'nic-aoc-s25g': {
+    id: 'nic-aoc-s25g',
+    category: 'nic',
+    vendor: 'Supermicro',
+    model: 'AOC-S25G-m2S',
+    partNumber: 'AOC-S25G-m2S',
+    description: 'ConnectX-4 Lx, dual-port 2× 25G SFP28',
+    status: 'stable',
+    ports: [{ speed: '25G', count: 2 }],
+  },
+  'nic-aoc-ctg-i2s': {
+    id: 'nic-aoc-ctg-i2s',
+    category: 'nic',
+    vendor: 'Supermicro',
+    model: 'AOC-CTG-i2S',
+    partNumber: 'AOC-CTG-i2S',
+    nicFormFactor: 'micro-lp',
+    description: 'Dual-port 2× 10G SFP+',
+    status: 'stable',
+    ports: [{ speed: '10G', count: 2 }],
+    referenceOnly:
+      '10G server uplinks are not modeled; the X11 MicroCloud is planned at 25G like every other group',
   },
 
   // --- CPUs (representative public orderable parts) ---
@@ -873,6 +933,30 @@ export function gpusForServer(serverModelId: string): CatalogItem[] {
 export function cpuLabel(cpu: CatalogItem, ...notes: string[]): string {
   const extra = notes.length ? `, ${notes.join(', ')}` : ''
   return `${itemLabel(cpu.id)} (${cpu.cores}C/${cpu.threads}T${extra})`
+}
+
+export function uplinkPortSpeed(uplink: UplinkSpeed): PortSpeed {
+  return uplink === '2x25G' ? '25G' : '100G'
+}
+
+export function nicFitsServer(nic: CatalogItem, server: CatalogItem): boolean {
+  return !nic.nicFormFactor || (server.nicFormFactors?.includes(nic.nicFormFactor) ?? false)
+}
+
+export function nicsForServer(serverModelId: string, uplink: UplinkSpeed): CatalogItem[] {
+  const server = catalog[serverModelId]
+  if (!server || server.category !== 'server') return []
+  const speed = uplinkPortSpeed(uplink)
+  return Object.values(catalog)
+    .filter(
+      (item) =>
+        item.category === 'nic' && portCount(item, speed) > 0 && nicFitsServer(item, server),
+    )
+    .sort(byAvailability)
+}
+
+export function defaultNicId(uplink: UplinkSpeed): string {
+  return uplink === '2x25G' ? 'nic-e810-xxvda2' : 'nic-e810-cqda2'
 }
 
 export function cpusForServer(serverModelId: string): CatalogItem[] {

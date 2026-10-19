@@ -74,6 +74,15 @@ describe('deriveBom NIC rules', () => {
     expect(quantity(plan, 'nic-e810-cqda2')).toBe(4)
     expect(quantity(plan, 'nic-e810-xxvda2')).toBe(0)
   })
+
+  it('uses an explicit NIC without changing uplink cabling', () => {
+    const plan = planWithWorkers(4, '2x25G')
+    plan.partitions[0].racks[0].servers[0].nicModelId = 'nic-connectx5'
+    expect(quantity(plan, 'nic-connectx5')).toBe(4)
+    expect(quantity(plan, 'nic-e810-xxvda2')).toBe(0)
+    expect(serverQuantity(plan, 'sfp-25g-sr')).toBe(8)
+    expect(serverQuantity(plan, 'cable-mtp-breakout')).toBe(2)
+  })
 })
 
 describe('deriveBom node size rules', () => {
