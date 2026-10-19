@@ -2,8 +2,10 @@ import {
   catalog,
   cpuLabel,
   cpusForServer,
+  defaultDrives,
   defaultNicId,
   dimmsForServer,
+  driveOptions,
   gpusForServer,
   itemLabel,
   nicsForServer,
@@ -11,7 +13,7 @@ import {
   switchesForRole,
   type CatalogItem,
 } from '../../model/catalog'
-import type { NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
+import type { DriveConfig, NodeConfig, Partition, Rack, ServerGroup } from '../../model/plan'
 import { nodeSizes, resolveNodeCompute } from '../../model/sizes'
 import { formatTally, rackNodes } from '../../derive/nodes'
 import { formatGbps, formatRatio, rackBandwidth } from '../../derive/bandwidth'
@@ -120,6 +122,16 @@ function ServerGroupRow({
         : undefined
     patchShown({ compute })
   }
+  // Drives are a free list per configuration; a list matching the default
+  // pair is stored as "unset" so the configuration keeps following the
+  // default.
+  const shownDrives = shown.drives ?? defaultDrives
+  const patchDrives = (next: DriveConfig[]) => {
+    patchShown({
+      drives: JSON.stringify(next) === JSON.stringify(defaultDrives) ? undefined : next,
+    })
+  }
+
   return (
     // Storage groups carry the racks view's storage color (sky), workers
     // the brand tint.
@@ -303,6 +315,61 @@ function ServerGroupRow({
               }
             />
           )}
+        </div>
+        <div className="mt-3">
+          <span className="text-sm font-semibold text-gray-700">
+            Drives <span className="font-normal text-gray-500">· fitted to every node</span>
+          </span>
+          <div className="mt-2 space-y-2">
+            {shownDrives.map((drive, i) => (
+              <div key={i} className="flex items-end gap-1.5">
+                <div className="w-44">
+                  <SelectField
+                    label={`Drive ${i + 1}`}
+                    value={drive.modelId}
+                    options={driveOptions().map((item) => ({
+                      value: item.id,
+                      // Model names collide across capacities (7450 PRO),
+                      // so drives list their spec instead.
+                      label: item.description,
+                    }))}
+                    onChange={(v) =>
+                      patchDrives(shownDrives.map((d, n) => (n === i ? { ...d, modelId: v } : d)))
+                    }
+                  />
+                </div>
+                <div className="w-24">
+                  <NumberField
+                    label="Per node"
+                    value={drive.perNode}
+                    min={1}
+                    onChange={(v) =>
+                      patchDrives(
+                        shownDrives.map((d, n) => (n === i ? { ...d, perNode: v || 1 } : d)),
+                      )
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => patchDrives(shownDrives.filter((_, n) => n !== i))}
+                  aria-label={`Remove drive ${i + 1}`}
+                  className="mb-2 text-gray-400 hover:text-red-700"
+                >
+                  <Icon icon={ACTION_ICON.remove} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              patchDrives([...shownDrives, { modelId: driveOptions()[0]?.id ?? '', perNode: 1 }])
+            }
+            className="btn-secondary mt-2"
+          >
+            Add drive
+          </button>
         </div>
       </details>
     </div>

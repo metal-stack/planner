@@ -8,6 +8,12 @@ function normalizeConfig<T extends Partial<NodeConfig>>(config: T): T {
     ...config,
     ...(config.gpu && { gpu: { ...config.gpu, modelId: currentCatalogId(config.gpu.modelId) } }),
     ...(config.nicModelId && { nicModelId: currentCatalogId(config.nicModelId) }),
+    ...(config.drives && {
+      drives: config.drives.map((drive) => ({
+        ...drive,
+        modelId: currentCatalogId(drive.modelId),
+      })),
+    }),
     ...(config.compute && {
       compute: {
         ...config.compute,

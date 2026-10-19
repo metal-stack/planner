@@ -5,6 +5,7 @@ import {
   cpusForServer,
   defaultNicId,
   dimmsForServer,
+  driveOptions,
   gpusForServer,
   itemLabel,
   legacyIdMap,
@@ -178,6 +179,15 @@ describe('category invariants', () => {
     }
   })
 
+  it('gives every drive its orderable facts', () => {
+    const drives = entries.filter(([, item]) => item.category === 'drive')
+    expect(drives.length).toBeGreaterThan(0)
+    for (const [id, item] of drives) {
+      expect(item.vendor, `${id}.vendor`).toBeDefined()
+      expect(item.partNumber, `${id}.partNumber`).toBeDefined()
+    }
+  })
+
   it('gives every GPU a power draw, a part number and a slot width', () => {
     const gpus = entries.filter(([, i]) => i.category === 'gpu')
     expect(gpus.length).toBeGreaterThan(0)
@@ -223,6 +233,7 @@ describe('reachability', () => {
       ...serversForUsage('management'),
       ...serversForUsage('storage'),
       ...gpusForServer('server-superserver-tn12'),
+      ...driveOptions(),
       // Every board's NIC, CPU and DIMM dropdowns, so a part reachable only
       // through a newly annotated socket counts as offered.
       ...Object.values(catalog)

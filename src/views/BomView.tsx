@@ -37,6 +37,7 @@ const CATEGORY_LABEL = {
   gpu: 'GPUs',
   cpu: 'CPUs',
   memory: 'Memory',
+  drive: 'Drives',
   transceiver: 'Transceivers',
   cable: 'Cables',
   license: 'Licenses',

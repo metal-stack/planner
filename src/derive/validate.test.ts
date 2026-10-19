@@ -154,6 +154,12 @@ describe('node compute and NIC configuration', () => {
     )
   })
 
+  it('rejects an unknown drive override', () => {
+    const plan = basePlan()
+    group(plan).drives = [{ modelId: 'drive-foo', perNode: 1 }]
+    expect(errors(plan)).toContain('Unknown drive model "drive-foo".')
+  })
+
   it('rejects an unknown NIC override', () => {
     const plan = basePlan()
     group(plan).nicModelId = 'nic-foo'
