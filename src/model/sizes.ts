@@ -1,6 +1,7 @@
 // Node sizes mirror metalstack.cloud machine types. Each size resolves to
 // orderable CPU and memory parts for the selected board socket. The planner
-// deliberately models one CPU per node, including on dual-socket boards.
+// defaults to one CPU per node; dual-socket boards can install two identical
+// CPUs. Memory quantities remain totals per node when the CPU count changes.
 // Server powerWatts already represents a typical complete configuration, so
 // CPU TDP and memory are not added to rack power estimates.
 
@@ -134,6 +135,7 @@ export function sizeLabel(size: NodeSize): string {
 
 export interface ResolvedCompute {
   size?: NodeSize
+  cpuCount: 1 | 2
   cpuModelId?: string
   dimmModelId?: string
   dimmsPerNode?: number
@@ -147,13 +149,15 @@ export function resolveNodeCompute(
   const socket = catalog[group.modelId]?.socket
   const preset = socket ? size?.parts[socket] : undefined
   const compute = group.compute
+  const cpuCount = compute?.cpuCount ?? 1
   const cpuModelId = compute?.cpuModelId ?? preset?.cpuModelId
   const dimmModelId = compute?.dimmModelId ?? preset?.dimmModelId
   const dimmsPerNode = compute?.dimmsPerNode ?? preset?.dimmsPerNode
   const custom =
+    cpuCount !== 1 ||
     (compute?.cpuModelId !== undefined && compute.cpuModelId !== preset?.cpuModelId) ||
     (compute?.dimmModelId !== undefined && compute.dimmModelId !== preset?.dimmModelId) ||
     (compute?.dimmsPerNode !== undefined && compute.dimmsPerNode !== preset?.dimmsPerNode)
 
-  return { size, cpuModelId, dimmModelId, dimmsPerNode, custom }
+  return { size, cpuCount, cpuModelId, dimmModelId, dimmsPerNode, custom }
 }

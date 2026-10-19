@@ -46,6 +46,10 @@ consistent — you edit the plan, everything else follows from it.
   servers), any number of compute racks, and the external networks that attach at the routers. A compute rack is either a single rack or a _rack group_: three
   physical racks sharing the middle rack's leaf pair and management leaf. Every physical rack
   gets its own number by default (a group takes three), and names stay editable.
+- **CPU sockets and RAM** — modeled dual-socket servers offer a count selector for one or two identical CPUs,
+  for the group or an individual chassis position. The BOM counts both CPUs, and RAM validation
+  checks the DIMM slots enabled by the installed CPUs and at least one DIMM per CPU. Total RAM
+  stays unchanged when changing the CPU count; existing plans keep one CPU per node.
 - **Live feedback** — a side panel shows node and rack tallies, validation issues that jump to the
   section they belong to, and a topology thumbnail. All of it updates as you type.
 - **Validation** — leaf, spine, exit, management leaf and management spine port budgets
