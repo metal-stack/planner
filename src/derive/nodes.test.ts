@@ -11,6 +11,7 @@ describe('node tallies', () => {
       modelId: 'server-superserver-tn20',
       count: 4,
       uplink: '2x100G',
+      sizeId: 'n1-medium-x86',
     })
     plan.partitions.push(defaultPartition('Partition 2'))
 

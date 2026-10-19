@@ -36,6 +36,18 @@ describe('plan JSON round-trip', () => {
   })
 })
 
+describe('plans from before node configuration', () => {
+  it('defaults the size and leaves overrides absent', () => {
+    const raw = JSON.parse(exportPlanJson(createEmptyPlan())) as {
+      partitions: { racks: { servers: Record<string, unknown>[] }[] }[]
+    }
+    const group = raw.partitions[0].racks[0].servers[0]
+    delete group.sizeId
+    const imported = importPlanJson(JSON.stringify(raw)).partitions[0].racks[0].servers[0]
+    expect(imported.sizeId).toBe('n1-medium-x86')
+  })
+})
+
 describe('files with shapes from before the format version', () => {
   /** A plan as an early build wrote it: zones instead of partitions, a
    *  management server group, and none of the later fields. */

@@ -12,9 +12,26 @@ import {
 } from './bom'
 
 function planWithWorkers(count: number, uplink: ServerGroup['uplink']): Plan {
+  return planWithServer('server-microcloud-x11', count, uplink)
+}
+
+function planWithServer(
+  modelId: string,
+  count: number,
+  uplink: ServerGroup['uplink'] = '2x25G',
+): Plan {
   const plan = createEmptyPlan()
   const rack = defaultRack('Rack 1')
-  rack.servers = [{ id: 'g1', role: 'worker', modelId: 'server-microcloud-x11', count, uplink }]
+  rack.servers = [
+    {
+      id: 'g1',
+      role: 'worker',
+      modelId,
+      count,
+      uplink,
+      sizeId: 'n1-medium-x86',
+    },
+  ]
   plan.partitions[0].racks = [rack]
   return plan
 }
@@ -39,6 +56,7 @@ describe('chassisCount', () => {
       modelId: 'server-microcloud-x11', // 8 nodes per chassis
       count: 9,
       uplink: '2x25G',
+      sizeId: 'n1-medium-x86',
     }
     expect(chassisCount(group)).toBe(2)
   })
@@ -55,6 +73,30 @@ describe('deriveBom NIC rules', () => {
     const plan = planWithWorkers(4, '2x100G')
     expect(quantity(plan, 'nic-e810-cqda2')).toBe(4)
     expect(quantity(plan, 'nic-e810-xxvda2')).toBe(0)
+  })
+})
+
+describe('deriveBom node size rules', () => {
+  it('adds one board-specific CPU and the preset DIMMs per node', () => {
+    const h13 = planWithServer('server-microcloud-h13', 8)
+    expect(quantity(h13, 'cpu-epyc-4344p')).toBe(8)
+    expect(quantity(h13, 'mem-ddr5u-16g')).toBe(16)
+    expect(
+      deriveBom(h13).find((line) => line.catalogId === 'cpu-epyc-4344p')?.reasons[0].detail,
+    ).toBe('8 worker nodes × 1 CPU (n1-medium-x86)')
+    expect(
+      deriveBom(h13).find((line) => line.catalogId === 'mem-ddr5u-16g')?.reasons[0].detail,
+    ).toBe('8 worker nodes × 2 DIMMs (n1-medium-x86)')
+
+    const x13 = planWithServer('server-microcloud-x13', 3)
+    expect(quantity(x13, 'cpu-xeon-e2488')).toBe(3)
+    expect(quantity(x13, 'mem-ddr5u-16g')).toBe(6)
+  })
+
+  it('does not add CPU or DIMM lines for a socketless board', () => {
+    const plan = planWithServer('server-superserver-tn20', 2)
+    expect(deriveBom(plan).some((line) => line.category === 'cpu')).toBe(false)
+    expect(deriveBom(plan).some((line) => line.category === 'memory')).toBe(false)
   })
 })
 

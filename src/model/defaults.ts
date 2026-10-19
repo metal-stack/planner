@@ -2,6 +2,7 @@ import { defaultIpPlan } from './ipPlan'
 import { SCHEMA_VERSION } from './migrate'
 import { defaultControlPlane } from './plan'
 import type { FabricConfig, Partition, Plan, Rack, RackDefaults } from './plan'
+import { DEFAULT_SIZE_ID } from './sizes'
 
 function id(): string {
   return crypto.randomUUID()
@@ -62,6 +63,7 @@ export function defaultRack(
         modelId: 'server-microcloud-h13',
         count: 8,
         uplink: '2x25G',
+        sizeId: DEFAULT_SIZE_ID,
       },
     ],
   }
