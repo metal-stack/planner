@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/metal-stack/planner/issues"
   },
-  "homepage": "https://metal-stack.github.io/planner/",
+  "homepage": "https://planner.metal-stack.io/",
   "type": "module",
   "scripts": {
     "dev": "vite",

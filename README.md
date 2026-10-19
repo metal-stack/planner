@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://metal-stack.github.io/planner/">Open the planner</a></strong>
+  <strong><a href="https://planner.metal-stack.io/">Open the planner</a></strong>
 </p>
 
 ---
@@ -125,7 +125,7 @@ With derivation shown: every quantity broken down by central rack and rack group
 
 ## Getting started
 
-The planner runs at **[https://metal-stack.github.io/planner/](https://metal-stack.github.io/planner/)** — no install, no account, nothing leaves your browser.
+The planner runs at **[https://planner.metal-stack.io/](https://planner.metal-stack.io/)** — no install, no account, nothing leaves your browser.
 
 To run it locally:
 
@@ -198,15 +198,19 @@ ExcelJS to 3.4.0, a breaking change, so the advisory is knowingly accepted rathe
 ## Deployment
 
 Every push to `main` that passes CI is published to GitHub Pages at
-[https://metal-stack.github.io/planner/](https://metal-stack.github.io/planner/) by the `deploy` job in
+[https://planner.metal-stack.io/](https://planner.metal-stack.io/) by the `deploy` job in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It is gated on `needs: build`, so only a
 commit that passed lint, formatting, the notices check, the build and the tests is ever deployed.
+The former address, https://metal-stack.github.io/planner/, redirects there. Plans saved in the
+browser belong to the address they were saved under, so plans kept at the old address do not carry
+over.
 
-A project site is served from `/<repo>/` rather than the domain root, so the workflow builds with
-`BASE_PATH` set from the repository name. Local builds keep the root default, and a fork deploys
-under its own name with no edit.
+The workflow builds with `BASE_PATH` set to the base path GitHub Pages reports through
+`actions/configure-pages`: the root on the custom domain, `/<repo>/` on a project site without
+one. Local builds keep the root default, and a fork deploys under its own name with no edit.
 
-To reproduce the deployed build locally — worth doing if an asset ever 404s under the sub-path:
+To reproduce a fork's project-site build locally, worth doing if an asset ever 404s under the
+sub-path:
 
 ```sh
 BASE_PATH=/planner/ npm run build

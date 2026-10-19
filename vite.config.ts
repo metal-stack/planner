@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  // GitHub Pages serves a project site from /<repo>/, so the bundle has to be
-  // built with that prefix. The Pages workflow passes it derived from the repo
-  // name, which keeps forks working without editing this file. Local builds and
+  // The Pages workflow passes the base path GitHub Pages reports: the root on
+  // the custom domain (planner.metal-stack.io), /<repo>/ on a fork's project
+  // site, which keeps forks working without editing this file. Local builds and
   // `npm run preview` keep the root default.
   base: process.env.BASE_PATH ?? '/',
   plugins: [react(), tailwindcss()],

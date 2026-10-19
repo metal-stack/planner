@@ -51,13 +51,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build for the Pages sub-path
-        # A project site lives at /<repo>/, not at the root. Deriving it from
-        # the repository name keeps forks working with no edit.
+      - id: pages
+        uses: actions/configure-pages@v6
+      - name: Build for the Pages base path
+        # Pages reports where the site is served: empty on a custom domain
+        # (planner.metal-stack.io serves from the root), /<repo> on a plain
+        # project site. Taking it from there keeps forks working with no edit.
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
         run: npm run build
-      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
