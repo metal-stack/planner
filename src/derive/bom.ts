@@ -16,6 +16,7 @@ import {
   type ServerGroup,
   type UplinkSpeed,
 } from '../model/plan'
+import { configBuckets, positionListLabel } from '../model/nodeConfig'
 import { resolveNodeCompute } from '../model/sizes'
 import { controlPlaneLeafCount, hasOwnRack, inCentralRack } from './controlPlane'
 
@@ -242,40 +243,46 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
     `${group.count} ${role} nodes / ${nodesPer} per chassis`,
   )
 
-  const config = group
-  const count = group.count
-  const who = `${count} ${role} nodes`
+  // Chassis positions may deviate from the group's configuration, so GPU,
+  // CPU, memory and NIC lines are emitted per distinct configuration;
+  // deviating buckets name their positions in the reason.
+  for (const bucket of configBuckets(group)) {
+    const { config, count } = bucket
+    const who = bucket.custom
+      ? `${count} ${role} nodes at ${positionListLabel(bucket.positions)}`
+      : `${count} ${role} nodes`
 
-  if (config.gpu && config.gpu.perNode > 0) {
-    bom.add(config.gpu.modelId, count * config.gpu.perNode, `${who} × ${config.gpu.perNode} GPU`)
-  }
-
-  // Socketless legacy boards deliberately get no CPU or memory lines.
-  if (catalog[group.modelId]?.socket) {
-    const compute = resolveNodeCompute(group)
-    const sizeNote = compute.custom ? `${config.sizeId}, customized` : config.sizeId
-    if (compute.cpuModelId) {
-      bom.add(compute.cpuModelId, count, `${who} × 1 CPU (${sizeNote})`)
+    if (config.gpu && config.gpu.perNode > 0) {
+      bom.add(config.gpu.modelId, count * config.gpu.perNode, `${who} × ${config.gpu.perNode} GPU`)
     }
-    if (compute.dimmModelId && compute.dimmsPerNode) {
+
+    // Socketless legacy boards deliberately get no CPU or memory lines.
+    if (catalog[group.modelId]?.socket) {
+      const compute = resolveNodeCompute({ modelId: group.modelId, ...config })
+      const sizeNote = compute.custom ? `${config.sizeId}, customized` : config.sizeId
+      if (compute.cpuModelId) {
+        bom.add(compute.cpuModelId, count, `${who} × 1 CPU (${sizeNote})`)
+      }
+      if (compute.dimmModelId && compute.dimmsPerNode) {
+        bom.add(
+          compute.dimmModelId,
+          count * compute.dimmsPerNode,
+          `${who} × ${compute.dimmsPerNode} DIMMs (${sizeNote})`,
+        )
+      }
+    }
+
+    bom.add(config.nicModelId ?? defaultNicId(group.uplink), count, `${who} × 1 NIC`)
+
+    // Drives per node: the configuration's list, or the default pair; an
+    // explicitly empty list orders none.
+    for (const drive of config.drives ?? defaultDrives) {
       bom.add(
-        compute.dimmModelId,
-        count * compute.dimmsPerNode,
-        `${who} × ${compute.dimmsPerNode} DIMMs (${sizeNote})`,
+        drive.modelId,
+        count * drive.perNode,
+        `${who} × ${drive.perNode} drive${drive.perNode === 1 ? '' : 's'}`,
       )
     }
-  }
-
-  bom.add(config.nicModelId ?? defaultNicId(group.uplink), count, `${who} × 1 NIC`)
-
-  // Drives per node: the configuration's list, or the default pair; an
-  // explicitly empty list orders none.
-  for (const drive of config.drives ?? defaultDrives) {
-    bom.add(
-      drive.modelId,
-      count * drive.perNode,
-      `${who} × ${drive.perNode} drive${drive.perNode === 1 ? '' : 's'}`,
-    )
   }
 
   addNodeUplinks(bom, group.count, group.uplink, role)

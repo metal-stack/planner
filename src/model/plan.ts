@@ -75,6 +75,12 @@ export const ServerGroupSchema = NodeConfigSchema.extend({
   count: z.number().int().min(0),
   uplink: UplinkSpeedSchema,
   sizeId: NodeConfigSchema.shape.sizeId.default(DEFAULT_SIZE_ID),
+  /** Per-node deviations, keyed by the node's position within its chassis
+   *  ("0" to nodesPerChassis - 1) and applying to that position in every
+   *  chassis of the group. Positions without an entry use the group's
+   *  configuration; entries at or above the model's nodes per chassis are
+   *  ignored. */
+  nodeConfigs: z.record(z.string(), NodeConfigSchema).default({}),
 })
 export type ServerGroup = z.infer<typeof ServerGroupSchema>
 

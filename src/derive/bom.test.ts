@@ -30,6 +30,7 @@ function planWithServer(
       count,
       uplink,
       sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     },
   ]
   plan.partitions[0].racks = [rack]
@@ -57,6 +58,7 @@ describe('chassisCount', () => {
       count: 9,
       uplink: '2x25G',
       sizeId: 'n1-medium-x86',
+      nodeConfigs: {},
     }
     expect(chassisCount(group)).toBe(2)
   })
@@ -424,6 +426,41 @@ describe('deriveBom GPUs', () => {
 })
 
 describe('deriveBom per-position node configurations', () => {
+  // Two chassis: a position's configuration applies to that node in both.
+  function planWithNodeConfigs(): Plan {
+    const plan = planWithServer('server-microcloud-h13', 16)
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      2: { sizeId: 'c1-medium-x86' },
+      5: { sizeId: 'n1-medium-x86', nicModelId: 'nic-connectx5' },
+    }
+    return plan
+  }
+
+  it('splits CPU and DIMM lines by configuration, once per chassis', () => {
+    const plan = planWithNodeConfigs()
+    // Both sizes use the same AM5 CPU; the DIMMs differ per bucket:
+    // 14 nodes on n1-medium (2× 16 GB), position 3 of both chassis on
+    // c1-medium (4× 32 GB each).
+    expect(quantity(plan, 'cpu-epyc-4344p')).toBe(16)
+    expect(quantity(plan, 'mem-ddr5u-16g')).toBe(28)
+    expect(quantity(plan, 'mem-ddr5u-32g')).toBe(8)
+  })
+
+  it('orders each position its own NIC in every chassis', () => {
+    const plan = planWithNodeConfigs()
+    expect(quantity(plan, 'nic-e810-xxvda2')).toBe(14)
+    expect(quantity(plan, 'nic-connectx5')).toBe(2)
+  })
+
+  it('names deviating positions in the reason', () => {
+    const line = deriveBom(planWithNodeConfigs()).find((l) => l.catalogId === 'mem-ddr5u-32g')
+    expect(
+      line?.reasons.some(
+        (r) => r.detail === '2 worker nodes at chassis position 3 × 4 DIMMs (c1-medium-x86)',
+      ),
+    ).toBe(true)
+  })
+
   it('orders one boot and one data drive per node by default', () => {
     const plan = planWithServer('server-microcloud-h13', 8)
     expect(quantity(plan, 'drive-m2-480')).toBe(8)
@@ -444,6 +481,14 @@ describe('deriveBom per-position node configurations', () => {
     const plan = planWithServer('server-microcloud-h13', 8)
     plan.partitions[0].racks[0].servers[0].drives = []
     expect(deriveBom(plan).some((line) => line.category === 'drive')).toBe(false)
+  })
+
+  it('fits per-position GPUs in every chassis', () => {
+    const plan = planWithServer('server-microcloud-h13', 16)
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      0: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+    }
+    expect(quantity(plan, 'gpu-h100-pcie')).toBe(2)
   })
 })
 

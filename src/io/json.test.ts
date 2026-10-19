@@ -47,6 +47,25 @@ describe('plan JSON round-trip', () => {
     group.nicModelId = 'nic-connectx5'
     expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
   })
+
+  it('round-trips per-node configurations', () => {
+    const plan = createEmptyPlan()
+    plan.partitions[0].racks[0].servers[0].nodeConfigs = {
+      1: { sizeId: 'c1-medium-x86', nicModelId: 'nic-connectx5' },
+      3: { sizeId: 'n1-medium-x86', gpu: { modelId: 'gpu-h100-pcie', perNode: 1 } },
+      5: { sizeId: 'n1-medium-x86', drives: [{ modelId: 'drive-nvme-960', perNode: 2 }] },
+    }
+    expect(importPlanJson(exportPlanJson(plan))).toEqual(plan)
+  })
+
+  it('imports files written before per-node configurations with none', () => {
+    const raw = JSON.parse(exportPlanJson(createEmptyPlan())) as {
+      partitions: { racks: { servers: Record<string, unknown>[] }[] }[]
+    }
+    delete raw.partitions[0].racks[0].servers[0].nodeConfigs
+    const imported = importPlanJson(JSON.stringify(raw))
+    expect(imported.partitions[0].racks[0].servers[0].nodeConfigs).toEqual({})
+  })
 })
 
 describe('plans from before node configuration', () => {
