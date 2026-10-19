@@ -7,7 +7,10 @@
 // https://docs.metal-stack.io/ -> Operators -> Hardware Support
 // (docs repo: docs/src/operators/hardware.md). Management servers, routers
 // and mgmt/OOB gear are not provisioned by metal-stack itself, so the list
-// does not apply to them; they carry roles but no support status.
+// does not apply to them; they carry roles but no support status. CPU, DIMM
+// and drive entries are representative public parts verified against
+// ark.intel.com, amd.com, micron.com and vendor listings, not the
+// compatibility list or sample BOMs.
 //
 // That list is authoritative for *compatibility only*, not for spelling: it
 // mixes prefixed and unprefixed Supermicro models in one table
@@ -52,7 +55,16 @@
 import type { Nos } from './plan'
 
 export type CatalogCategory =
-  'switch' | 'server' | 'router' | 'nic' | 'gpu' | 'transceiver' | 'cable' | 'license'
+  | 'switch'
+  | 'server'
+  | 'router'
+  | 'nic'
+  | 'gpu'
+  | 'cpu'
+  | 'memory'
+  | 'transceiver'
+  | 'cable'
+  | 'license'
 
 export type SupportStatus = 'stable' | 'alpha'
 
@@ -67,7 +79,27 @@ export type ServerUsage = 'worker' | 'management' | 'storage'
 
 export type PortSpeed = '1G' | '10G' | '25G' | '100G'
 
+/** CPU platform of a server board. 'D-2100' is the soldered Xeon D platform
+ *  of the X11 MicroCloud: no orderable CPUs exist for it, but its memory is
+ *  configurable like any other board's. */
+export type CpuSocket =
+  'AM5' | 'LGA-1700' | 'LGA-3647' | 'LGA-4189' | 'LGA-4677' | 'LGA-4710' | 'D-2100'
+
+export type DimmType = 'ddr5-ecc-udimm' | 'ddr5-rdimm' | 'ddr4-rdimm'
+
 export type GpuWidth = 'single' | 'double'
+
+// Memory technology follows the socket. Individual boards may also require
+// a specific DIMM speed rating, independently of their operating speed.
+export const dimmTypeForSocket: Record<CpuSocket, DimmType> = {
+  AM5: 'ddr5-ecc-udimm',
+  'LGA-1700': 'ddr5-ecc-udimm',
+  'LGA-3647': 'ddr4-rdimm',
+  'LGA-4189': 'ddr4-rdimm',
+  'LGA-4677': 'ddr5-rdimm',
+  'LGA-4710': 'ddr5-rdimm',
+  'D-2100': 'ddr4-rdimm',
+}
 
 /** Platform tier a NOS support license is priced by. The vendors name the
  *  tiers differently — Edgecore sells "40/100G" and "10/25G", Broadcom
@@ -94,6 +126,21 @@ export interface CatalogItem {
    *  estimates. Partial chassis are scaled by their node count. */
   powerWatts?: number
   ports?: { speed: PortSpeed; count: number }[]
+  /** Board socket on servers, compatible socket on CPUs. */
+  socket?: CpuSocket
+  /** Physical cores on CPUs. */
+  cores?: number
+  /** Hardware threads on CPUs. */
+  threads?: number
+  /** DIMM slots available per server node. */
+  dimmSlots?: number
+  /** Memory module technology and capacity. */
+  dimmType?: DimmType
+  dimmGiB?: number
+  /** Module's rated transfer rate, not its negotiated operating speed. */
+  dimmRatedSpeed?: number
+  /** Required module rating on boards that restrict it. */
+  requiredDimmRatedSpeed?: number
   /** metal-stack support status; absent = not applicable (mgmt gear, cables…). */
   status?: SupportStatus
   /** Vendor lifecycle; absent = current. */
@@ -107,7 +154,8 @@ export interface CatalogItem {
   serverUsages?: ServerUsage[]
   /** Max GPUs a single server node of this model accepts; absent = none. */
   gpuCapable?: number
-  /** Card width on GPUs; maximum bay width on servers. */
+  /** On GPUs: the card's slot width. On servers: the widest card a node's
+   *  GPU bay accepts (a double-width bay takes single-width cards too). */
   gpuWidth?: GpuWidth
   /** No plan can select this item, so it never reaches a BOM: it is kept
    *  because the official compatibility list names it. Say why. Every
@@ -195,7 +243,7 @@ export const catalog: Record<string, CatalogItem> = {
     model: 'SYS-5039MD8-H8TNR',
     // sample BOM: "8 Worker-Server: SUPERMICRO SYS-5039MD8-H8TNR".
     partNumber: 'SYS-5039MD8-H8TNR',
-    description: 'MicroCloud SuperServer, X11SDD-8C-F board',
+    description: 'MicroCloud SuperServer, X11SDD-8C-F board, Xeon D-2141I soldered per node',
     heightUnits: 3,
     powerWatts: 1600,
     nodesPerChassis: 8,
@@ -217,6 +265,8 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     gpuCapable: 1,
     gpuWidth: 'single',
+    socket: 'LGA-1700',
+    dimmSlots: 4,
   },
   'server-microcloud-h13': {
     id: 'server-microcloud-h13',
@@ -232,6 +282,8 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker'],
     gpuCapable: 1,
     gpuWidth: 'single',
+    socket: 'AM5',
+    dimmSlots: 4,
   },
   'server-bigtwin-x11': {
     id: 'server-bigtwin-x11',
@@ -246,6 +298,7 @@ export const catalog: Record<string, CatalogItem> = {
     status: 'stable',
     serverUsages: ['worker'],
     availability: 'eol',
+    // https://www.supermicro.com/datasheet/datasheet_BigTwin.pdf
   },
   'server-bigtwin-x12': {
     id: 'server-bigtwin-x12',
@@ -259,6 +312,8 @@ export const catalog: Record<string, CatalogItem> = {
     nodesPerChassis: 4,
     status: 'stable',
     serverUsages: ['worker'],
+    socket: 'LGA-4189',
+    dimmSlots: 16,
   },
   'server-superserver-tn20': {
     id: 'server-superserver-tn20',
@@ -280,7 +335,7 @@ export const catalog: Record<string, CatalogItem> = {
     vendor: 'Supermicro',
     model: 'SYS-621C-TN12R',
     partNumber: 'SYS-621C-TN12R',
-    description: 'SuperServer, X13DDW-A board, 12× 2.5" NVMe',
+    description: 'SuperServer, X13DDW-A board, 12× 2.5" NVMe, double-width GPUs',
     heightUnits: 2,
     powerWatts: 800,
     nodesPerChassis: 1,
@@ -288,6 +343,8 @@ export const catalog: Record<string, CatalogItem> = {
     serverUsages: ['worker', 'storage'],
     gpuCapable: 2,
     gpuWidth: 'double',
+    socket: 'LGA-4677',
+    dimmSlots: 16,
   },
   'server-superserver-tr12p': {
     id: 'server-superserver-tr12p',
@@ -404,6 +461,144 @@ export const catalog: Record<string, CatalogItem> = {
     referenceOnly: 'NIC choice follows ServerGroup.uplink, so only the E810 pair is used',
   },
 
+  // --- CPUs (representative public orderable parts) ---
+  'cpu-epyc-4344p': {
+    id: 'cpu-epyc-4344p',
+    category: 'cpu',
+    vendor: 'AMD',
+    model: 'EPYC 4344P',
+    partNumber: '100-000001479',
+    description: '8 cores, 16 threads, 3.8 GHz base',
+    cores: 8,
+    threads: 16,
+    powerWatts: 65,
+    socket: 'AM5',
+  },
+  'cpu-xeon-e2488': {
+    id: 'cpu-xeon-e2488',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon E-2488',
+    partNumber: 'CM8071505024520',
+    description: '8 cores, 16 threads, 3.2 GHz base',
+    cores: 8,
+    threads: 16,
+    powerWatts: 95,
+    socket: 'LGA-1700',
+  },
+  'cpu-xeon-4309y': {
+    id: 'cpu-xeon-4309y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Silver 4309Y',
+    partNumber: 'CD8068904658102',
+    description: '8 cores, 16 threads, 2.8 GHz base',
+    cores: 8,
+    threads: 16,
+    powerWatts: 105,
+    socket: 'LGA-4189',
+  },
+  'cpu-xeon-5318y': {
+    id: 'cpu-xeon-5318y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Gold 5318Y',
+    partNumber: 'CD8068904656703',
+    description: '24 cores, 48 threads, 2.1 GHz base',
+    cores: 24,
+    threads: 48,
+    powerWatts: 165,
+    socket: 'LGA-4189',
+  },
+  'cpu-xeon-4509y': {
+    id: 'cpu-xeon-4509y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Silver 4509Y',
+    partNumber: 'PK8071305554400',
+    description: '8 cores, 16 threads, 2.6 GHz base',
+    cores: 8,
+    threads: 16,
+    powerWatts: 125,
+    socket: 'LGA-4677',
+  },
+  'cpu-xeon-6442y': {
+    id: 'cpu-xeon-6442y',
+    category: 'cpu',
+    vendor: 'Intel',
+    model: 'Xeon Gold 6442Y',
+    partNumber: 'PK8071305120500',
+    description: '24 cores, 48 threads, 2.6 GHz base',
+    cores: 24,
+    threads: 48,
+    powerWatts: 225,
+    socket: 'LGA-4677',
+  },
+
+  // --- Memory (representative public orderable parts) ---
+  'mem-ddr5u-16g': {
+    id: 'mem-ddr5u-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC10C1084S1EC48BA1',
+    description: '16 GB DDR5-4800 ECC UDIMM',
+    dimmType: 'ddr5-ecc-udimm',
+    dimmGiB: 16,
+    dimmRatedSpeed: 4800,
+  },
+  'mem-ddr5u-32g': {
+    id: 'mem-ddr5u-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC20C2085S1EC48BA1',
+    description: '32 GB DDR5-4800 ECC UDIMM',
+    dimmType: 'ddr5-ecc-udimm',
+    dimmGiB: 32,
+    dimmRatedSpeed: 4800,
+  },
+  'mem-ddr4r-16g': {
+    id: 'mem-ddr4r-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTA18ASF2G72PZ-3G2R',
+    description: '16 GB DDR4-3200 RDIMM',
+    dimmType: 'ddr4-rdimm',
+    dimmGiB: 16,
+    dimmRatedSpeed: 3200,
+  },
+  'mem-ddr4r-32g': {
+    id: 'mem-ddr4r-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTA36ASF4G72PZ-3G2R',
+    description: '32 GB DDR4-3200 RDIMM',
+    dimmType: 'ddr4-rdimm',
+    dimmGiB: 32,
+    dimmRatedSpeed: 3200,
+  },
+  'mem-ddr5r-16g': {
+    id: 'mem-ddr5r-16g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC10F1084S1RC48BA1',
+    description: '16 GB DDR5-4800 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 16,
+    dimmRatedSpeed: 4800,
+  },
+  'mem-ddr5r-32g': {
+    id: 'mem-ddr5r-32g',
+    category: 'memory',
+    vendor: 'Micron',
+    partNumber: 'MTC20F2085S1RC48BA1',
+    description: '32 GB DDR5-4800 RDIMM',
+    dimmType: 'ddr5-rdimm',
+    dimmGiB: 32,
+    dimmRatedSpeed: 4800,
+  },
+
+  // --- Drives (representative public orderable parts) ---
+
   // --- GPUs (official metal-stack compatibility list) ---
   // The list names "RTX 6000" without a generation; the Ada Generation is
   // the current product and is assumed here. No sample BOM orders GPUs, so
@@ -416,8 +611,8 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: '900-5G133-2250-000',
     description: '48 GB GDDR6 ECC, PCIe 4.0 ×16, dual slot',
     powerWatts: 300,
-    status: 'stable',
     gpuWidth: 'double',
+    status: 'stable',
   },
   'gpu-h100-pcie': {
     id: 'gpu-h100-pcie',
@@ -427,8 +622,8 @@ export const catalog: Record<string, CatalogItem> = {
     partNumber: '900-21010-0000-000',
     description: '80 GB HBM2e, PCIe 5.0 ×16, dual slot',
     powerWatts: 350,
-    status: 'stable',
     gpuWidth: 'double',
+    status: 'stable',
   },
 
   // --- Transceivers ---
@@ -670,6 +865,36 @@ export function gpusForServer(serverModelId: string): CatalogItem[] {
   if (!server?.gpuCapable) return []
   return Object.values(catalog)
     .filter((i) => i.category === 'gpu' && gpuFits(i, server))
+    .sort(byAvailability)
+}
+
+/** "EPYC 4344P (8C/16T)" — how CPUs are named in dropdowns and summaries.
+ *  Extra notes join the parenthesis: cpuLabel(cpu, 'preset'). */
+export function cpuLabel(cpu: CatalogItem, ...notes: string[]): string {
+  const extra = notes.length ? `, ${notes.join(', ')}` : ''
+  return `${itemLabel(cpu.id)} (${cpu.cores}C/${cpu.threads}T${extra})`
+}
+
+export function cpusForServer(serverModelId: string): CatalogItem[] {
+  const socket = catalog[serverModelId]?.socket
+  if (!socket) return []
+  return Object.values(catalog)
+    .filter((item) => item.category === 'cpu' && item.socket === socket)
+    .sort(byAvailability)
+}
+
+export function dimmsForServer(serverModelId: string): CatalogItem[] {
+  const server = catalog[serverModelId]
+  const socket = server?.socket
+  if (!socket) return []
+  const dimmType = dimmTypeForSocket[socket]
+  return Object.values(catalog)
+    .filter(
+      (item) =>
+        item.category === 'memory' &&
+        item.dimmType === dimmType &&
+        (!server.requiredDimmRatedSpeed || item.dimmRatedSpeed === server.requiredDimmRatedSpeed),
+    )
     .sort(byAvailability)
 }
 
