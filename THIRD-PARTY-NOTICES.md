@@ -465,7 +465,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## brace-expansion 2.1.4
+## brace-expansion 2.1.7
 
 License: MIT
 Homepage: https://github.com/juliangruber/brace-expansion
