@@ -2690,7 +2690,7 @@ licenses; we recommend you read them, as their terms may differ from the
 terms above.
 ```
 
-## lucide-react 1.45.0
+## lucide-react 1.61.0
 
 License: ISC
 Homepage: https://lucide.dev
@@ -2952,7 +2952,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.**
 ```
 
-## react 19.3.0
+## react 19.3.1
 
 License: MIT
 Homepage: https://react.dev/
@@ -2981,7 +2981,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## react-dom 19.3.0
+## react-dom 19.3.1
 
 License: MIT
 Homepage: https://react.dev/
@@ -3689,7 +3689,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## zod 4.6.1
+## zod 4.6.7
 
 License: MIT
 Homepage: https://zod.dev
@@ -3747,7 +3747,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## zustand 5.0.15
+## zustand 5.0.16
 
 License: MIT
 Homepage: https://github.com/pmndrs/zustand
