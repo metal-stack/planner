@@ -37,7 +37,8 @@ function catalogOptions(items: CatalogItem[], id?: string, defaultLabel?: string
   const options = items.map((item) => ({ value: item.id, label: optionLabel(item) }))
   if (defaultLabel) options.unshift({ value: '', label: defaultLabel })
   if (id && !options.some((option) => option.value === id)) {
-    options.push({ value: id, label: `${itemLabel(id)} (incompatible)` })
+    const label = catalog[id] ? optionLabel(catalog[id]) : id
+    options.push({ value: id, label: `${label} (incompatible)` })
   }
   return options
 }
@@ -229,6 +230,7 @@ function ServerGroupRow({
   // pair is stored as "unset" so the configuration keeps following the
   // default.
   const defaultDrives = drivesForServer(group.modelId)
+  const compatibleDrives = driveOptions(group.modelId)
   const shownDrives = shown.drives ?? defaultDrives
   const patchDrives = (next: DriveConfig[]) => {
     patchShown({
@@ -426,6 +428,9 @@ function ServerGroupRow({
               )}
               <SelectField
                 label="DIMM model"
+                info={{
+                  text: 'Capacity is per module. The displayed speed is the module rating; operating speed depends on the CPU, board revision and BIOS. These are representative parts, so confirm the exact SKU against the server vendor’s qualified memory list.',
+                }}
                 value={shown.compute?.dimmModelId ?? ''}
                 options={catalogOptions(
                   dimmOptions,
@@ -441,7 +446,7 @@ function ServerGroupRow({
                 min={resolvedCompute.cpuCount}
                 max={dimmSlots}
                 info={{
-                  text: `Total across the node: ${dimmSlots ?? 'unknown'} slots available with ${resolvedCompute.cpuCount} CPU${resolvedCompute.cpuCount === 1 ? '' : 's'}. Changing the CPU count keeps this memory total. Populate at least one DIMM per CPU and follow the board's memory population guide.`,
+                  text: `${availableDimmSlots(group.modelId) ?? 'Unknown number of'} DIMM slots per CPU; ${dimmSlots ?? 'unknown'} available with ${resolvedCompute.cpuCount} CPU${resolvedCompute.cpuCount === 1 ? '' : 's'} installed.`,
                 }}
                 value={shown.compute?.dimmsPerNode ?? resolvedCompute.dimmsPerNode ?? 0}
                 onChange={(value) =>
@@ -498,12 +503,21 @@ function ServerGroupRow({
                   <SelectField
                     label={`Drive ${i + 1}`}
                     value={drive.modelId}
-                    options={driveOptions().map((item) => ({
-                      value: item.id,
-                      // Model names collide across capacities (7450 PRO),
-                      // so drives list their spec instead.
-                      label: item.description,
-                    }))}
+                    options={[
+                      ...compatibleDrives.map((item) => ({
+                        value: item.id,
+                        // Model names collide across capacities; show the spec.
+                        label: item.description,
+                      })),
+                      ...(!compatibleDrives.some((item) => item.id === drive.modelId)
+                        ? [
+                            {
+                              value: drive.modelId,
+                              label: `${catalog[drive.modelId]?.description ?? drive.modelId} (incompatible)`,
+                            },
+                          ]
+                        : []),
+                    ]}
                     onChange={(v) =>
                       patchDrives(shownDrives.map((d, n) => (n === i ? { ...d, modelId: v } : d)))
                     }
@@ -535,7 +549,7 @@ function ServerGroupRow({
           <button
             type="button"
             onClick={() =>
-              patchDrives([...shownDrives, { modelId: driveOptions()[0]?.id ?? '', perNode: 1 }])
+              patchDrives([...shownDrives, { modelId: compatibleDrives[0]?.id ?? '', perNode: 1 }])
             }
             className="btn-secondary mt-2"
           >

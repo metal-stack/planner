@@ -311,12 +311,21 @@ function addServerGroup(bom: BomBuilder, group: ServerGroup): void {
 
     // Drives per node: the configuration's list, or the default pair; an
     // explicitly empty list orders none.
-    for (const drive of config.drives ?? drivesForServer(group.modelId)) {
+    const drives = config.drives ?? drivesForServer(group.modelId)
+    for (const drive of drives) {
       bom.add(
         drive.modelId,
         count * drive.perNode,
         `${who} × ${drive.perNode} drive${drive.perNode === 1 ? '' : 's'}`,
       )
+    }
+    for (const bay of catalog[group.modelId]?.driveBays ?? []) {
+      if (
+        bay.adapterModelId &&
+        drives.some((drive) => drive.perNode > 0 && catalog[drive.modelId]?.driveType === bay.type)
+      ) {
+        bom.add(bay.adapterModelId, count, `${who} × 1 expansion card for fitted M.2 drives`)
+      }
     }
   }
 

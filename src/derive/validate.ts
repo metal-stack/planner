@@ -1,12 +1,14 @@
 import {
   availableDimmSlots,
   catalog,
+  cpuFitsServer,
   dimmTypeForSocket,
   gpuFits,
   itemLabel,
   fitsRack,
   rackUnit,
   drivesForServer,
+  driveFitsServer,
   nicFitsServer,
   portCount,
   uplinkPortSpeed,
@@ -263,7 +265,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
           issues,
           scope,
           'warning',
-          `${itemLabel(group.modelId)}: no drives configured. Select compatible drives separately; the catalog does not yet model this sled's E1.S and boot-drive options.`,
+          `${itemLabel(group.modelId)}: no drives configured. Add a compatible M.2 or E1.S drive if local storage is required.`,
         )
       }
       const label = positionListLabel(bucket.positions)
@@ -271,7 +273,7 @@ function validateRack(issues: Issue[], partition: Partition, rack: Rack): void {
       checkGpu(issues, scope, group, bucket.config, prefix)
       checkCompute(issues, scope, group, bucket.config, prefix)
       checkNic(issues, scope, group, bucket.config, prefix)
-      checkDrives(issues, scope, bucket.config, prefix)
+      checkDrives(issues, scope, group.modelId, bucket.config, prefix)
     }
   }
 }
@@ -380,6 +382,16 @@ function checkCompute(
         'error',
         `${prefix}${itemLabel(cpu.id)} (${cpu.socket}) does not fit ${itemLabel(group.modelId)} (${socket}).`,
       )
+    } else if (!cpuFitsServer(cpu, server)) {
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${itemLabel(cpu.id)} has a stock TDP of ${cpu.powerWatts ?? 'unknown'} W, ` +
+          `but ${itemLabel(group.modelId)} supports CPUs up to ${server.maxCpuTdpWatts} W.`,
+      )
+    } else if (server.cpuCompatibilityNotes?.[cpu.id]) {
+      report(issues, scope, 'warning', `${prefix}${server.cpuCompatibilityNotes[cpu.id]}`)
     }
   }
 
@@ -408,6 +420,8 @@ function checkCompute(
           `${prefix}${itemLabel(group.modelId)} requires ${server.requiredDimmRatedSpeed} MT/s-rated DIMMs, ` +
             `but ${itemLabel(dimm.id)} is rated ${dimm.dimmRatedSpeed ?? 'unknown'} MT/s.`,
         )
+      } else if (server.dimmCompatibilityNotes?.[dimm.id]) {
+        report(issues, scope, 'warning', `${prefix}${server.dimmCompatibilityNotes[dimm.id]}`)
       }
     }
   }
@@ -418,11 +432,8 @@ function checkCompute(
       issues,
       scope,
       'error',
-      `${prefix}${itemLabel(group.modelId)} has ${dimmSlots} DIMM slots per node` +
-        (server.cpuSockets
-          ? ` with ${cpuCount} CPU${cpuCount === 1 ? '' : 's'} installed, `
-          : ', ') +
-        `but ${compute.dimmsPerNode} DIMMs per node are configured.`,
+      `${prefix}${itemLabel(group.modelId)} supports ${availableDimmSlots(group.modelId)} DIMM slots per CPU: ` +
+        `${dimmSlots} available, ${compute.dimmsPerNode} configured.`,
     )
   }
   if (compute.dimmsPerNode && compute.dimmsPerNode < cpuCount) {
@@ -436,12 +447,40 @@ function checkCompute(
   }
 }
 
-/** Every configured drive must exist and be a drive. */
-function checkDrives(issues: Issue[], scope: Scope, config: NodeConfig, prefix: string): void {
-  for (const { modelId } of config.drives ?? []) {
+function checkDrives(
+  issues: Issue[],
+  scope: Scope,
+  serverModelId: string,
+  config: NodeConfig,
+  prefix: string,
+): void {
+  const drives = config.drives ?? drivesForServer(serverModelId)
+  for (const { modelId } of drives) {
     const drive = catalog[modelId]
     if (!drive || drive.category !== 'drive') {
       report(issues, scope, 'error', `${prefix}Unknown drive model "${modelId}".`)
+    } else if (!driveFitsServer(drive, serverModelId)) {
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${drive.description} does not fit ${itemLabel(serverModelId)} drive bays.`,
+      )
+    }
+  }
+  for (const bay of catalog[serverModelId]?.driveBays ?? []) {
+    const fitted = drives.reduce(
+      (sum, drive) => sum + (catalog[drive.modelId]?.driveType === bay.type ? drive.perNode : 0),
+      0,
+    )
+    if (fitted > bay.count) {
+      const label = bay.type === 'e1s-9.5-nvme' ? 'E1.S' : 'M.2'
+      report(
+        issues,
+        scope,
+        'error',
+        `${prefix}${itemLabel(serverModelId)} has ${bay.count} ${label} bays per node, but ${fitted} drives are configured.`,
+      )
     }
   }
 }
@@ -710,21 +749,13 @@ export function validatePlan(plan: Plan): Issue[] {
       // Advanced section; the central rack's budget is partition-level.
       const inAdvanced = { where, target: { ...target, ...(rack.rackId && { field: 'advanced' }) } }
       const infrastructure = orv3Infrastructure(rack)
-      if (infrastructure) {
+      if (infrastructure && rack.heightUnits > infrastructure.usableHeightUnits) {
         report(
           issues,
           inAdvanced,
           'warning',
-          `The BOM includes an ORV3 frame with bus bar, ${infrastructure.shelfCount} power shelves with ${infrastructure.psuCount} fitted PSU modules (N+N, ${infrastructure.psusPerFeed} per feed, sized to ${rack.powerWatts} W estimated equipment load), ${infrastructure.blankCount} slot blanks and their AC input cable sets for this physical rack. The diagram includes ${infrastructure.reservedHeightUnits}OU of power shelves in used height. Enter mounting height including power shelves; do not subtract shelf space manually. Confirm bus bar capacity, shelf configuration, site feeds and AC distribution for 19-inch devices with the supplier. Battery backup is optional and excluded. Shared rack infrastructure appears under Production in the BOM.`,
+          `Configured usable height ${rack.heightUnits}OU exceeds the reference ORV3 frame's ${infrastructure.usableHeightUnits}OU mounting capacity. Reduce usable height or arrange a different rack configuration with the supplier.`,
         )
-        if (rack.heightUnits > infrastructure.usableHeightUnits) {
-          report(
-            issues,
-            inAdvanced,
-            'warning',
-            `Configured usable height ${rack.heightUnits}OU exceeds the reference ORV3 frame's ${infrastructure.usableHeightUnits}OU mounting capacity. Reduce usable height or arrange a different rack configuration with the supplier.`,
-          )
-        }
       }
       if (seen.has(rack.name)) {
         report(
