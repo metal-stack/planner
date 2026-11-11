@@ -34,6 +34,7 @@ export const nodeSizes: NodeSize[] = [
     memoryGiB: 32,
     parts: {
       AM5: { cpuModelId: 'cpu-epyc-4344p', dimmModelId: 'mem-ddr5u-16g', dimmsPerNode: 2 },
+      SP5: { cpuModelId: 'cpu-epyc-9015', dimmModelId: 'mem-ddr5r-16g', dimmsPerNode: 2 },
       'LGA-1700': {
         cpuModelId: 'cpu-xeon-e2488',
         dimmModelId: 'mem-ddr5u-16g',
@@ -68,6 +69,7 @@ export const nodeSizes: NodeSize[] = [
     memoryGiB: 128,
     parts: {
       AM5: { cpuModelId: 'cpu-epyc-4344p', dimmModelId: 'mem-ddr5u-32g', dimmsPerNode: 4 },
+      SP5: { cpuModelId: 'cpu-epyc-9015', dimmModelId: 'mem-ddr5r-32g', dimmsPerNode: 4 },
       'LGA-1700': {
         cpuModelId: 'cpu-xeon-e2488',
         dimmModelId: 'mem-ddr5u-32g',
@@ -101,6 +103,7 @@ export const nodeSizes: NodeSize[] = [
     cores: 24,
     memoryGiB: 192,
     parts: {
+      SP5: { cpuModelId: 'cpu-epyc-9254', dimmModelId: 'mem-ddr5r-32g', dimmsPerNode: 6 },
       'LGA-4189': {
         cpuModelId: 'cpu-xeon-5318y',
         dimmModelId: 'mem-ddr4r-32g',

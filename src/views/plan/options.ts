@@ -2,10 +2,6 @@ import type { CatalogItem, NosOption } from '../../model/catalog'
 import { catalog, cpuLabel, itemLabel, nosLabel } from '../../model/catalog'
 import type { SelectOption, SelectOptionGroup } from './fields'
 
-// How hardware is named in the plan editor's dropdowns: the vendor model
-// designation (never the region-suffixed ordering code), with the caveats a
-// planner needs to see before picking it. CPUs carry their core and thread
-// counts: "EPYC 4344P (8C/16T)".
 export function optionLabel(item: CatalogItem): string {
   const notes = [
     item.status === 'alpha' ? 'alpha' : '',
@@ -13,7 +9,9 @@ export function optionLabel(item: CatalogItem): string {
     item.availability === 'withdrawn' ? 'withdrawn' : '',
   ].filter(Boolean)
   if (item.category === 'cpu') return cpuLabel(item, ...notes)
-  return notes.length ? `${itemLabel(item.id)} (${notes.join(', ')})` : itemLabel(item.id)
+  const label =
+    item.category === 'memory' ? `${item.description} · ${itemLabel(item.id)}` : itemLabel(item.id)
+  return notes.length ? `${label} (${notes.join(', ')})` : label
 }
 
 /** Each model appears once. Retired hardware goes last; current ORV3 models
